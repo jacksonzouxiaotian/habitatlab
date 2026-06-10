@@ -1,0 +1,8 @@
+| Method | Success | Collision | Final collision | Near collision | Min clearance | False feasible collision | Narrow collision | Recover triggers | Memory writes | Reject |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| rule_baseline | 0.620 | 0.334 | 0.334 | 0.490 | 0.090 | 0.928 | 0.707 | - | - | - |
+| passage_ppo | 0.832 | 0.168 | 0.168 | 0.504 | 0.089 | 1.000 | 0.190 | - | - | - |
+| passage_plus_collision_recovery | 0.832 | 0.168 | 0.168 | 0.504 | 0.089 | 1.000 | 0.190 | - | - | - |
+| passage_plus_risk_recovery | 0.694 | 0.134 | 0.134 | 0.506 | 0.089 | 0.807 | 0.052 | - | - | - |
+| geometry_fsm | 0.834 | 0.166 | 0.166 | 0.474 | 0.092 | 1.000 | 0.181 | 0.704 | - | 0.000 |
+| memory_gated_fsm | 0.834 | 0.150 | 0.150 | 0.506 | 0.089 | 0.904 | 0.112 | 0.264 | 0.562 | 0.016 |

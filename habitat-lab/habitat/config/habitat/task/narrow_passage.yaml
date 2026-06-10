@@ -1,0 +1,63 @@
+defaults:
+  - task_config_base
+  - actions:
+    - velocity_control
+  - measurements:
+    - narrow_passage_success
+    - narrow_passage_collision
+    - narrow_passage_stuck
+    - narrow_passage_reward
+  - lab_sensors:
+    - pointgoal_with_gps_compass_sensor
+    - narrow_passage_geometry_sensor
+    - narrow_passage_memory_sensor
+  - _self_
+
+type: NarrowPassageNav-v0
+end_on_success: True
+reward_measure: narrow_passage_reward
+success_measure: narrow_passage_success
+memory_trigger_count: 1
+memory_reject_count: 3
+
+actions:
+  velocity_control:
+    lin_vel_range: [-0.15, 0.35]
+    ang_vel_range: [-45.0, 45.0]
+    min_abs_lin_speed: 0.01
+    min_abs_ang_speed: 1.0
+    time_step: 0.25
+
+lab_sensors:
+  pointgoal_with_gps_compass_sensor:
+    type: PointGoalWithGPSCompassSensor
+    goal_format: POLAR
+    dimensionality: 2
+  narrow_passage_geometry_sensor:
+    type: NarrowPassageGeometrySensor
+    max_depth: 5.0
+  narrow_passage_memory_sensor:
+    type: NarrowPassageMemorySensor
+
+measurements:
+  narrow_passage_success:
+    type: NarrowPassageSuccess
+    success_distance: 0.35
+    heading_threshold: 0.35
+    lateral_threshold: 0.25
+  narrow_passage_collision:
+    type: NarrowPassageCollision
+  narrow_passage_stuck:
+    type: NarrowPassageStuck
+    stuck_threshold: 0.7
+  narrow_passage_reward:
+    type: NarrowPassageReward
+    progress_weight: 2.0
+    center_weight: 0.5
+    alignment_weight: 0.3
+    clearance_weight: 0.2
+    success_reward: 10.0
+    collision_penalty: 10.0
+    stuck_penalty: 5.0
+    oscillation_weight: 0.1
+    slack_penalty: 0.01
