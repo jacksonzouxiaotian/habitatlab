@@ -22,6 +22,9 @@ from habitat_baselines.rl.hrl.hierarchical_policy import (  # noqa: F401.
 )
 from habitat_baselines.rl.ppo.agent_access_mgr import AgentAccessMgr
 from habitat_baselines.rl.ppo.policy import NetPolicy
+from habitat_baselines.rl.ppo.narrow_passage_policy import (  # noqa: F401.
+    NarrowPassagePolicy,
+)
 from habitat_baselines.rl.ppo.ppo import PPO
 from habitat_baselines.rl.ppo.updater import Updater
 

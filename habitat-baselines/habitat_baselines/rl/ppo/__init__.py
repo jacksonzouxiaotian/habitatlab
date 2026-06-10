@@ -11,6 +11,7 @@ from habitat_baselines.rl.ppo.policy import (
     PointNavBaselinePolicy,
     Policy,
 )
+from habitat_baselines.rl.ppo.narrow_passage_policy import NarrowPassagePolicy
 from habitat_baselines.rl.ppo.ppo import PPO
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "NetPolicy",
     "Net",
     "PointNavBaselinePolicy",
+    "NarrowPassagePolicy",
     "CPCA",
 ]

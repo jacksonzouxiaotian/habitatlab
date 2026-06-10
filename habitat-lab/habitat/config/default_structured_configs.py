@@ -390,6 +390,17 @@ class PointGoalSensorConfig(LabSensorConfig):
 
 
 @dataclass
+class NarrowPassageGeometrySensorConfig(LabSensorConfig):
+    type: str = "NarrowPassageGeometrySensor"
+    max_depth: float = 5.0
+
+
+@dataclass
+class NarrowPassageMemorySensorConfig(LabSensorConfig):
+    type: str = "NarrowPassageMemorySensor"
+
+
+@dataclass
 class PointGoalWithGPSCompassSensorConfig(PointGoalSensorConfig):
     """
     Indicates the position of the point goal in the frame of reference of the robot.
@@ -1365,6 +1376,39 @@ class DistanceToGoalRewardMeasurementConfig(MeasurementConfig):
 
 
 @dataclass
+class NarrowPassageSuccessMeasurementConfig(MeasurementConfig):
+    type: str = "NarrowPassageSuccess"
+    success_distance: float = 0.35
+    heading_threshold: float = 0.35
+    lateral_threshold: float = 0.25
+
+
+@dataclass
+class NarrowPassageCollisionMeasurementConfig(MeasurementConfig):
+    type: str = "NarrowPassageCollision"
+
+
+@dataclass
+class NarrowPassageStuckMeasurementConfig(MeasurementConfig):
+    type: str = "NarrowPassageStuck"
+    stuck_threshold: float = 0.7
+
+
+@dataclass
+class NarrowPassageRewardMeasurementConfig(MeasurementConfig):
+    type: str = "NarrowPassageReward"
+    progress_weight: float = 2.0
+    center_weight: float = 0.5
+    alignment_weight: float = 0.3
+    clearance_weight: float = 0.2
+    success_reward: float = 10.0
+    collision_penalty: float = 10.0
+    stuck_penalty: float = 5.0
+    oscillation_weight: float = 0.1
+    slack_penalty: float = 0.01
+
+
+@dataclass
 class AnswerAccuracyMeasurementConfig(MeasurementConfig):
     type: str = "AnswerAccuracy"
 
@@ -1408,6 +1452,8 @@ class TaskConfig(HabitatBaseConfig):
     success_reward: float = 2.5
     slack_reward: float = -0.01
     end_on_success: bool = False
+    memory_trigger_count: int = 1
+    memory_reject_count: int = 3
     # NAVIGATION task
     type: str = "Nav-v0"
     # Temporary structure for sensors
@@ -2148,6 +2194,18 @@ cs.store(
     node=PointGoalWithGPSCompassSensorConfig,
 )
 cs.store(
+    package="habitat.task.lab_sensors.narrow_passage_geometry_sensor",
+    group="habitat/task/lab_sensors",
+    name="narrow_passage_geometry_sensor",
+    node=NarrowPassageGeometrySensorConfig,
+)
+cs.store(
+    package="habitat.task.lab_sensors.narrow_passage_memory_sensor",
+    group="habitat/task/lab_sensors",
+    name="narrow_passage_memory_sensor",
+    node=NarrowPassageMemorySensorConfig,
+)
+cs.store(
     package="habitat.task.lab_sensors.humanoid_detector_sensor",
     group="habitat/task/lab_sensors",
     name="humanoid_detector_sensor",
@@ -2360,6 +2418,30 @@ cs.store(
     group="habitat/task/measurements",
     name="distance_to_goal_reward",
     node=DistanceToGoalRewardMeasurementConfig,
+)
+cs.store(
+    package="habitat.task.measurements.narrow_passage_success",
+    group="habitat/task/measurements",
+    name="narrow_passage_success",
+    node=NarrowPassageSuccessMeasurementConfig,
+)
+cs.store(
+    package="habitat.task.measurements.narrow_passage_collision",
+    group="habitat/task/measurements",
+    name="narrow_passage_collision",
+    node=NarrowPassageCollisionMeasurementConfig,
+)
+cs.store(
+    package="habitat.task.measurements.narrow_passage_stuck",
+    group="habitat/task/measurements",
+    name="narrow_passage_stuck",
+    node=NarrowPassageStuckMeasurementConfig,
+)
+cs.store(
+    package="habitat.task.measurements.narrow_passage_reward",
+    group="habitat/task/measurements",
+    name="narrow_passage_reward",
+    node=NarrowPassageRewardMeasurementConfig,
 )
 cs.store(
     package="habitat.task.measurements.success",
