@@ -1189,16 +1189,19 @@ class VelocityAction(SimulatorTaskAction):
 
     @property
     def action_space(self):
+        # step() normalizes inputs via (x+1)/2, so it expects [-1, 1].
+        # Advertising physical min/max here caused GaussianNet to learn the
+        # wrong output range and gave the gym wrapper wrong clip bounds.
         return ActionSpace(
             {
                 "linear_velocity": spaces.Box(
-                    low=np.array([self.min_lin_vel]),
-                    high=np.array([self.max_lin_vel]),
+                    low=np.array([-1.0], dtype=np.float32),
+                    high=np.array([1.0], dtype=np.float32),
                     dtype=np.float32,
                 ),
                 "angular_velocity": spaces.Box(
-                    low=np.array([self.min_ang_vel]),
-                    high=np.array([self.max_ang_vel]),
+                    low=np.array([-1.0], dtype=np.float32),
+                    high=np.array([1.0], dtype=np.float32),
                     dtype=np.float32,
                 ),
             }
@@ -1232,6 +1235,13 @@ class VelocityAction(SimulatorTaskAction):
             allow_sliding = self._allow_sliding
         if time_step is None:
             time_step = self.time_step
+
+        # Callers (e.g. the flattened gym action space used by
+        # habitat_baselines) may pass each component as a length-1 array
+        # rather than a scalar; np.array([0.0, 0.0, -linear_velocity]) below
+        # would otherwise build a ragged/inhomogeneous array.
+        linear_velocity = float(np.asarray(linear_velocity).reshape(-1)[0])
+        angular_velocity = float(np.asarray(angular_velocity).reshape(-1)[0])
 
         # Convert from [-1, 1] to [0, 1] range
         linear_velocity = (linear_velocity + 1.0) / 2.0

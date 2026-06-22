@@ -97,7 +97,11 @@ class NarrowPassageNavTask(NavigationTask):
         agent_state = self._sim.get_agent_state()
         agent_pos = np.array(agent_state.position, dtype=np.float32)
         delta = goal - agent_pos
-        goal_yaw = math.atan2(delta[0], -delta[2])
+        # Correct formula: heading_error=0 when robot faces toward goal.
+        # Habitat forward direction = -Z local = [-sin(yaw), 0, -cos(yaw)] world.
+        # For forward ∝ (delta_x, 0, delta_z): need goal_yaw = atan2(-delta_x, -delta_z).
+        # The previous atan2(delta_x, -delta_z) gave the WRONG facing direction in X.
+        goal_yaw = math.atan2(-delta[0], -delta[2])
         rot = agent_state.rotation
         yaw = math.atan2(
             2.0 * (rot.real * rot.y + rot.x * rot.z),

@@ -1,0 +1,6 @@
+| Method | Success | Collision | Final collision | Near collision | Min clearance | False feasible collision | Narrow collision |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| passage_ppo | 0.832 | 0.168 | 0.168 | 0.504 | 0.089 | 1.000 | 0.190 |
+| ablation_no_failure | 0.822 | 0.178 | 0.178 | 0.504 | 0.089 | 1.000 | 0.233 |
+| ablation_no_clearance | 0.832 | 0.168 | 0.168 | 1.000 | 0.000 | 1.000 | 0.190 |
+| no_curriculum | 0.826 | 0.174 | 0.174 | 0.504 | 0.089 | 1.000 | 0.215 |

@@ -21,9 +21,11 @@ def normalize(v):
 
 
 def yaw_from_start_goal(start, goal):
+    # Habitat forward = [-sin(yaw), 0, -cos(yaw)].
+    # For forward ∝ (dx, 0, dz): yaw = atan2(-dx, -dz).
     dx = goal[0] - start[0]
     dz = goal[2] - start[2]
-    return math.atan2(dx, dz)
+    return math.atan2(-dx, -dz)
 
 
 def read_anchors(path):

@@ -6,19 +6,20 @@
 
 defaults:
   - /benchmark/nav/pointnav: pointnav_habitat_test
-  - override /habitat/task: narrow_passage
   - /habitat_baselines: habitat_baselines_rl_config_base
+  - override /habitat/task: narrow_passage
   - _self_
 
 habitat:
   environment:
-    max_episode_steps: 300
+    max_episode_steps: 500
   dataset:
     type: PointNav-v1
     split: train
     data_path: data/datasets/narrow_passage/{split}/{split}.json.gz
   simulator:
-    allow_sliding: False
+    habitat_sim_v0:
+      allow_sliding: False
     agents:
       main_agent:
         sim_sensors:
@@ -33,26 +34,26 @@ habitat_baselines:
   video_dir: "video_dir/narrow_passage_habitat"
   test_episode_count: 20
   eval_ckpt_path_dir: "data/narrow_passage_checkpoints"
-  num_environments: 1
+  num_environments: 4
   checkpoint_folder: "data/narrow_passage_checkpoints"
-  total_num_steps: 1e6
+  total_num_steps: 5e6
   num_updates: -1
   log_interval: 10
-  num_checkpoints: 20
+  num_checkpoints: 50
   force_torch_single_threaded: True
 
   rl:
     policy:
       main_agent:
         name: "NarrowPassagePolicy"
-        action_distribution_type: "categorical"
+        action_distribution_type: "gaussian"
 
     ppo:
       clip_param: 0.2
       ppo_epoch: 4
       num_mini_batch: 1
       value_loss_coef: 0.5
-      entropy_coef: 0.01
+      entropy_coef: 0.05
       lr: 2.5e-4
       eps: 1e-5
       max_grad_norm: 0.5

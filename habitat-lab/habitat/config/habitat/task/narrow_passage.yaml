@@ -42,9 +42,9 @@ lab_sensors:
 measurements:
   narrow_passage_success:
     type: NarrowPassageSuccess
-    success_distance: 0.35
-    heading_threshold: 0.35
-    lateral_threshold: 0.25
+    success_distance: 0.5
+    heading_threshold: 0.52
+    lateral_threshold: 0.4
   narrow_passage_collision:
     type: NarrowPassageCollision
   narrow_passage_stuck:
@@ -52,12 +52,12 @@ measurements:
     stuck_threshold: 0.7
   narrow_passage_reward:
     type: NarrowPassageReward
-    progress_weight: 2.0
-    center_weight: 0.5
-    alignment_weight: 0.3
-    clearance_weight: 0.2
-    success_reward: 10.0
-    collision_penalty: 10.0
-    stuck_penalty: 5.0
-    oscillation_weight: 0.1
-    slack_penalty: 0.01
+    progress_weight: 4.0
+    center_weight: 0.15
+    alignment_weight: 0.5
+    clearance_weight: 0.1
+    success_reward: 100.0
+    collision_penalty: 3.0
+    stuck_penalty: 1.5
+    oscillation_weight: 0.0
+    slack_penalty: 0.003

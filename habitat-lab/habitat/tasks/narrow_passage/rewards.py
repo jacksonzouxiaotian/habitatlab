@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import math
 from typing import Any
 
 from habitat.core.embodied_task import Measure
@@ -49,22 +50,27 @@ class NarrowPassageReward(Measure):
         action_delta += abs(f.get("previous_action_wz", 0.0) - self._prev_action_wz)
 
         reward = 0.0
-        reward += float(getattr(self._config, "progress_weight", 2.0)) * progress
-        reward -= float(getattr(self._config, "center_weight", 0.5)) * abs(
+        reward += float(getattr(self._config, "progress_weight", 4.0)) * progress
+        reward -= float(getattr(self._config, "center_weight", 0.15)) * abs(
             f.get("lateral_offset", 0.0)
         )
-        reward -= float(getattr(self._config, "alignment_weight", 0.3)) * abs(
-            f.get("heading_error", 0.0)
+        # cos(heading_error): +1 when facing goal, -1 when facing away — continuous
+        # positive gradient everywhere, replacing the always-negative abs() penalty.
+        heading_error = f.get("heading_error", 0.0)
+        reward += float(getattr(self._config, "alignment_weight", 0.5)) * math.cos(
+            heading_error
         )
-        reward += float(getattr(self._config, "clearance_weight", 0.2)) * min_clearance
-        reward -= float(getattr(self._config, "stuck_penalty", 5.0)) * f.get(
+        reward += float(getattr(self._config, "clearance_weight", 0.1)) * min_clearance
+        reward -= float(getattr(self._config, "stuck_penalty", 1.5)) * f.get(
             "stuck_score", 0.0
         )
-        reward -= float(getattr(self._config, "collision_penalty", 10.0)) * f.get(
+        reward -= float(getattr(self._config, "collision_penalty", 3.0)) * f.get(
             "collision_flag", 0.0
         )
-        reward -= float(getattr(self._config, "oscillation_weight", 0.1)) * action_delta
-        reward -= float(getattr(self._config, "slack_penalty", 0.01))
+        oscillation_weight = float(getattr(self._config, "oscillation_weight", 0.0))
+        if oscillation_weight > 0.0:
+            reward -= oscillation_weight * action_delta
+        reward -= float(getattr(self._config, "slack_penalty", 0.003))
 
         success = 0.0
         task.measurements.check_measure_dependencies(
@@ -74,7 +80,7 @@ class NarrowPassageReward(Measure):
             success = task.measurements.measures[
                 "narrow_passage_success"
             ].get_metric()
-        reward += float(getattr(self._config, "success_reward", 10.0)) * success
+        reward += float(getattr(self._config, "success_reward", 100.0)) * success
 
         self._prev_distance = distance
         self._prev_action_vx = f.get("previous_action_vx", 0.0)

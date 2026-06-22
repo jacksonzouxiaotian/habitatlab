@@ -21,6 +21,13 @@ ABLATION_CASES = [
     "no_curriculum",
 ]
 
+# Habitat sim generalization results (real HM3D scenes, NarrowPassageNav-v0 task)
+HABITAT_CASES = [
+    "habitat_ppo_baseline",
+    "habitat_geometry_fsm",
+    "habitat_ours_memory",
+]
+
 COLUMNS = [
     ("case", "Method"),
     ("success_rate", "Success"),
@@ -33,6 +40,15 @@ COLUMNS = [
     ("avg_recover_triggers", "Recover triggers"),
     ("avg_memory_writes", "Memory writes"),
     ("reject_rate", "Reject"),
+]
+
+# Columns for the Habitat generalization table (subset — memory/risk metrics not applicable)
+HABITAT_COLUMNS = [
+    ("case", "Method"),
+    ("success_rate", "Success"),
+    ("collision_rate", "Collision"),
+    ("near_collision_rate", "Near collision"),
+    ("avg_min_clearance", "Min clearance"),
 ]
 
 
@@ -95,6 +111,12 @@ def main():
         default=Path("results/narrow_passage_rl/results_rl_summary.csv"),
     )
     parser.add_argument(
+        "--habitat-input",
+        type=Path,
+        default=None,
+        help="Separate CSV for Habitat results (defaults to same as --input)",
+    )
+    parser.add_argument(
         "--output-dir", type=Path, default=Path("results/narrow_passage_rl")
     )
     args = parser.parse_args()
@@ -103,20 +125,26 @@ def main():
     main_rows = select_rows(rows, MAIN_CASES)
     ablation_rows = select_rows(rows, ABLATION_CASES)
 
-    main_md = markdown_table(main_rows, COLUMNS)
-    ablation_md = markdown_table(ablation_rows, COLUMNS[:8])
-    main_tex = latex_table(main_rows, COLUMNS)
-    ablation_tex = latex_table(ablation_rows, COLUMNS[:8])
+    habitat_csv = args.habitat_input if args.habitat_input is not None else args.input
+    habitat_rows = select_rows(read_rows(habitat_csv), HABITAT_CASES)
 
-    write_text(args.output_dir / "paper_table_main.md", main_md)
-    write_text(args.output_dir / "paper_table_ablation.md", ablation_md)
-    write_text(args.output_dir / "paper_table_main.tex", main_tex)
-    write_text(args.output_dir / "paper_table_ablation.tex", ablation_tex)
+    if main_rows:
+        write_text(args.output_dir / "paper_table_main.md", markdown_table(main_rows, COLUMNS))
+        write_text(args.output_dir / "paper_table_main.tex", latex_table(main_rows, COLUMNS))
+        print("[write] paper_table_main.md")
+        print("[write] paper_table_main.tex")
 
-    print("[write] paper_table_main.md")
-    print("[write] paper_table_ablation.md")
-    print("[write] paper_table_main.tex")
-    print("[write] paper_table_ablation.tex")
+    if ablation_rows:
+        write_text(args.output_dir / "paper_table_ablation.md", markdown_table(ablation_rows, COLUMNS[:8]))
+        write_text(args.output_dir / "paper_table_ablation.tex", latex_table(ablation_rows, COLUMNS[:8]))
+        print("[write] paper_table_ablation.md")
+        print("[write] paper_table_ablation.tex")
+
+    if habitat_rows:
+        write_text(args.output_dir / "paper_table_habitat.md", markdown_table(habitat_rows, HABITAT_COLUMNS))
+        write_text(args.output_dir / "paper_table_habitat.tex", latex_table(habitat_rows, HABITAT_COLUMNS))
+        print("[write] paper_table_habitat.md")
+        print("[write] paper_table_habitat.tex")
 
 
 if __name__ == "__main__":
