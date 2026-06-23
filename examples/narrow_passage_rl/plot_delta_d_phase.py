@@ -74,6 +74,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--fsm-csv",  default=os.path.join(RESULTS, "habitat_fsm_v2_episodes.csv"))
     ap.add_argument("--ppo-csv",  default=os.path.join(RESULTS, "habitat_ppo_v2_episodes.csv"))
+    ap.add_argument("--apf-csv",  default=os.path.join(RESULTS, "habitat_apf_gap_episodes.csv"))
     ap.add_argument("--out",      default=os.path.join(RESULTS, "delta_d_phase.png"))
     ap.add_argument("--bin-width", type=float, default=0.15,
                     help="ΔD bin width in metres (default 0.15)")
@@ -86,27 +87,31 @@ def main():
     meta = load_val_meta()
     fsm_rows = load_csv(args.fsm_csv, meta)
     ppo_rows = load_csv(args.ppo_csv, meta)
+    apf_rows = load_csv(args.apf_csv, meta) if os.path.exists(args.apf_csv) else []
 
-    all_dd = [r["delta_d"] for r in fsm_rows + ppo_rows if not np.isnan(r["delta_d"])]
+    all_dd = [r["delta_d"] for r in fsm_rows + ppo_rows + apf_rows if not np.isnan(r["delta_d"])]
     dd_max = max(all_dd) + 0.01
     bins = np.arange(0.0, dd_max + args.bin_width, args.bin_width)
 
     fsm_c, fsm_r, fsm_n = bin_success(fsm_rows, bins)
     ppo_c, ppo_r, ppo_n = bin_success(ppo_rows, bins)
+    apf_c, apf_r, apf_n = bin_success(apf_rows, bins) if apf_rows else (np.array([]), np.array([]), np.array([]))
 
     # ── per-difficulty summary ──────────────────────────────────────────
     print("\n=== Per-difficulty summary ===")
+    methods = [("FSM", fsm_rows), ("APF+Gap", apf_rows), ("PPO", ppo_rows)]
     for diff in ["narrow", "normal", "wide"]:
-        fn = [r for r in fsm_rows if r["difficulty"] == diff]
-        pn = [r for r in ppo_rows if r["difficulty"] == diff]
-        if fn:
-            print(f"  FSM  {diff:6s}: {np.mean([r['success'] for r in fn]):.3f} ({sum(r['success']>0.5 for r in fn)}/{len(fn)})")
-        if pn:
-            print(f"  PPO  {diff:6s}: {np.mean([r['success'] for r in pn]):.3f} ({sum(r['success']>0.5 for r in pn)}/{len(pn)})")
+        for name, rws in methods:
+            eps = [r for r in rws if r["difficulty"] == diff]
+            if eps:
+                print(f"  {name:8s} {diff:6s}: {np.mean([r['success'] for r in eps]):.3f}"
+                      f" ({sum(r['success']>0.5 for r in eps)}/{len(eps)})")
 
     print(f"\n=== Overall ===")
-    print(f"  FSM: {np.mean([r['success'] for r in fsm_rows]):.3f} ({sum(r['success']>0.5 for r in fsm_rows)}/{len(fsm_rows)})")
-    print(f"  PPO: {np.mean([r['success'] for r in ppo_rows]):.3f} ({sum(r['success']>0.5 for r in ppo_rows)}/{len(ppo_rows)})")
+    for name, rws in methods:
+        if rws:
+            print(f"  {name:8s}: {np.mean([r['success'] for r in rws]):.3f}"
+                  f" ({sum(r['success']>0.5 for r in rws)}/{len(rws)})")
 
     # ── plot ────────────────────────────────────────────────────────────
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
@@ -116,7 +121,9 @@ def main():
 
     # ── left: line plot ──────────────────────────────────────────────────
     ax = axes[0]
-    ax.plot(fsm_c, fsm_r * 100, "o-", color="tab:blue",  linewidth=2, label="FSM (ours)")
+    ax.plot(fsm_c, fsm_r * 100, "o-", color="tab:blue",  linewidth=2.5, label="FSM (ours)")
+    if len(apf_c):
+        ax.plot(apf_c, apf_r * 100, "^-", color="tab:green", linewidth=2, label="APF+Gap (classical)")
     ax.plot(ppo_c, ppo_r * 100, "s--", color="tab:orange", linewidth=2, label="PPO baseline")
 
     # shade "narrow" zone (ΔD < 0.30m, i.e. body_margin < 0.15m)
@@ -153,15 +160,26 @@ def main():
         fsm_ns.append(len(fn))
         ppo_ns.append(len(pn))
 
-    bars1 = ax2.bar(x_ticks - bar_w/2, fsm_bars, bar_w, label="FSM", color="tab:blue", alpha=0.85)
-    bars2 = ax2.bar(x_ticks + bar_w/2, ppo_bars, bar_w, label="PPO", color="tab:orange", alpha=0.85)
+    apf_bars, apf_ns = [], []
+    for diff in diff_order:
+        an = [r for r in apf_rows if r["difficulty"] == diff]
+        apf_bars.append(np.mean([r["success"] for r in an]) * 100 if an else 0)
+        apf_ns.append(len(an))
+
+    bar_w = 0.25
+    bars1 = ax2.bar(x_ticks - bar_w, fsm_bars, bar_w, label="FSM (ours)", color="tab:blue", alpha=0.85)
+    bars_a = ax2.bar(x_ticks, apf_bars, bar_w, label="APF+Gap", color="tab:green", alpha=0.85)
+    bars2 = ax2.bar(x_ticks + bar_w, ppo_bars, bar_w, label="PPO", color="tab:orange", alpha=0.85)
 
     for bar, n in zip(bars1, fsm_ns):
         ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
-                 f"n={n}", ha="center", va="bottom", fontsize=8)
+                 f"{n}", ha="center", va="bottom", fontsize=7)
+    for bar, n in zip(bars_a, apf_ns):
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
+                 f"{n}", ha="center", va="bottom", fontsize=7)
     for bar, n in zip(bars2, ppo_ns):
         ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
-                 f"n={n}", ha="center", va="bottom", fontsize=8)
+                 f"{n}", ha="center", va="bottom", fontsize=7)
 
     ax2.set_xticks(x_ticks)
     ax2.set_xticklabels([f"{d}\n(ΔD {'<0.30' if d=='narrow' else '0.30–0.80' if d=='normal' else '>0.80'}m)"
