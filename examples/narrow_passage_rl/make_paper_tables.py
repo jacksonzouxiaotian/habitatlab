@@ -22,8 +22,11 @@ ABLATION_CASES = [
 ]
 
 # Habitat sim generalization results (real HM3D scenes, NarrowPassageNav-v0 task)
+# Order: strongest baselines first, ours last
 HABITAT_CASES = [
     "habitat_ppo_baseline",
+    "habitat_ppo_policy",
+    "habitat_apf_gap",
     "habitat_geometry_fsm",
     "habitat_ours_memory",
 ]
@@ -45,9 +48,11 @@ COLUMNS = [
 # Columns for the Habitat generalization table (subset — memory/risk metrics not applicable)
 HABITAT_COLUMNS = [
     ("case", "Method"),
-    ("success_rate", "Success"),
-    ("collision_rate", "Collision"),
-    ("near_collision_rate", "Near collision"),
+    ("success_rate", "Success ↑"),
+    ("narrow_sr", "Narrow ↑"),
+    ("normal_sr", "Normal ↑"),
+    ("wide_sr", "Wide ↑"),
+    ("collision_rate", "Collision ↓"),
     ("avg_min_clearance", "Min clearance"),
 ]
 
