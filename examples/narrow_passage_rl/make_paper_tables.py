@@ -31,6 +31,13 @@ HABITAT_CASES = [
     "habitat_ours_memory",
 ]
 
+# FSM ablation on HM3D val set
+HABITAT_ABLATION_CASES = [
+    "habitat_geometry_fsm",
+    "habitat_fsm_no_recovery",
+    "habitat_fsm_no_alignment",
+]
+
 COLUMNS = [
     ("case", "Method"),
     ("success_rate", "Success"),
@@ -132,6 +139,7 @@ def main():
 
     habitat_csv = args.habitat_input if args.habitat_input is not None else args.input
     habitat_rows = select_rows(read_rows(habitat_csv), HABITAT_CASES)
+    habitat_ablation_rows = select_rows(read_rows(habitat_csv), HABITAT_ABLATION_CASES)
 
     if main_rows:
         write_text(args.output_dir / "paper_table_main.md", markdown_table(main_rows, COLUMNS))
@@ -150,6 +158,14 @@ def main():
         write_text(args.output_dir / "paper_table_habitat.tex", latex_table(habitat_rows, HABITAT_COLUMNS))
         print("[write] paper_table_habitat.md")
         print("[write] paper_table_habitat.tex")
+
+    if habitat_ablation_rows:
+        write_text(args.output_dir / "paper_table_habitat_ablation.md",
+                   markdown_table(habitat_ablation_rows, HABITAT_COLUMNS))
+        write_text(args.output_dir / "paper_table_habitat_ablation.tex",
+                   latex_table(habitat_ablation_rows, HABITAT_COLUMNS))
+        print("[write] paper_table_habitat_ablation.md")
+        print("[write] paper_table_habitat_ablation.tex")
 
 
 if __name__ == "__main__":
