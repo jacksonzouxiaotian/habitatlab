@@ -1,0 +1,25 @@
+% Table: Harder Synthetic Benchmark v2 -- FSM Ablation
+% 500 episodes x 3 seeds (42-44), entry_jitter_sigma=0.25m
+\begin{table}[t]
+\centering
+\caption{FSM ablation on the harder synthetic benchmark (v2) with lateral entry jitter
+($\sigma{=}0.25$\,m), 500 episodes $\times$ 3 seeds.
+Numbers in parentheses are std across seeds.
+Removing the alignment module causes a $-45.0$\,pp drop overall and collapses L/S-shaped SR
+to under 7\%.  The recovery module shows marginal benefit ($+0.5$\,pp) in simulation,
+where the navmesh boundary prevents physical contact.}
+\label{tab:harder_ablation}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+Method & Overall & Straight & L-shaped & S-shaped & Narrow exit & Narrow entry & Asymmetric & False-feas. \\
+\midrule
+\textbf{Geometry-FSM (full)}
+  & \textbf{64.1\,(0.9)} & \textbf{82.1} & \textbf{74.6} & \textbf{65.9} & \textbf{94.8} & 45.8 & 45.7 & \textbf{0.0} \\
+FSM w/o recovery
+  & 64.6\,(0.7) & 80.3 & 77.1 & 62.2 & 95.3 & \textbf{52.3} & \textbf{48.2} & 0.0 \\
+FSM w/o alignment
+  & 19.1\,(0.4) & 44.5 & 6.1 & 6.5 & 23.0 & 24.8 & 16.5 & 0.0 \\
+\bottomrule
+\end{tabular}}
+\end{table}

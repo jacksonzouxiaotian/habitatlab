@@ -63,14 +63,16 @@ habitat-baselines/habitat_baselines/
 Tests generalization to L-shaped, S-shaped, and false-feasible corridors.
 RL (PPO/SB3) achieves near-zero SR on L/S-shaped types.
 
+Mean across 3 seeds (std in parentheses), 500 episodes per seed.
+
 | Method | Overall | Straight | L-shaped | S-shaped | Narrow exit | Narrow entry | Asymmetric | False-feas. |
 |---|---|---|---|---|---|---|---|---|
-| Rule baseline | 24.0% | 57.1% | 5.0% | 5.1% | 34.5% | 23.1% | 31.3% | 0% |
-| **Geometry-FSM (ours)** | **71.8%** | **94.6%** | **86.1%** | **65.4%** | **94.8%** | 71.2% | 47.9% | 0% |
-| FSM w/o alignment | 25.6% | 57.1% | 6.9% | 7.7% | 37.9% | 28.9% | 29.2% | 0% |
+| Rule baseline | 25.4 (1.0) | 60.5 | 8.2 | 6.5 | 27.2 | 24.8 | 33.5 | 0.0 |
+| **Geometry-FSM (ours)** | **70.3 (1.1)** | **92.8** | **79.6** | **70.0** | **96.7** | **61.4** | **50.6** | **0.0** |
 
-`false_feasible` corridors (physically impassable) yield 0% SR with 0% collision —
-correctly rejected by body-margin gating.
+FSM ablation (entry jitter σ=0.25 m): removing alignment drops Overall from 64.1% → 19.1% (−45 pp),
+L-shaped from 74.6% → 6.1%. `false_feasible` corridors yield 0% SR — correctly rejected by
+body-margin gating.
 
 ### 2. Habitat HM3D Generalization (157 val episodes, 20 held-out scenes)
 

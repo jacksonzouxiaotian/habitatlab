@@ -324,8 +324,19 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
                 cross_mem: Optional[CrossEpisodeMemory],
                 max_steps: int,
                 entry_obs_ref: list,
-                agent: Optional["TurnCommitFSM"] = None) -> dict:
+                agent: Optional["TurnCommitFSM"] = None,
+                entry_jitter_sigma: float = 0.0) -> dict:
     obs, _ = env.reset()
+
+    # Lateral entry jitter: perturb start position perpendicular to heading.
+    # Exposes RECOVER mode by forcing the robot off-center at episode start.
+    if entry_jitter_sigma > 0.0:
+        yaw = float(env.pose[2])
+        lateral = float(np.random.normal(0.0, entry_jitter_sigma))
+        env.pose[0] += lateral * (-math.cos(yaw))
+        env.pose[1] += lateral * math.sin(yaw)
+        obs = env._obs()
+
     entry_obs = obs.copy()
     entry_obs_ref.clear()
     entry_obs_ref.append(entry_obs)
@@ -337,7 +348,8 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
     steps = 0
     any_collision = False
     min_bm = float("inf")
-    near_collision = False
+    tight_passage = False   # bm < 0.05 m (near-risk, not a physical collision)
+    body_overlap_steps = 0  # steps where bm < 0 (Habitat sliding through wall)
 
     if cross_mem is not None:
         cross_mem.reset_local()
@@ -347,7 +359,9 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         if bm < min_bm:
             min_bm = bm
         if bm < 0.05:
-            near_collision = True
+            tight_passage = True
+        if bm < 0.0:
+            body_overlap_steps += 1
         if float(obs[16]) > 0.5:
             any_collision = True
 
@@ -376,10 +390,20 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
     if not np.isfinite(min_bm):
         min_bm = float(obs[9])
 
+    success = float(info.get("success", 0.0))
+    # Collision-free success: reached goal AND never penetrated a wall (bm >= 0 throughout).
+    # The base success criterion only checks dist/heading/lateral — no collision guard.
+    # body_overlap_steps > 0 means the robot was inside a wall (Habitat allow_sliding).
+    collision_free_success = float(success > 0.5 and body_overlap_steps == 0)
+
     return {
-        "success": float(info.get("success", 0.0)),
+        "success": success,
+        "collision_free_success": collision_free_success,
         "collision": float(any_collision),
-        "near_collision": float(near_collision),
+        # tight_passage_rate: bm < 0.05 m (near-risk; NOT a physical collision)
+        "tight_passage_rate": float(tight_passage),
+        # body_overlap_rate: fraction of steps with bm < 0 (wall penetration via allow_sliding)
+        "body_overlap_rate": body_overlap_steps / max(steps, 1),
         "min_body_margin": min_bm,
         "steps": steps,
         "passable": info.get("passable", True),
@@ -391,7 +415,7 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
 # ── Per-method runner ─────────────────────────────────────────────────────────
 
 def eval_method(method: str, ctypes: List[str], n_episodes: int,
-                seed: int = 42) -> List[dict]:
+                seed: int = 42, entry_jitter_sigma: float = 0.0) -> List[dict]:
     env_cfg = {"corridor_types": ctypes, "seed": seed}
     env = HarderNarrowPassageEnv(env_cfg)
 
@@ -424,7 +448,7 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
 
         stat = run_episode(env, method, local_mem, cross_mem,
                            max_steps=env.max_steps, entry_obs_ref=entry_obs_ref,
-                           agent=agent)
+                           agent=agent, entry_jitter_sigma=entry_jitter_sigma)
         stat["episode_idx"] = ep_idx
         stat["method"] = method
         all_stats.append(stat)
@@ -449,24 +473,32 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
 
 # ── Summary table ─────────────────────────────────────────────────────────────
 
-def print_summary(all_stats: List[dict], methods: List[str], ctypes: List[str]):
-    print(f"\n{'Method':22s}  {'SR':>6}  {'Col':>6}  {'NarCol':>7}  "
-          f"{'MinBM':>6}  ", end="")
+def print_summary(all_stats: List[dict], methods: List[str], ctypes: List[str],
+                  multi_seed_std: Optional[Dict[str, float]] = None):
+    print(f"\n{'Method':22s}  {'SR':>7}  {'CF-SR':>7}  {'Col':>6}  "
+          f"{'Tight%':>7}  {'Overlap%':>8}  {'MinBM':>6}  ", end="")
     for ct in ctypes:
         short = ct[:6]
         print(f"  {short:>6}", end="")
     print()
-    print("-" * (22 + 6 + 6 + 7 + 6 + 4 + len(ctypes) * 8))
+    print("-" * (22 + 7 + 7 + 6 + 7 + 8 + 6 + 5 + len(ctypes) * 8))
 
     for method in methods:
         rows = [s for s in all_stats if s["method"] == method]
         if not rows:
             continue
-        sr = np.mean([s["success"] for s in rows])
-        cr = np.mean([s["collision"] for s in rows])
-        nc = np.mean([s["near_collision"] for s in rows])
-        bm = np.mean([s["min_body_margin"] for s in rows])
-        print(f"{method:22s}  {sr:.3f}  {cr:.3f}  {nc:.4f}  {bm:+.3f}  ", end="")
+        sr   = np.mean([s["success"] for s in rows])
+        cfsr = np.mean([s["collision_free_success"] for s in rows])
+        cr   = np.mean([s["collision"] for s in rows])
+        tp   = np.mean([s["tight_passage_rate"] for s in rows])
+        bo   = np.mean([s["body_overlap_rate"] for s in rows])
+        bm   = np.mean([s["min_body_margin"] for s in rows])
+        sr_str   = f"{sr:.3f}"
+        cfsr_str = f"{cfsr:.3f}"
+        if multi_seed_std and method in multi_seed_std:
+            sr_str   += f"±{multi_seed_std[method]:.3f}"
+        print(f"{method:22s}  {sr_str:>7}  {cfsr_str:>7}  {cr:.3f}  "
+              f"{tp:.4f}  {bo:.5f}  {bm:+.3f}  ", end="")
         for ct in ctypes:
             grp = [s for s in rows if s["corridor_type"] == ct]
             dsr = np.mean([s["success"] for s in grp]) if grp else float("nan")
@@ -498,8 +530,14 @@ def write_summary_rows(all_stats, methods, ctypes, path):
         row = {
             "case": f"v2_{method}",
             "success_rate": round(np.mean([s["success"] for s in stats]), 4),
+            # collision_free_success: primary metric — reached goal AND no wall penetration
+            "collision_free_success_rate": round(
+                np.mean([s["collision_free_success"] for s in stats]), 4),
             "collision_rate": round(np.mean([s["collision"] for s in stats]), 4),
-            "near_collision_rate": round(np.mean([s["near_collision"] for s in stats]), 4),
+            # tight_passage_rate: bm < 0.05 m episodes (near-risk, NOT physical collision)
+            "tight_passage_rate": round(np.mean([s["tight_passage_rate"] for s in stats]), 4),
+            # body_overlap_rate: steps with bm < 0 / total steps (allow_sliding wall penetration)
+            "body_overlap_rate": round(np.mean([s["body_overlap_rate"] for s in stats]), 5),
             "avg_min_clearance": round(np.mean([s["min_body_margin"] for s in stats]), 4),
         }
         for ct in ctypes:
@@ -526,6 +564,11 @@ def main():
                              "narrow_exit", "narrow_entry", "asymmetric", "false_feasible"])
     ap.add_argument("--episodes", type=int, default=500)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--seeds", type=int, default=1,
+                    help="number of independent seeds (reports mean ± std when > 1)")
+    ap.add_argument("--entry-jitter", type=float, default=0.0,
+                    help="std dev (m) of lateral start-position noise — use 0.20–0.30 "
+                         "to force RECOVER activations for ablation robustness testing")
     ap.add_argument("--output-csv",
                     type=Path, default=RESULTS / "harder_benchmark_episodes.csv")
     ap.add_argument("--output-summary",
@@ -533,20 +576,53 @@ def main():
     args = ap.parse_args()
 
     ctypes = args.corridor_types
+    n_seeds = args.seeds
+    jitter = args.entry_jitter
+
+    # Collect per-seed stats for all methods
+    per_seed_stats: Dict[str, List[List[dict]]] = {m: [] for m in args.methods}
+
+    for seed_idx in range(n_seeds):
+        run_seed = args.seed + seed_idx
+        print(f"\n{'='*60}")
+        print(f"Seed {run_seed}  ({seed_idx+1}/{n_seeds})"
+              + (f"  entry_jitter={jitter:.2f}m" if jitter > 0 else ""))
+        print(f"{'='*60}")
+
+        for method in args.methods:
+            print(f"\n--- {method} ---")
+            stats = eval_method(method, ctypes, args.episodes, run_seed,
+                                entry_jitter_sigma=jitter)
+            per_seed_stats[method].append(stats)
+            for ct in ctypes:
+                grp = [s for s in stats if s["corridor_type"] == ct]
+                if grp:
+                    dsr = np.mean([s["success"] for s in grp])
+                    print(f"  {ct:14s}: SR={dsr:.3f}  n={len(grp)}")
+
+    # Aggregate across seeds
     all_stats = []
-
     for method in args.methods:
-        print(f"\n=== {method} ===")
-        stats = eval_method(method, ctypes, args.episodes, args.seed)
-        all_stats.extend(stats)
-        # Quick per-type breakdown
-        for ct in ctypes:
-            grp = [s for s in stats if s["corridor_type"] == ct]
-            if grp:
-                dsr = np.mean([s["success"] for s in grp])
-                print(f"  {ct:14s}: SR={dsr:.3f}  n={len(grp)}")
+        for seed_stats in per_seed_stats[method]:
+            all_stats.extend(seed_stats)
 
-    print_summary(all_stats, args.methods, ctypes)
+    # Compute per-method SR std across seeds for the summary header
+    multi_seed_std: Optional[Dict[str, float]] = None
+    if n_seeds > 1:
+        multi_seed_std = {}
+        for method in args.methods:
+            seed_srs = [
+                np.mean([s["success"] for s in seed_stats])
+                for seed_stats in per_seed_stats[method]
+            ]
+            multi_seed_std[method] = float(np.std(seed_srs))
+        print(f"\n[multi-seed] SR std across {n_seeds} seeds:")
+        for method, std in multi_seed_std.items():
+            mean_sr = np.mean([s["success"]
+                               for s in all_stats if s["method"] == method])
+            print(f"  {method:22s}: {mean_sr:.3f} ± {std:.3f}")
+
+    print_summary(all_stats, args.methods, ctypes, multi_seed_std)
     write_csv(all_stats, args.output_csv)
     write_summary_rows(all_stats, args.methods, ctypes, args.output_summary)
 

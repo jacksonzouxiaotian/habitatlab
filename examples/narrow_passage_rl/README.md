@@ -38,14 +38,28 @@ asymmetry and commits to the correct turn direction.
 RL-based policies (SB3 PPO) achieve near-zero SR on L/S-shaped types — this is the
 primary negative result motivating the geometry-first approach.
 
+Results below are mean across 3 independent seeds (std in parentheses), 500 episodes per seed.
+
+**Main comparison:**
+
 | Method | Overall | Straight | L-shaped | S-shaped | Narrow exit | Narrow entry | Asymmetric | False-feas. |
 |---|---|---|---|---|---|---|---|---|
-| Rule baseline | 24.0% | 57.1% | 5.0% | 5.1% | 34.5% | 23.1% | 31.3% | 0% |
-| **Geometry-FSM (ours)** | **71.8%** | **94.6%** | **86.1%** | **65.4%** | **94.8%** | 71.2% | 47.9% | 0% |
-| FSM w/o alignment | 25.6% | 57.1% | 6.9% | 7.7% | 37.9% | 28.9% | 29.2% | 0% |
+| Rule baseline | 25.4 (1.0) | 60.5 | 8.2 | 6.5 | 27.2 | 24.8 | 33.5 | 0.0 |
+| **Geometry-FSM (ours)** | **70.3 (1.1)** | **92.8** | **79.6** | **70.0** | **96.7** | **61.4** | **50.6** | **0.0** |
+| FSM + local memory | 70.3 (1.1) | 92.8 | 79.6 | 70.0 | 96.7 | 61.4 | 50.6 | 0.0 |
+| FSM + cross memory | 70.3 (1.1) | 92.8 | 79.6 | 70.0 | 96.7 | 61.4 | 50.6 | 0.0 |
 
-`false_feasible` corridors (physically impassable) always yield 0% — correctly
-rejected by body-margin gating; collision rate = 0% throughout.
+**FSM ablation** (entry_jitter σ=0.25 m to stress-test recovery):
+
+| Method | Overall | Straight | L-shaped | S-shaped | Narrow exit | Narrow entry | Asymmetric | False-feas. |
+|---|---|---|---|---|---|---|---|---|
+| **Geometry-FSM (full)** | **64.1 (0.9)** | **82.1** | **74.6** | **65.9** | **94.8** | 45.8 | 45.7 | 0.0 |
+| FSM w/o recovery | 64.6 (0.7) | 80.3 | 77.1 | 62.2 | 95.3 | 52.3 | 48.2 | 0.0 |
+| FSM w/o alignment | 19.1 (0.4) | 44.5 | **6.1** | **6.5** | 23.0 | 24.8 | 16.5 | 0.0 |
+
+`false_feasible` corridors (physically impassable) yield 0% SR with 0% collision — correctly
+rejected by body-margin gating. Memory variants are identical to base FSM in single-run eval;
+differentiation requires multi-round repeated-passage experiments (see `eval_memory_differentiation.py`).
 
 ```bash
 python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500
