@@ -28,6 +28,31 @@ We evaluate on two independent setups:
 | w/o recovery | 100% | 100% | 100% | 100% |
 | w/o alignment | 100% | 100% | 100% | 100% |
 
+---
+
+### Harder Synthetic Benchmark — v2 (500 episodes, 7 corridor types)
+
+The v2 benchmark extends the procedural environment to include L-shaped, S-shaped,
+and false-feasible corridors. A geometry-guided `TurnCommitFSM` detects junction
+asymmetry and commits to the correct turn direction.
+RL-based policies (SB3 PPO) achieve near-zero SR on L/S-shaped types — this is the
+primary negative result motivating the geometry-first approach.
+
+| Method | Overall | Straight | L-shaped | S-shaped | Narrow exit | Narrow entry | Asymmetric | False-feas. |
+|---|---|---|---|---|---|---|---|---|
+| Rule baseline | 24.0% | 57.1% | 5.0% | 5.1% | 34.5% | 23.1% | 31.3% | 0% |
+| **Geometry-FSM (ours)** | **71.8%** | **94.6%** | **86.1%** | **65.4%** | **94.8%** | 71.2% | 47.9% | 0% |
+| FSM w/o alignment | 25.6% | 57.1% | 6.9% | 7.7% | 37.9% | 28.9% | 29.2% | 0% |
+
+`false_feasible` corridors (physically impassable) always yield 0% — correctly
+rejected by body-margin gating; collision rate = 0% throughout.
+
+```bash
+python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500
+```
+
+---
+
 ### D_min Self-Calibration (300 synthetic episodes)
 
 | Agent | SR | Reject rate | Notes |
@@ -45,11 +70,14 @@ D_hat converges from 0.56 m → 0.39 m (9% error) within ~75 episodes.
 ```
 examples/narrow_passage_rl/
 ├── procedural_env.py               # Synthetic 2-D corridor simulator (primary)
+├── procedural_env_v2.py            # v2: L/S-shaped, asymmetric, false-feasible corridors
 ├── risk_estimator.py               # Geometric risk estimator (width from depth)
-├── failure_memory.py               # Cross-episode failure memory
+├── failure_memory.py               # Episode-local failure memory
+├── cross_episode_memory.py         # Cross-episode failure memory (persistent)
 ├── dmin_calibrator.py              # Bayesian D_min self-calibration module
 ├── run_rl_experiments.py           # Synthetic ablation suite
 │
+├── eval_harder_benchmark.py        # v2 harder benchmark (TurnCommitFSM + 7 corridor types)
 ├── eval_habitat_geometry_fsm.py    # Geometry-FSM evaluator on Habitat
 ├── eval_habitat_apf_gap.py         # APF+Gap classical baseline
 ├── eval_habitat_ppo_policy.py      # Trained NarrowPassagePolicy evaluator
@@ -64,6 +92,8 @@ examples/narrow_passage_rl/
 │
 └── results/narrow_passage_rl/
     ├── results_rl_summary.csv              # All results (synthetic + Habitat)
+    ├── harder_benchmark_summary.csv        # v2 harder benchmark results
+    ├── harder_benchmark_episodes.csv       # v2 per-episode details
     ├── paper_table_main.{md,tex}           # Synthetic main table
     ├── paper_table_ablation.{md,tex}       # Synthetic ablation
     ├── paper_table_habitat.{md,tex}        # HM3D main comparison table
@@ -120,11 +150,14 @@ For Habitat experiments: install `habitat-sim` and place HM3D data under
 ## Synthetic Environment Experiments
 
 ```bash
-# Full ablation suite
+# Full ablation suite (primary synthetic env)
 python examples/narrow_passage_rl/run_rl_experiments.py
 
 # FSM + failure memory (quick eval)
 python examples/narrow_passage_rl/eval_mode_fsm.py --use-memory 1
+
+# v2 harder benchmark (L/S-shaped, asymmetric, false-feasible)
+python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500
 
 # D_min self-calibration experiment (300 episodes)
 python examples/narrow_passage_rl/eval_dmin_calibration.py --n-episodes 300
@@ -219,6 +252,14 @@ Mode-switching controller driven by live depth-derived passage features:
 | RECOVER | Collision or stuck_score > 0.80 | Back up + reorient |
 
 Features (19-dim from `NarrowPassageGeometrySensor`): depth at 6 sectors, clearance left/right, passage width, body margin, heading error, lateral offset, distance to goal, velocities, stuck score, collision flag.
+
+### TurnCommitFSM (v2 extension)
+
+Wraps the base Geometry-FSM with a junction-detection layer for L/S-shaped corridors.
+Detects corner entry via near-ray asymmetry (`max_side − min_side > 2.0`, `min_side < 0.30 m`,
+`d_center ≤ 1.5 × min_side`), then commits to the open-arm direction for up to 60 steps.
+Natural exit fires when `peak_heading_error > 30°` and `abs(heading_error) < 0.35 rad`,
+followed by an 8-step cooldown to prevent immediate false re-trigger.
 
 ### APF+Gap Baseline
 

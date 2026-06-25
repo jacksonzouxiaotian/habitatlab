@@ -123,8 +123,14 @@ def depth_to_passage_features(
 
     clearance_left = min(d_left_near, d_left_far)
     clearance_right = min(d_right_near, d_right_far)
+    # passage_width ≈ distance_left_wall + distance_right_wall from robot centre,
+    # which approximates the true corridor width regardless of lateral offset.
     passage_width = clearance_left + clearance_right
-    body_margin = 0.5 * passage_width - state.robot_radius
+    # body_margin = actual clearance between robot body surface and nearest wall.
+    # Uses min(), not mean(), so it reflects the tighter side at the current
+    # lateral position.  Can be negative when depth noise causes under-estimation;
+    # the paper's collision metric uses Habitat-Sim's physics contact flag instead.
+    body_margin = min(clearance_left, clearance_right) - state.robot_radius
 
     return np.asarray(
         [
