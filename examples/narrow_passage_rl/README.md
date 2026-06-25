@@ -276,6 +276,54 @@ of D_true=0.36 m in ~75 episodes.
 
 ---
 
+## Sim-to-Real Transfer
+
+The FSM is a feature-driven controller: the same code transfers to a real quadruped
+without retraining, as long as the 19-dim observation vector can be reproduced from
+real sensors.
+
+### Sensor Mapping
+
+| Feature | Real-robot source |
+|---|---|
+| `d_ln, d_cn, d_rn, d_lf, d_cf, d_rf` | Depth camera (e.g. RealSense D435): min-pool at 6 fixed azimuth angles on the horizontal projection |
+| `cl, cr, passage_width, body_margin` | Min-distance left/right from depth scan minus robot effective radius |
+| `heading_error, lateral_offset` | SLAM / UWB localization + goal position |
+| `dist_to_goal` | Same localization |
+| `stuck_score, collision` | Velocity estimate + contact force / IMU jerk |
+
+### Control Interface
+
+FSM outputs `(v_x, ω_z)`. Map to the quadruped's locomotion controller velocity
+interface. Verify `ω_z` sign convention (CW/CCW). Scale `v_x_max` to the gait range.
+
+### Geometry Calibration
+
+1. Run `eval_dmin_calibration.py` (or `dmin_calibrator.py` on-robot) to calibrate
+   the effective body radius from traversal outcomes (~75 episodes to converge).
+2. Log depth features from a known L-shaped corner; verify `asymmetry = max_side − min_side`
+   exceeds 2.0 before the junction. If not, lower the threshold in `_follow_space_mode`.
+
+### Deployment Checklist
+
+1. Reproduce the 19-dim vector in a known corridor; compare against simulator output.
+2. Test straight corridors (FSM without TurnCommitFSM): verify `CORRIDOR_FOLLOW`
+   and `RECOVER` modes.
+3. Test L-shaped corridor: verify `FOLLOW_SPACE` trigger fires at the junction.
+4. Run D_min calibration on-robot.
+5. Enable `cross_episode_memory.py` (transfers unchanged).
+
+### Main Sim-to-Real Risks
+
+| Risk | Mitigation |
+|---|---|
+| Depth noise / missing values (glass, dark) | Median-filter sectors; require minimum valid-point count |
+| Quadruped effective radius varies with gait | D_min calibrator; add 5 cm margin to `min_side` threshold |
+| Localization drift | Local odometry for `lateral_offset`; global SLAM for `heading_error` |
+| `FOLLOW_SPACE` fails at real L-junction | Log asymmetry signal; lower threshold or add dead-reckoning fallback |
+
+---
+
 ## Key Implementation Note: Heading Error Sign
 
 The original `atan2(delta_x, -delta_z)` formula caused heading_error = 0 when

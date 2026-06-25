@@ -1,222 +1,264 @@
-[![codecov](https://codecov.io/gh/facebookresearch/habitat-lab/branch/main/graph/badge.svg)](https://codecov.io/gh/facebookresearch/habitat-lab)
-[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/facebookresearch/habitat-lab/blob/main/LICENSE)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/facebookresearch/habitat-lab)](https://github.com/facebookresearch/habitat-lab/releases/latest)
-[![Supports Habitat_Sim](https://img.shields.io/static/v1?label=supports&message=Habitat%20Sim&color=informational&link=https://github.com/facebookresearch/habitat-sim)](https://github.com/facebookresearch/habitat-sim)
-[![Python 3.9](https://img.shields.io/badge/python-3.9-blue.svg)](https://www.python.org/downloads/release/python-390/)
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://timothycrosley.github.io/isort/)
-[![Twitter Follow](https://img.shields.io/twitter/follow/ai_habitat?style=social)](https://twitter.com/ai_habitat)
+# Geometry-Guided Narrow-Passage Navigation for Quadruped Robots
 
-Habitat-Lab
-==============================
+> **This repository is a fork of [Habitat-Lab](https://github.com/facebookresearch/habitat-lab).**
+> Our contributions are confined to `examples/narrow_passage_rl/` and
+> `habitat-lab/habitat/tasks/narrow_passage/`. All other files are the
+> unmodified Habitat-Lab v0.3.3 codebase.
 
-Habitat-Lab is a modular high-level library for end-to-end development in embodied AI. It is designed to train agents to perform a wide variety of embodied AI tasks in indoor environments, as well as develop agents that can interact with humans in performing these tasks.
+This repository contains simulation experiments for a paper on geometry-guided,
+failure-aware narrow-passage navigation for quadruped robots. The approach uses a
+hand-crafted Finite State Machine (FSM) driven by live depth-derived passage geometry.
+Reinforcement learning is evaluated as a baseline and shown to fail at generalizing
+to unseen corridor geometries — motivating the geometry-first design.
 
-Towards this goal, Habitat-Lab is designed to support the following features:
-
-- **Flexible task definitions**: allowing users to train agents in a wide variety of single and multi-agent tasks (e.g. navigation, rearrangement, instruction following, question answering, human following), as well as define novel tasks.
-- **Diverse embodied agents**: configuring and instantiating a diverse set of embodied agents, including commercial robots and humanoids, specifying their sensors and capabilities.
-- **Training and evaluating agents**: providing algorithms for single and multi-agent training (via imitation or reinforcement learning, or no learning at all as in SensePlanAct pipelines), as well as tools to benchmark their performance on the defined tasks using standard metrics.
-- **Human in the loop interaction**: providing a framework for humans to interact with the simulator, enabling to collect embodied data or interact with trained agents.
-
-Habitat-Lab uses [`Habitat-Sim`](https://github.com/facebookresearch/habitat-sim) as the core simulator. For documentation refer [here](https://aihabitat.org/docs/habitat-lab/).
-
-[![Habitat Demo](https://img.shields.io/static/v1?label=WebGL&message=Try%20AI%20Habitat%20In%20Your%20Browser%20&color=blue&logo=webgl&labelColor=%23990000&style=for-the-badge&link=https://aihabitat.org/demo)](https://aihabitat.org/demo)
-
-<p align="center">
-  <img src="res/img/habitat3.gif" height="400">
-
-</p>
+Real-robot experiments (quadruped hardware) are conducted separately and are
+referenced in the paper.
 
 ---
 
-## Table of contents
-- [Habitat-Lab](#habitat-lab)
-  - [Table of contents](#table-of-contents)
-  - [Citing Habitat](#citing-habitat)
-  - [Installation](#installation)
-  - [Testing](#testing)
-  - [Debugging an environment issue](#debugging-an-environment-issue)
-  - [Documentation](#documentation)
-  - [Docker Setup](#docker-setup)
-    - [Questions?](#questions)
-  - [Datasets](#datasets)
-  - [Baselines](#baselines)
-  - [ROS-X-Habitat](#ros-x-habitat)
-  - [License](#license)
-
-
-## Citing Habitat
-If you use the Habitat platform in your research, please cite the [Habitat 1.0](https://arxiv.org/abs/1904.01201), [Habitat 2.0](https://arxiv.org/abs/2106.14405), and [Habitat 3.0](https://arxiv.org/abs/2310.13724) papers:
+## Our Contributions
 
 ```
-@misc{puig2023habitat3,
-      title  = {Habitat 3.0: A Co-Habitat for Humans, Avatars and Robots},
-      author = {Xavi Puig and Eric Undersander and Andrew Szot and Mikael Dallaire Cote and Ruslan Partsey and Jimmy Yang and Ruta Desai and Alexander William Clegg and Michal Hlavac and Tiffany Min and Theo Gervet and Vladimír Vondruš and Vincent-Pierre Berges and John Turner and Oleksandr Maksymets and Zsolt Kira and Mrinal Kalakrishnan and Jitendra Malik and Devendra Singh Chaplot and Unnat Jain and Dhruv Batra and Akshara Rai and Roozbeh Mottaghi},
-      year={2023},
-      archivePrefix={arXiv},
-}
+examples/narrow_passage_rl/          ← all experiment code (new directory)
+│
+├── procedural_env.py                 # Synthetic 2-D corridor simulator
+├── procedural_env_v2.py              # v2: L/S-shaped, asymmetric, false-feasible
+├── risk_estimator.py                 # Geometric risk estimator
+├── failure_memory.py                 # Episode-local failure memory
+├── cross_episode_memory.py           # Cross-episode persistent failure memory
+├── dmin_calibrator.py                # Bayesian D_min self-calibration
+│
+├── eval_harder_benchmark.py          # v2 benchmark + TurnCommitFSM
+├── eval_habitat_geometry_fsm.py      # Geometry-FSM on Habitat HM3D
+├── eval_habitat_apf_gap.py           # APF+Gap classical baseline
+├── eval_habitat_ppo_policy.py        # Trained NarrowPassagePolicy (RL)
+├── eval_habitat_fsm_ablations.py     # FSM ablation variants
+├── eval_dmin_calibration.py          # D_min calibration experiment
+│
+├── mine_habitat_passages.py          # Auto-mine narrow passages from HM3D
+├── generate_habitat_episodes.py      # Anchor CSV → Habitat JSON dataset
+├── make_paper_tables.py              # Render Markdown / LaTeX tables
+├── plot_delta_d_phase.py             # ΔD phase-transition figure
+├── plot_dmin_calibration.py          # D_min calibration convergence figure
+│
+└── results/narrow_passage_rl/        # All result CSVs and paper tables
 
-@inproceedings{szot2021habitat,
-  title     =     {Habitat 2.0: Training Home Assistants to Rearrange their Habitat},
-  author    =     {Andrew Szot and Alex Clegg and Eric Undersander and Erik Wijmans and Yili Zhao and John Turner and Noah Maestre and Mustafa Mukadam and Devendra Chaplot and Oleksandr Maksymets and Aaron Gokaslan and Vladimir Vondrus and Sameer Dharur and Franziska Meier and Wojciech Galuba and Angel Chang and Zsolt Kira and Vladlen Koltun and Jitendra Malik and Manolis Savva and Dhruv Batra},
-  booktitle =     {Advances in Neural Information Processing Systems (NeurIPS)},
-  year      =     {2021}
-}
+habitat-lab/habitat/tasks/narrow_passage/   ← new Habitat task (new directory)
+├── narrow_passage_task.py            # NarrowPassageNav-v0 task + sensors
+├── rewards.py
+├── sensors.py                        # NarrowPassageGeometrySensor (depth → 19-dim)
+└── geometry.py
 
-@inproceedings{habitat19iccv,
-  title     =     {Habitat: {A} {P}latform for {E}mbodied {AI} {R}esearch},
-  author    =     {Manolis Savva and Abhishek Kadian and Oleksandr Maksymets and Yili Zhao and Erik Wijmans and Bhavana Jain and Julian Straub and Jia Liu and Vladlen Koltun and Jitendra Malik and Devi Parikh and Dhruv Batra},
-  booktitle =     {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
-  year      =     {2019}
-}
+habitat-baselines/habitat_baselines/
+├── config/narrow_passage/ppo_narrow_passage.yaml   ← new training config
+└── rl/ppo/narrow_passage_policy.py                 ← new policy network
+```
+
+---
+
+## Key Results
+
+### 1. Harder Synthetic Benchmark — v2 (500 episodes, 7 corridor types)
+
+Tests generalization to L-shaped, S-shaped, and false-feasible corridors.
+RL (PPO/SB3) achieves near-zero SR on L/S-shaped types.
+
+| Method | Overall | Straight | L-shaped | S-shaped | Narrow exit | Narrow entry | Asymmetric | False-feas. |
+|---|---|---|---|---|---|---|---|---|
+| Rule baseline | 24.0% | 57.1% | 5.0% | 5.1% | 34.5% | 23.1% | 31.3% | 0% |
+| **Geometry-FSM (ours)** | **71.8%** | **94.6%** | **86.1%** | **65.4%** | **94.8%** | 71.2% | 47.9% | 0% |
+| FSM w/o alignment | 25.6% | 57.1% | 6.9% | 7.7% | 37.9% | 28.9% | 29.2% | 0% |
+
+`false_feasible` corridors (physically impassable) yield 0% SR with 0% collision —
+correctly rejected by body-margin gating.
+
+### 2. Habitat HM3D Generalization (157 val episodes, 20 held-out scenes)
+
+| Method | SR | Narrow | Normal | Wide | Notes |
+|---|---|---|---|---|---|
+| PPO-SB3 baseline | 10.2% | 3.8% | 18.2% | 13.0% | Trained on synthetic env, fails to generalize |
+| PPO w/ geometry sensor | 6.4% | 2.5% | 10.9% | 8.7% | 5M steps, 99%+ train SR — sim-to-real gap |
+| APF+Gap (Khatib 1986) | 93.6% | 92.4% | 100% | 82.6% | Depth + GPS only, no learning |
+| **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | |
+| **FSM + Failure Memory (ours)** | **100%** | **100%** | **100%** | **100%** | |
+
+FSM ablation — all variants stay at 100%, showing structural robustness.
+
+### 3. D_min Self-Calibration (300 synthetic episodes)
+
+| Agent | SR | Reject rate | Notes |
+|---|---|---|---|
+| Oracle (D_true = 0.36 m) | 94.0% | 0% | Perfect body-width knowledge |
+| Fixed wrong (D_hat = 0.56 m) | 67.7% | 32% | Over-rejects feasible passages |
+| **Calibrated (ours)** | **89.3%** | 8% | Bayesian update from outcomes |
+
+D_hat converges from 0.56 m → 0.39 m (9% error) within ~75 episodes.
+
+---
+
+## Method: Geometry-FSM
+
+A mode-switching controller driven by 19-dimensional depth-derived features:
 
 ```
+obs = [d_ln, d_cn, d_rn,          # near depth: left / center / right
+       d_lf, d_cf, d_rf,          # far depth
+       cl, cr,                    # clearance left / right
+       passage_width, body_margin, # passage geometry
+       heading_error, lateral_offset, dist_to_goal,
+       action[0], action[1],      # previous velocities
+       stuck_score, collision,
+       prev_action[0], prev_action[1]]
+```
+
+| Mode | Trigger | Action |
+|---|---|---|
+| ALIGN | \|heading_error\| > 40° | Rotate in place toward goal |
+| COMMIT | Normal geometry | 0.20 m/s forward + alignment correction |
+| EXPLORE | Medium misalignment | 0.08 m/s forward + stronger correction |
+| RECOVER | Collision or stuck\_score > 0.80 | Back up + reorient |
+| FOLLOW\_SPACE | L/S-junction: depth asymmetry > 2.0 m | Commit to open-arm direction |
+
+**TurnCommitFSM** (v2): wraps the base FSM with junction detection.
+Detects corner entry via near-ray asymmetry, commits to the open-arm direction
+for up to 60 steps. Natural exit fires when `peak_he > 30°` AND `|he| < 0.35 rad`.
+
+---
+
+## Sim-to-Real Transfer
+
+The FSM is a feature-driven controller: as long as the 19-dim feature vector can
+be reproduced on the real robot, the controller transfers without retraining.
+
+### Sensor Mapping
+
+| Feature | Real-robot source |
+|---|---|
+| `d_ln, d_cn, d_rn, d_lf, d_cf, d_rf` | Depth camera (e.g. RealSense D435): min-pool at 6 fixed azimuth angles on the horizontal projection |
+| `cl, cr, passage_width, body_margin` | Min-distance left/right obstacle from depth scan, minus robot effective radius |
+| `heading_error, lateral_offset` | SLAM / UWB localization + goal position |
+| `dist_to_goal` | Same localization |
+| `stuck_score, collision` | Velocity estimate + contact force sensors / IMU jerk |
+
+### Control Interface
+
+FSM outputs `(v_x, ω_z)` velocity commands. Map linearly to the quadruped's
+locomotion controller velocity interface. Confirm sign convention (CW/CCW for `ω_z`).
+The FSM's `v_x_max ≈ 0.06–0.12 m/s` is a soft limit; scale to the quadruped's
+gait range as needed.
+
+### Geometry Calibration
+
+Thresholds in `_follow_space_mode` (`min_side < 0.30 m`, `asymmetry > 2.0`) were
+tuned for the synthetic 2-D environment. For the real robot:
+
+1. Run `dmin_calibrator.py` in an open corridor — Bayesian-updates D_min from
+   traversal outcomes, converges within ~75 episodes.
+2. Log depth features from a known L-shaped corner and verify `asymmetry` reaches
+   the 2.0 threshold before the junction. If not, adjust the threshold down.
+
+### Deployment Steps
+
+1. **Feature reproduction** — log the 19-dim vector on the robot in a known corridor
+   and compare numerically against the simulator for the same geometry.
+2. **Straight-corridor test** — deploy FSM without TurnCommitFSM; verify
+   `CORRIDOR_FOLLOW` and `RECOVER` modes behave as expected.
+3. **L-shaped test** — enable TurnCommitFSM; verify `FOLLOW_SPACE` triggers at the
+   junction (check depth asymmetry signal in real time).
+4. **D_min calibration** — run `dmin_calibrator.py` on-robot to adapt to real
+   body dimensions.
+5. **Failure memory** — `cross_episode_memory.py` transfers unchanged.
+
+### Main Sim-to-Real Risks
+
+| Risk | Mitigation |
+|---|---|
+| Depth noise / missing values (glass, dark surfaces) | Median-filter depth sectors; require a minimum valid-point count |
+| Quadruped effective radius varies with gait | Use D_min calibrator; add 5 cm safety margin to `min_side` threshold |
+| Localization drift in long corridors | Use local odometry for short-horizon `lateral_offset`; global for `heading_error` |
+| `FOLLOW_SPACE` fails at real L-junction | Log asymmetry signal; lower threshold or add dead-reckoning fallback |
+
+---
 
 ## Installation
 
-1. **Preparing conda env**
+```bash
+# Base Habitat stack
+pip install -e habitat-lab/
+pip install -e habitat-baselines/
 
-   Assuming you have [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/) installed, let's prepare a conda env:
-   ```bash
-   # We require python>=3.9 and cmake>=3.14
-   conda create -n habitat python=3.9 cmake=3.14.0
-   conda activate habitat
-   ```
+# Experiment dependencies
+pip install stable-baselines3 gymnasium numpy matplotlib
+```
 
-1. **conda install habitat-sim**
-   - To install habitat-sim with bullet physics
-      ```
-      conda install habitat-sim withbullet -c conda-forge -c aihabitat
-      ```
-      Note, for newer features added after the most recent release, you may need to install `aihabitat-nightly`. See Habitat-Sim's [installation instructions](https://github.com/facebookresearch/habitat-sim#installation) for more details.
+For Habitat experiments: install `habitat-sim` and place HM3D data under
+`data/scene_datasets/hm3d/`. Use the `habitat` conda environment.
 
-1. **pip install habitat-lab stable version**.
+---
 
-      ```bash
-      git clone --branch stable https://github.com/facebookresearch/habitat-lab.git
-      cd habitat-lab
-      pip install -e habitat-lab  # install habitat_lab
-      ```
-1. **Install habitat-baselines**.
+## Quick Start
 
-    The command above will install only core of Habitat-Lab. To include habitat_baselines along with all additional requirements, use the command below after installing habitat-lab:
+```bash
+# Synthetic v2 harder benchmark (no Habitat required)
+python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500
 
-      ```bash
-      pip install -e habitat-baselines  # install habitat_baselines
-      ```
+# Habitat HM3D — Geometry-FSM
+conda run -n habitat python examples/narrow_passage_rl/eval_habitat_geometry_fsm.py
 
-## Testing
+# Habitat HM3D — APF+Gap baseline
+conda run -n habitat python examples/narrow_passage_rl/eval_habitat_apf_gap.py
 
-1. Let's download some 3D assets using Habitat-Sim's python data download utility:
-   - Download (testing) 3D scenes:
-      ```bash
-      python -m habitat_sim.utils.datasets_download --uids habitat_test_scenes --data-path data/
-      ```
-      Note that these testing scenes do not provide semantic annotations.
+# D_min self-calibration
+python examples/narrow_passage_rl/eval_dmin_calibration.py --n-episodes 300
 
-   - Download point-goal navigation episodes for the test scenes:
-      ```bash
-      python -m habitat_sim.utils.datasets_download --uids habitat_test_pointnav_dataset --data-path data/
-      ```
+# Generate paper tables
+python examples/narrow_passage_rl/make_paper_tables.py \
+    --input      examples/narrow_passage_rl/results/narrow_passage_rl/results_rl_summary.csv \
+    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl/
+```
 
-1. **Non-interactive testing**: Test the Pick task: Run the example pick task script
-    <!--- Please, update `examples/example.py` if you update example. -->
-    ```bash
-    python examples/example.py
-    ```
+Full experiment details: [examples/narrow_passage_rl/README.md](examples/narrow_passage_rl/README.md)
 
-    which uses [`habitat-lab/habitat/config/benchmark/rearrange/skills/pick.yaml`](habitat-lab/habitat/config/benchmark/rearrange/skills/pick.yaml) for configuration of task and agent. The script roughly does this:
+---
 
-    ```python
-    import gym
-    import habitat.gym
+## Dataset
 
-    # Load embodied AI task (RearrangePick) and a pre-specified virtual robot
-    env = gym.make("HabitatRenderPick-v0")
-    observations = env.reset()
+HM3D val split, auto-mined with `mine_habitat_passages.py`. Scene-level 80/20 split.
 
-    terminal = False
+| Split | Episodes | Narrow | Normal | Wide |
+|---|---|---|---|---|
+| train | 638 | 320 | 224 | 94 |
+| val | 157 | 79 | 55 | 23 |
 
-    # Step through environment with random actions
-    while not terminal:
-        observations, reward, terminal, info = env.step(env.action_space.sample())
-    ```
+`narrow` = body_margin ≤ 0.15 m · `normal` = 0.15–0.40 m · `wide` > 0.40 m.
 
-    To modify some of the configurations of the environment, you can also use the `habitat.gym.make_gym_from_config` method that allows you to create a habitat environment using a configuration.
+```bash
+conda run -n habitat python examples/narrow_passage_rl/mine_habitat_passages.py \
+    --scenes-dir data/scene_datasets/hm3d/val --target-episodes 800 \
+    --out-train data/datasets/narrow_passage/anchors_train.csv \
+    --out-val   data/datasets/narrow_passage/anchors_val.csv
 
-    ```python
-    config = habitat.get_config(
-      "benchmark/rearrange/skills/pick.yaml",
-      overrides=["habitat.environment.max_episode_steps=20"]
-    )
-    env = habitat.gym.make_gym_from_config(config)
-    ```
+python examples/narrow_passage_rl/generate_habitat_episodes.py \
+    --anchors data/datasets/narrow_passage/anchors_train.csv \
+    --split train --output data/datasets/narrow_passage/train/train.json.gz
+```
 
-    If you want to know more about what the different configuration keys overrides do, you can use [this reference](habitat-lab/habitat/config/CONFIG_KEYS.md).
+---
 
-    See [`examples/register_new_sensors_and_measures.py`](examples/register_new_sensors_and_measures.py) for an example of how to extend habitat-lab from _outside_ the source code.
+## Implementation Notes
 
+**Heading error sign fix**: `atan2(delta_x, −delta_z)` caused `heading_error = 0`
+when the robot faced *away* from the goal. Habitat's forward direction is
+`[−sin(yaw), 0, −cos(yaw)]`; correct formula is `atan2(−delta_x, −delta_z)`.
+Without the fix, FSM achieved 2.7% on HM3D; after: 100%.
 
+**body_margin formula**: Uses `min(clearance_left, clearance_right) − robot_radius`
+(tight side, not average), reflecting actual worst-case clearance at the current
+lateral position.
 
-1. **Interactive testing**: Using you keyboard and mouse to control a Fetch robot in a ReplicaCAD environment:
-    ```bash
-    # Pygame for interactive visualization, pybullet for inverse kinematics
-    pip install pygame==2.0.1 pybullet==3.0.4
+---
 
-    # Interactive play script
-    python examples/interactive_play.py --never-end
-    ```
+## Habitat-Lab Base
 
-   Use I/J/K/L keys to move the robot base forward/left/backward/right and W/A/S/D to move the arm end-effector forward/left/backward/right and E/Q to move the arm up/down. The arm can be difficult to control via end-effector control. More details in documentation. Try to move the base and the arm to touch the red bowl on the table. Have fun!
-
-   Note: Interactive testing currently fails on Ubuntu 20.04 with an error: `X Error of failed request:  BadAccess (attempt to access private resource denied)`. We are working on fixing this, and will update instructions once we have a fix. The script works without errors on MacOS.
-
-## Debugging an environment issue
-
-Our vectorized environments are very fast, but they are not very verbose. When using `VectorEnv` some errors may be silenced, resulting in process hanging or multiprocessing errors that are hard to interpret. We recommend setting the environment variable `HABITAT_ENV_DEBUG` to 1 when debugging (`export HABITAT_ENV_DEBUG=1`) as this will use the slower, but more verbose `ThreadedVectorEnv` class. Do not forget to reset `HABITAT_ENV_DEBUG` (`unset HABITAT_ENV_DEBUG`) when you are done debugging since `VectorEnv` is much faster than `ThreadedVectorEnv`.
-
-## Documentation
-
-Browse the online [Habitat-Lab documentation](https://aihabitat.org/docs/habitat-lab/index.html) and the extensive [tutorial on how to train your agents with Habitat](https://aihabitat.org/tutorial/2020/). For Habitat 2.0, use this [quickstart guide](https://aihabitat.org/docs/habitat2/).
-
-
-## Docker Setup
-We provide docker containers for Habitat, updated approximately once per year for the [Habitat Challenge](https://github.com/facebookresearch/habitat-challenge). This works on machines with an NVIDIA GPU and requires users to install [nvidia-docker](https://github.com/NVIDIA/nvidia-docker). To setup the habitat stack using docker follow the below steps:
-
-1. Pull the habitat docker image: `docker pull fairembodied/habitat-challenge:testing_2022_habitat_base_docker`
-
-1. Start an interactive bash session inside the habitat docker: `docker run --runtime=nvidia -it fairembodied/habitat-challenge:testing_2022_habitat_base_docker`
-
-1. Activate the habitat conda environment: `conda init; source ~/.bashrc; source activate habitat`
-
-1. Run the testing scripts as above: `cd habitat-lab; python examples/example.py`. This should print out an output like:
-    ```bash
-    Agent acting inside environment.
-    Episode finished after 200 steps.
-    ```
-
-### Questions?
-Can't find the answer to your question? Look up for [common issues](./TROUBLESHOOTING.md) or try asking the developers and community on our [Discussions forum](https://github.com/facebookresearch/habitat-lab/discussions).
-
-## Datasets
-
-[Common task and episode datasets used with Habitat-Lab](DATASETS.md).
-
-## Baselines
-Habitat-Lab includes reinforcement learning (via PPO) baselines. For running PPO training on sample data and more details refer [habitat_baselines/README.md](habitat-baselines/habitat_baselines/README.md).
-
-## ROS-X-Habitat
-ROS-X-Habitat (https://github.com/ericchen321/ros_x_habitat) is a framework that bridges the AI Habitat platform (Habitat Lab + Habitat Sim) with other robotics resources via ROS. ROS-X-Habitat places emphasis on 1) leveraging Habitat Sim v2's physics-based simulation capability and 2) allowing roboticists to access simulation assets from ROS. The work has also been made public as a [paper](https://arxiv.org/abs/2109.07703).
-
-Note that ROS-X-Habitat was developed, and is maintained by the Lab for Computational Intelligence at UBC; it has not yet been officially supported by the Habitat Lab team. Please refer to the framework's repository for docs and discussions.
-
-
-## License
-Habitat-Lab is MIT licensed. See the [LICENSE file](/LICENSE) for details.
-
-The trained models and the task datasets are considered data derived from the correspondent scene datasets.
-
-- Matterport3D based task datasets and trained models are distributed with [Matterport3D Terms of Use](http://kaldir.vc.in.tum.de/matterport/MP_TOS.pdf) and under [CC BY-NC-SA 3.0 US license](https://creativecommons.org/licenses/by-nc-sa/3.0/us/).
-- Gibson based task datasets, the code for generating such datasets, and trained models are distributed with [Gibson Terms of Use](https://storage.googleapis.com/gibson_material/Agreement%20GDS%2006-04-18.pdf) and under [CC BY-NC-SA 3.0 US license](https://creativecommons.org/licenses/by-nc-sa/3.0/us/).
+The rest of this repository is [Habitat-Lab v0.3.3](https://github.com/facebookresearch/habitat-lab)
+by Meta AI Research, released under the MIT License.
