@@ -196,14 +196,14 @@ class CrossEpisodeMemory:
         return self._calibrator.std
 
     def should_attempt(
-        self, passage_width: float, rng: np.random.Generator = None
+        self, passage_width: float, corridor_type: str = "unknown",
+        rng: np.random.Generator = None
     ) -> bool:
         """Combine D_min gating and retrieval-based reject to decide entry."""
-        # Hard reject from retrieval memory
-        info = self.retrieval_stats(
-            np.array([0, 0, 0, 0, 0, 0, 0, 0, passage_width, 0,
-                      0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32)
-        )
+        # Build minimal obs (only width matters for fingerprint; corridor_type sets type_class)
+        obs = np.zeros(19, dtype=np.float32)
+        obs[8] = passage_width
+        info = self.retrieval_stats(obs, corridor_type)
         if (info["n_similar"] >= self.cfg.min_similar_for_reject and
                 info["success_rate"] < self.cfg.sr_reject_threshold):
             return False

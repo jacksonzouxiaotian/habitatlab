@@ -73,10 +73,9 @@ def _run_episode(env, obs_init, memory=None, corridor_type="true_narrow",
         if collision_flag:
             any_collision = True
 
-        mem_obs = memory.local.as_array(obs) if memory else None
         action, mode = fsm_action(obs, variant="full",
                                   local_mem=None,
-                                  cross_mem=None)
+                                  cross_mem=memory)
         result = env.step(action)
         obs = result[0]
         done = result[2] or result[3]
@@ -119,7 +118,7 @@ def _run_round(narrow_env, ff_env, dyn_env_open, dyn_env_blocked,
         obs, _ = narrow_env.reset(seed=seed)
         if memory is not None:
             memory.reset_local()
-            if not memory.should_attempt(float(obs[8])):
+            if not memory.should_attempt(float(obs[8]), corridor_type="narrow"):
                 stats["true_narrow"].append({
                     "success": False, "steps": 0, "rejected": True,
                     "any_collision": False, "min_bm": 0.0
@@ -134,9 +133,7 @@ def _run_round(narrow_env, ff_env, dyn_env_open, dyn_env_blocked,
         obs, _ = ff_env.reset(seed=seed)
         if memory is not None:
             memory.reset_local()
-            # Check if memory wants to reject
-            info = memory.retrieval_stats(obs, "false_feasible")
-            if not memory.should_attempt(float(obs[8])):
+            if not memory.should_attempt(float(obs[8]), corridor_type="false_feasible"):
                 stats["false_feasible"].append({
                     "success": False, "steps": 0, "rejected": True,
                     "any_collision": False, "min_bm": 0.0
@@ -156,13 +153,14 @@ def _run_round(narrow_env, ff_env, dyn_env_open, dyn_env_blocked,
         obs, _ = dyn_env.reset(seed=seed)
         if memory is not None:
             memory.reset_local()
-            if not memory.should_attempt(float(obs[8])):
+            dyn_ctype = "dynamic_passable" if round_idx < DYNAMIC_BLOCK_CUTOFF else "dynamic_blocked"
+            if not memory.should_attempt(float(obs[8]), corridor_type=dyn_ctype):
                 stats["dynamic_block"].append({
                     "success": False, "steps": 0, "rejected": True,
                     "any_collision": False, "min_bm": 0.0
                 })
                 memory.record_episode(obs, False, float(obs[8]),
-                                      steps=0, corridor_type="dynamic_block")
+                                      steps=0, corridor_type=dyn_ctype)
                 continue
         ctype = "dynamic_passable" if round_idx < DYNAMIC_BLOCK_CUTOFF else "dynamic_blocked"
         result = _run_episode(dyn_env, obs, memory, ctype)
