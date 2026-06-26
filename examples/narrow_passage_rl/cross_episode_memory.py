@@ -197,13 +197,21 @@ class CrossEpisodeMemory:
 
     def should_attempt(
         self, passage_width: float, corridor_type: str = "unknown",
+        entry_obs: np.ndarray = None,
         rng: np.random.Generator = None
     ) -> bool:
-        """Combine D_min gating and retrieval-based reject to decide entry."""
-        # Build minimal obs (only width matters for fingerprint; corridor_type sets type_class)
-        obs = np.zeros(19, dtype=np.float32)
-        obs[8] = passage_width
-        info = self.retrieval_stats(obs, corridor_type)
+        """Combine D_min gating and retrieval-based reject to decide entry.
+
+        Pass entry_obs (the full reset observation) for accurate fingerprint
+        matching — omitting it uses a zero-obs which zeroes d_bkt and may miss
+        stored records that had non-zero heading/lateral at approach.
+        """
+        if entry_obs is not None:
+            obs_q = entry_obs
+        else:
+            obs_q = np.zeros(19, dtype=np.float32)
+            obs_q[8] = passage_width
+        info = self.retrieval_stats(obs_q, corridor_type)
         if (info["n_similar"] >= self.cfg.min_similar_for_reject and
                 info["success_rate"] < self.cfg.sr_reject_threshold):
             return False

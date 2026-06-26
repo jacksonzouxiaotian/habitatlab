@@ -118,7 +118,7 @@ def _run_round(narrow_env, ff_env, dyn_env_open, dyn_env_blocked,
         obs, _ = narrow_env.reset(seed=seed)
         if memory is not None:
             memory.reset_local()
-            if not memory.should_attempt(float(obs[8]), corridor_type="narrow"):
+            if not memory.should_attempt(float(obs[8]), corridor_type="narrow", entry_obs=obs):
                 stats["true_narrow"].append({
                     "success": False, "steps": 0, "rejected": True,
                     "any_collision": False, "min_bm": 0.0
@@ -133,7 +133,7 @@ def _run_round(narrow_env, ff_env, dyn_env_open, dyn_env_blocked,
         obs, _ = ff_env.reset(seed=seed)
         if memory is not None:
             memory.reset_local()
-            if not memory.should_attempt(float(obs[8]), corridor_type="false_feasible"):
+            if not memory.should_attempt(float(obs[8]), corridor_type="false_feasible", entry_obs=obs):
                 stats["false_feasible"].append({
                     "success": False, "steps": 0, "rejected": True,
                     "any_collision": False, "min_bm": 0.0
@@ -154,7 +154,7 @@ def _run_round(narrow_env, ff_env, dyn_env_open, dyn_env_blocked,
         if memory is not None:
             memory.reset_local()
             dyn_ctype = "dynamic_passable" if round_idx < DYNAMIC_BLOCK_CUTOFF else "dynamic_blocked"
-            if not memory.should_attempt(float(obs[8]), corridor_type=dyn_ctype):
+            if not memory.should_attempt(float(obs[8]), corridor_type=dyn_ctype, entry_obs=obs):
                 stats["dynamic_block"].append({
                     "success": False, "steps": 0, "rejected": True,
                     "any_collision": False, "min_bm": 0.0
