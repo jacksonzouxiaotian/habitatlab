@@ -14,11 +14,16 @@ We evaluate on two independent setups:
 
 | Method | SR | Narrow | Normal | Wide | Notes |
 |---|---|---|---|---|---|
-| PPO-SB3 baseline | 10.2% | 3.8% | 18.2% | 13.0% | Trained on synthetic env |
-| PPO w/ geometry sensor | 6.4% | 2.5% | 10.9% | 8.7% | 5M steps, 99%+ train SR → fails to generalize |
+| PPO-SB3 baseline | 10.2% | 3.8% | 18.2% | 13.0% | Trained on synthetic env, single seed |
+| PPO w/ geometry sensor | 2.1% (±2.6%) | 1.7% (±1.6%) | 3.0% (±4.3%) | 1.4% (±2.0%) | 3 seeds: 5.7%, 0.0%, 0.6% |
 | APF+Gap (Khatib 1986, Meng 2002) | 93.6% | 92.4% | 100% | 82.6% | Depth + GPS only |
 | **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | |
 | **FSM + Failure Memory (ours)** | **100%** | **100%** | **100%** | **100%** | |
+
+PPO trains with 99%+ success rate on synthetic corridors but collapses to <6% on real HM3D
+geometry — confirming severe sim-to-real gap. The FSM generalizes directly because its
+geometric features (heading error, body margin) have the same physical meaning in both
+2D synthetic and 3D scanned environments.
 
 **FSM ablation** — all components remain at 100%, showing structural robustness:
 
@@ -61,9 +66,34 @@ Results below are mean across 3 independent seeds (std in parentheses), 500 epis
 rejected by body-margin gating. Memory variants are identical to base FSM in single-run eval;
 differentiation requires multi-round repeated-passage experiments (see `eval_memory_differentiation.py`).
 
+**Cross-episode Memory Differentiation** (`eval_memory_differentiation.py`):
+
+| Round | no-memory FF attempt% | with-memory FF attempt% | wasted steps |
+|---|---|---|---|
+| 1 | 100% | 40% | 400 |
+| 2+ | 100% | **0%** | **0** |
+
+From round 2 onward, with-memory correctly rejects all false-feasible passages (0 wasted steps)
+while the memoryless agent continues to waste 400 steps per episode. Narrow passages (true passable)
+are always attempted correctly by both methods (SR 100%).
+
 ```bash
 python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500
 ```
+
+### Trajectory Visualization
+
+Top-down figures comparing method behavior across corridor types:
+
+```bash
+python examples/narrow_passage_rl/render_trajectories.py \
+    --panels l_shaped s_shaped false_feasible narrow_entry \
+    --dpi 150
+# Output → results/narrow_passage_rl/trajectory_comparison.png
+```
+
+Mode color scheme: COMMIT=green · EXPLORE=orange · ALIGN=red · RECOVER=dark-red ·
+FOLLOW_SPACE=teal · rule_baseline=blue.
 
 ---
 
@@ -92,11 +122,13 @@ examples/narrow_passage_rl/
 ├── run_rl_experiments.py           # Synthetic ablation suite
 │
 ├── eval_harder_benchmark.py        # v2 harder benchmark (TurnCommitFSM + 7 corridor types)
+├── eval_memory_differentiation.py  # Cross-episode memory differentiation experiment
 ├── eval_habitat_geometry_fsm.py    # Geometry-FSM evaluator on Habitat
 ├── eval_habitat_apf_gap.py         # APF+Gap classical baseline
 ├── eval_habitat_ppo_policy.py      # Trained NarrowPassagePolicy evaluator
 ├── eval_habitat_fsm_ablations.py   # FSM variant ablation (no_recovery / no_alignment)
 ├── eval_dmin_calibration.py        # D_min self-calibration experiment
+├── render_trajectories.py          # Top-down trajectory visualization (paper figures)
 │
 ├── mine_habitat_passages.py        # Auto-mine narrow passages from HM3D scenes
 ├── generate_habitat_episodes.py    # Anchor CSV → Habitat JSON dataset
@@ -112,8 +144,11 @@ examples/narrow_passage_rl/
     ├── paper_table_ablation.{md,tex}       # Synthetic ablation
     ├── paper_table_habitat.{md,tex}        # HM3D main comparison table
     ├── paper_table_habitat_ablation.{md,tex} # HM3D FSM ablation
+    ├── memory_differentiation.csv          # Multi-round memory reject experiment
+    ├── ppo_seed{0,1,2}_episodes.csv        # PPO 3-seed Habitat eval (5.7%, 0.0%, 0.6%)
     ├── delta_d_phase.png                   # ΔD phase-transition figure
     ├── dmin_calibration.png                # D_min calibration figure
+    ├── traj_seed*.png                      # Top-down trajectory comparison figures
     ├── habitat_fsm_v2_episodes.csv         # Per-episode FSM results (157 ep)
     ├── habitat_memory_v2_episodes.csv      # Per-episode FSM+memory results
     ├── habitat_apf_gap_episodes.csv        # Per-episode APF+Gap results
