@@ -1,0 +1,41 @@
+# Ablation protocol for paper Table: module contribution.
+experiment: eval_narrow_passage_ablation
+script: examples/narrow_passage_rl/narrow_passage/scripts/run_ablation.py
+
+variants:
+  ours_full:
+    geometry: true
+    memory: true
+    risk_head: true
+    recovery: true
+  ours_no_memory:
+    geometry: true
+    memory: false
+    risk_head: true
+    recovery: true
+  ours_no_geometry:
+    geometry: false
+    memory: true
+    risk_head: true
+    recovery: true
+  ours_no_risk:
+    geometry: true
+    memory: true
+    risk_head: false
+    recovery: true
+  ours_no_recovery:
+    geometry: true
+    memory: true
+    risk_head: true
+    recovery: false
+
+habitat_stress_tests:
+  extreme_narrow:
+    split: extreme_narrow
+    heading_perturb_deg: [0, 60]
+    max_steps: 500
+
+metrics:
+  primary: [success_rate, repeated_failure_rate]
+  safety: [collision_rate, near_collision_rate, min_clearance]
+  behavior: [oscillation_count, stuck_rate, recovery_success, time_to_goal]

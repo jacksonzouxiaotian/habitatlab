@@ -1,0 +1,30 @@
+# Sim-to-real / Habitat transfer protocol.
+experiment: sim2real_narrow_passage
+
+source:
+  env: HarderNarrowPassageEnv
+  observation: narrow_passage_geometry_features_19d
+  train_algorithms: [ppo, sac, td3]
+
+target:
+  env: NarrowPassageNav-v0
+  dataset: HM3D
+  data_path: data/datasets/narrow_passage/{split}/{split}.json.gz
+  splits:
+    val:
+      episodes: 151
+      scenes: 20
+    extreme_narrow:
+      episodes: 24
+
+transfer_checks:
+  - observation_index_compatibility
+  - heading_error_sign
+  - robot_body_width
+  - velocity_action_scale
+  - success_radius
+
+reported_results:
+  ppo_v2_habitat_val_sr: 0.060
+  sac_v2_habitat_val_sr: 0.000
+  geometry_fsm_habitat_val_sr: 1.000

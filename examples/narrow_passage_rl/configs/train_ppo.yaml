@@ -1,0 +1,44 @@
+# PPO training config for the narrow-passage v2 synthetic benchmark.
+experiment: train_ppo_v2
+script: examples/narrow_passage_rl/narrow_passage/scripts/train.py
+
+env:
+  name: HarderNarrowPassageEnv
+  benchmark: narrow_passage_v2
+  corridor_types:
+    - STRAIGHT
+    - L_SHAPED
+    - S_SHAPED
+    - NARROW_EXIT
+    - NARROW_ENTRY
+    - ASYMMETRIC
+    - FALSE_FEASIBLE
+  width_body_ratio_curriculum: [1.20, 1.00, 0.95, 0.85, 0.75]
+
+robot:
+  body_width_m: 0.36
+
+algorithm:
+  name: ppo
+  total_steps: 5000000
+  num_envs: 8
+  learning_rate: 0.00025
+  n_steps: 1024
+  batch_size: 256
+  gamma: 0.99
+  gae_lambda: 0.95
+  ent_coef: 0.01
+
+reward:
+  success_reward: 10.0
+  progress_reward: 1.0
+  collision_penalty: -5.0
+  near_collision_penalty: -1.0
+  oscillation_penalty: -0.2
+  stuck_penalty: -1.0
+  excessive_recovery_penalty: -0.1
+  safe_clearance_bonus: 0.2
+
+output:
+  checkpoint_dir: data/narrow_passage_sb3_v2_ppo
+  tensorboard_dir: data/narrow_passage_sb3_v2_ppo/tb

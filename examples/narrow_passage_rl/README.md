@@ -160,6 +160,46 @@ D_hat converges from 0.56 m → 0.39 m (9% error) within ~75 episodes.
 
 ```
 examples/narrow_passage_rl/
+├── configs/
+│   ├── train_ppo.yaml              # PPO curriculum/reward protocol
+│   ├── eval_baselines.yaml         # Baseline evaluation protocol
+│   ├── eval_ablation.yaml          # Module ablation protocol
+│   └── sim2real.yaml               # Synthetic-to-Habitat transfer checks
+│
+├── narrow_passage/                 # Paper-facing research framework
+│   ├── envs/
+│   │   ├── narrow_passage_task.py  # Stable adapter for NarrowPassageNav-v0
+│   │   ├── passage_generator.py    # Mining / dataset generation entry points
+│   │   └── metrics.py              # Success, safety, memory-specific metrics
+│   ├── models/
+│   │   ├── geometry_encoder.py     # Explicit passage geometry vector → z_g
+│   │   ├── risk_head.py            # Risk fusion / traversability estimator
+│   │   ├── failure_memory.py       # Geometry-aware failure memory bank
+│   │   └── policy.py               # Commit / Explore / Recover / Reject modes
+│   ├── planners/
+│   │   ├── astar_baseline.py       # Global graph-search baseline spec
+│   │   ├── rrt_baseline.py         # Sampling baseline spec
+│   │   ├── dwa_baseline.py         # DWB/DWA local planner adapter spec
+│   │   └── mppi_baseline.py        # MPPI local planner adapter spec
+│   └── scripts/
+│       ├── train.py                # Stable training entry point
+│       ├── evaluate.py             # Stable evaluation entry point
+│       ├── run_ablation.py         # Stable ablation entry point
+│       ├── make_paper_tables.py    # Table rendering entry point
+│       └── visualize_memory.py     # Memory visualization entry point
+│
+├── docs/
+│   ├── method.md                   # Five-module algorithm description
+│   ├── experiment_protocol.md      # Seeds, scenes, metrics, definitions
+│   └── reproducibility.md          # Environment, checkpoints, commands
+│
+├── results/
+│   ├── raw/                        # Raw future experiment dumps
+│   ├── tables/                     # Paper table outputs
+│   ├── figures/                    # Paper figures
+│   └── narrow_passage_rl/          # Current result CSV/MD/PNG artifacts
+│
+Legacy implementation scripts retained for reproducibility:
 ├── procedural_env.py               # Synthetic 2-D corridor simulator (primary)
 ├── procedural_env_v2.py            # v2: L/S-shaped, asymmetric, false-feasible corridors
 ├── risk_estimator.py               # Geometric risk estimator (width from depth)

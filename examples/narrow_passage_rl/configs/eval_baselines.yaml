@@ -1,0 +1,37 @@
+# Baseline evaluation protocol.
+experiment: eval_narrow_passage_baselines
+script: examples/narrow_passage_rl/narrow_passage/scripts/evaluate.py
+
+datasets:
+  synthetic_v2:
+    episodes: 500
+    seeds: [0, 1, 2]
+    scenario_types:
+      - Straight Passage
+      - Angled Entrance
+      - Asymmetric Obstacles
+      - Multi-Passage Choice
+    width_body_ratios: [0.70, 0.75, 0.85, 0.95, 1.10]
+  habitat_hm3d:
+    data_path: data/datasets/narrow_passage/{split}/{split}.json.gz
+    splits: [val, extreme_narrow]
+
+methods:
+  classical_local_planner: [dwb, teb, rpp]
+  sampling_mpc_planner: [mppi]
+  learning_baseline: [ppo_v2, sac_v2, td3_v2]
+  memory_baseline: [rl_vanilla_replay_memory]
+  ours_ablation: [ours_no_geometry, ours_no_memory, ours_no_risk, ours_no_recovery]
+  ours_full: [geometry_fsm_memory]
+
+metrics:
+  - success_rate
+  - collision_rate
+  - near_collision_rate
+  - oscillation_count
+  - stuck_rate
+  - recovery_success
+  - min_clearance
+  - time_to_goal
+  - spl
+  - repeated_failure_rate
