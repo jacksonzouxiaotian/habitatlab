@@ -28,6 +28,7 @@ We evaluate on two independent setups:
 | Method | SR | Narrow (73) | Normal (55) | Wide (23) |
 |---|---|---|---|---|
 | PPO v2 (geometry sensor) | 6.0% | 5.5% | 9.1% | 0.0% |
+| SAC v2 (geometry sensor) | 0.0% | 0.0% | 0.0% | 0.0% |
 | **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** |
 
 PPO trains with 99%+ success rate on synthetic corridors but collapses to <6% on real HM3D
@@ -43,8 +44,20 @@ scanned environments.
 | w/o recovery | 100% | 100% | 100% | 100% |
 | w/o alignment | 100% | 100% | 100% | 100% |
 
-Note: FSM ablation variants are differentiated on extreme-narrow passages (body_margin < 0.05 m):
-FSM 100% vs. PPO v2 4.2% (1/24 episodes).
+On unperturbed Habitat episodes, recovery/alignment ablations remain at 100% because the mined
+anchors are already well aligned. A controlled Habitat stress test rotates the initial heading by
+60° on the 24 extreme-narrow episodes (body_margin < 0.05 m), revealing the alignment module:
+
+| Variant (+60° heading perturb) | SR | Successes |
+|---|---:|---:|
+| Full FSM | 100% | 24/24 |
+| w/o recovery | 100% | 24/24 |
+| w/o all alignment | 0% | 0/24 |
+| w/o heading alignment | 0% | 0/24 |
+| w/o lateral alignment | 100% | 24/24 |
+
+Thus, heading alignment is the critical Habitat module under start-pose perturbation; lateral
+centering and recovery are not the bottleneck for these mined anchors.
 
 **Inference speed** (CPU, n=10,000 calls):
 
@@ -168,7 +181,7 @@ examples/narrow_passage_rl/
 ├── generate_habitat_episodes.py    # Anchor CSV → Habitat JSON dataset
 ├── eval_multi_agent_memory.py      # Cross-episode memory (Experiment ①)
 ├── eval_inference_speed.py         # FSM vs RL inference latency comparison (Experiment ⑥)
-├── train_sb3_v2.py                 # SB3 PPO/SAC training on v2 env (fair RL baseline)
+├── train_sb3_v2.py                 # SB3 PPO/SAC/TD3 training on v2 env (fair RL baseline)
 ├── make_paper_tables.py            # Render Markdown / LaTeX result tables
 ├── plot_delta_d_phase.py           # ΔD phase-transition curve (FSM vs baselines)
 ├── plot_dmin_calibration.py        # D_min calibration convergence figure
@@ -193,6 +206,8 @@ examples/narrow_passage_rl/
     ├── ppo_v2_episodes.csv                 # PPO v2 checkpoint on Habitat (5.7%)
     ├── sb3_on_v2_episodes.csv              # PPO-SB3 on v2 synthetic env (0.0%)
     ├── habitat_ppo_policy_episodes.csv     # Per-episode trained policy results (v1)
+    ├── habitat_sac_v2_mined_val.csv        # SAC v2 checkpoint on mined Habitat val (0.0%)
+    ├── habitat_fsm_extreme_ablation_perturb60.csv # Habitat stress ablation (+60° heading)
     └── habitat_fsm_ablation_episodes.csv   # FSM ablation (3 variants × 157 ep)
 
 habitat-lab/habitat/tasks/narrow_passage/

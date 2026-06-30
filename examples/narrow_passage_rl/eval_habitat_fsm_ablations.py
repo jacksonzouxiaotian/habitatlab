@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""FSM ablation study on Habitat NarrowPassageNav-v0 val set (157 episodes).
+"""FSM ablation study on Habitat NarrowPassageNav-v0.
 
-Runs four FSM variants to isolate the contribution of each component:
-  full          — complete geometry-FSM (same as eval_habitat_geometry_fsm.py)
-  no_recovery   — no backward recovery; collisions just continue forward
-  no_alignment  — no heading/lateral correction; always full-speed toward goal
-  no_memory     — no cross-episode failure memory (same as FSM, included for clarity)
+Runs FSM variants to isolate the contribution of each controller component:
+  full                  — complete geometry-FSM
+  no_recovery           — disable backward recovery on collision/stuck
+  no_alignment          — disable both heading and lateral alignment
+  no_heading_alignment  — keep lateral centering, remove heading-to-goal alignment
+  no_lateral_alignment  — keep heading-to-goal alignment, remove lateral centering
 
 Usage:
     conda run -n habitat python3 examples/narrow_passage_rl/eval_habitat_fsm_ablations.py
     conda run -n habitat python3 examples/narrow_passage_rl/eval_habitat_fsm_ablations.py \
-        --variants full no_recovery no_alignment
+        --variants full no_recovery no_alignment no_heading_alignment no_lateral_alignment
 """
 
 import argparse
@@ -66,8 +67,40 @@ def _heading_error(env) -> float:
     return float((err + math.pi) % (2 * math.pi) - math.pi)
 
 
+def _yaw_from_rotation(rot) -> float:
+    return math.atan2(2.0 * (rot.real * rot.y + rot.x * rot.z),
+                      1.0 - 2.0 * (rot.y**2 + rot.z**2))
+
+
+def _yaw_to_quat(yaw: float) -> list:
+    half = 0.5 * yaw
+    return [0.0, math.sin(half), 0.0, math.cos(half)]
+
+
+def _apply_heading_perturb(env, degrees: float) -> None:
+    if abs(degrees) < 1e-6:
+        return
+    state = env.sim.get_agent_state()
+    yaw = _yaw_from_rotation(state.rotation) + math.radians(degrees)
+    env.sim.set_agent_state(
+        state.position,
+        _yaw_to_quat(yaw),
+        reset_sensors=False,
+    )
+
+
 def _wz(heading_error: float, lateral_offset: float, gain: float = 1.0) -> float:
     return float(np.clip((0.9 * heading_error - 1.2 * lateral_offset) * gain, -1.2, 1.2))
+
+
+def _wz_variant(heading_error: float, lateral_offset: float, gain: float, variant: str) -> float:
+    if variant == "no_alignment":
+        return 0.0
+    if variant == "no_heading_alignment":
+        return float(np.clip((-1.2 * lateral_offset) * gain, -1.2, 1.2))
+    if variant == "no_lateral_alignment":
+        return float(np.clip((0.9 * heading_error) * gain, -1.2, 1.2))
+    return _wz(heading_error, lateral_offset, gain)
 
 
 def run_episode(env, features, variant: str, max_steps: int, max_recover: int) -> dict:
@@ -75,6 +108,7 @@ def run_episode(env, features, variant: str, max_steps: int, max_recover: int) -
     any_collision = False
     min_bm = float("inf")
     near_collision = False
+    recover_triggers = 0
     done = False
 
     while not done and steps < max_steps:
@@ -101,17 +135,8 @@ def run_episode(env, features, variant: str, max_steps: int, max_recover: int) -
                 done = True
             continue
 
-        if variant == "no_alignment":
-            # pure goal-seeking: always go straight toward goal, no side corrections
-            obs = env.step(_act(0.20, he * 0.9))
-            steps += 1
-            features = np.array(obs.get("narrow_passage_features", features), np.float32)
-            if env.episode_over:
-                done = True
-            continue
-
         # Shared logic for "full" and "no_recovery"
-        if abs(he) > 0.7:
+        if variant != "no_alignment" and abs(he) > 0.7:
             mode = "ALIGN"
         elif collision_flag or stuck > 0.80:
             mode = "RECOVER" if variant != "no_recovery" else "COMMIT"
@@ -121,16 +146,18 @@ def run_episode(env, features, variant: str, max_steps: int, max_recover: int) -
             mode = "COMMIT"
 
         if mode == "ALIGN":
-            obs = env.step(_act(0.0, np.clip(he * 1.8, -1.2, 1.2)))
+            obs = env.step(_act(0.0, _wz_variant(he, lat, 1.8, variant)))
         elif mode == "COMMIT":
-            obs = env.step(_act(0.20, _wz(he, lat, 1.0)))
+            obs = env.step(_act(0.20, _wz_variant(he, lat, 1.0, variant)))
         elif mode == "EXPLORE":
-            obs = env.step(_act(0.08, _wz(he, lat, 1.6)))
+            obs = env.step(_act(0.08, _wz_variant(he, lat, 1.6, variant)))
         elif mode == "RECOVER":
             # back up + reorient for up to max_recover steps
+            recover_triggers += 1
             for _ in range(max_recover):
                 he_r = _heading_error(env)
-                obs = env.step(_act(-0.12, np.clip(he_r * 0.4, -0.8, 0.8)))
+                lat_r = float(features[11])
+                obs = env.step(_act(-0.12, _wz_variant(he_r, lat_r, 0.4, variant)))
                 steps += 1
                 features = np.array(obs.get("narrow_passage_features", features), np.float32)
                 if float(features[9]) < min_bm:
@@ -169,6 +196,7 @@ def run_episode(env, features, variant: str, max_steps: int, max_recover: int) -
         "stuck": float(metrics.get("narrow_passage_stuck", 0.0)),
         "near_collision": float(near_collision),
         "min_clearance": float(min_bm),
+        "recover_triggers": recover_triggers,
     }
 
 
@@ -195,6 +223,7 @@ def eval_variant(variant: str, args) -> list:
             obs = env.reset()
             episode = env.current_episode
             info = episode.info if hasattr(episode, "info") and episode.info else {}
+            _apply_heading_perturb(env, args.heading_perturb_deg)
             features = np.array(
                 obs.get("narrow_passage_features", np.zeros(19, np.float32)), np.float32
             )
@@ -202,6 +231,7 @@ def eval_variant(variant: str, args) -> list:
             stat["episode_id"] = str(episode.episode_id)
             stat["difficulty"] = str(info.get("difficulty", "?"))
             stat["body_margin"] = round(float(info.get("body_margin", float("nan"))), 4)
+            stat["heading_perturb_deg"] = float(args.heading_perturb_deg)
             stat["variant"] = variant
             all_stats.append(stat)
 
@@ -223,13 +253,27 @@ def eval_variant(variant: str, args) -> list:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--variants", nargs="+",
-                    default=["full", "no_recovery", "no_alignment"],
-                    choices=["full", "no_recovery", "no_alignment"])
+                    default=[
+                        "full",
+                        "no_recovery",
+                        "no_alignment",
+                        "no_heading_alignment",
+                        "no_lateral_alignment",
+                    ],
+                    choices=[
+                        "full",
+                        "no_recovery",
+                        "no_alignment",
+                        "no_heading_alignment",
+                        "no_lateral_alignment",
+                    ])
     ap.add_argument("--data-path", default="data/datasets/narrow_passage/{split}/{split}.json.gz")
     ap.add_argument("--split", default="val")
     ap.add_argument("--num-episodes", type=int, default=-1)
     ap.add_argument("--max-steps", type=int, default=500)
     ap.add_argument("--max-recover-steps", type=int, default=30)
+    ap.add_argument("--heading-perturb-deg", type=float, default=0.0,
+                    help="Rotate the start pose after reset; stress-tests alignment modules")
     ap.add_argument("--output-csv", type=Path,
                     default=RESULTS / "habitat_fsm_ablation_episodes.csv")
     args = ap.parse_args()
@@ -240,16 +284,17 @@ def main():
 
     # ── summary table ─────────────────────────────────────────────────────
     print("\n=== Ablation Summary ===")
-    print(f"{'Variant':15s}  {'SR':>5}  {'Narrow':>6}  {'Normal':>6}  {'Wide':>6}  {'Col':>5}")
+    print(f"{'Variant':22s}  {'SR':>5}  {'Narrow':>6}  {'Normal':>6}  {'Wide':>6}  {'Col':>5}  {'Steps':>6}")
     for variant in args.variants:
         rows = [s for s in all_stats if s["variant"] == variant]
         sr = np.mean([s["success"] for s in rows])
         cr = np.mean([s["collision"] for s in rows])
+        avg_steps = np.mean([s["steps"] for s in rows])
         def dsr(diff):
             g = [s for s in rows if s["difficulty"] == diff]
             return np.mean([s["success"] for s in g]) if g else float("nan")
-        print(f"{variant:15s}  {sr:.3f}  {dsr('narrow'):6.3f}  "
-              f"{dsr('normal'):6.3f}  {dsr('wide'):6.3f}  {cr:.3f}")
+        print(f"{variant:22s}  {sr:.3f}  {dsr('narrow'):6.3f}  "
+              f"{dsr('normal'):6.3f}  {dsr('wide'):6.3f}  {cr:.3f}  {avg_steps:6.1f}")
 
     args.output_csv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_csv.open("w", newline="") as f:

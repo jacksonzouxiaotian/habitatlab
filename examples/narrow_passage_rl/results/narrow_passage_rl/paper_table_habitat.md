@@ -27,9 +27,20 @@
 | Method | SR | Narrow (73) | Normal (55) | Wide (23) | Notes |
 |:---|:---:|:---:|:---:|:---:|:---|
 | PPO v2 (geometry sensor) | 6.0% | 5.5% | 9.1% | 0.0% | 9/151; consistent with val set A (5.7%) |
+| SAC v2 (geometry sensor) | 0.0% | 0.0% | 0.0% | 0.0% | 0/151; same observation interface as PPO v2 |
 | **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | 151/151 |
 | FSM w/o recovery | **100%** | **100%** | **100%** | **100%** | Extreme-narrow subset: 24/24 |
 | FSM w/o alignment | **100%** | **100%** | **100%** | **100%** | Extreme-narrow subset: 24/24 |
+
+## Habitat FSM Stress Ablation (+60° start-heading perturb, 24 extreme-narrow episodes)
+
+| Variant | SR | Successes | Avg steps | Notes |
+|:---|:---:|:---:|:---:|:---|
+| **Full FSM** | **100%** | **24/24** | 55.3 | Heading alignment recovers the perturbation |
+| FSM w/o recovery | **100%** | **24/24** | 55.3 | Recovery is not triggered on these anchors |
+| FSM w/o all alignment | 0.0% | 0/24 | 124.7 | Cannot reorient to the corridor/goal |
+| FSM w/o heading alignment | 0.0% | 0/24 | 1.0 | Zero heading correction causes immediate failed stop |
+| FSM w/o lateral alignment | **100%** | **24/24** | 55.3 | Lateral centering is not the bottleneck here |
 
 ## Experiment ①: Cross-Episode Memory (multi-agent, 8 agents × 100 corridors)
 
@@ -57,10 +68,13 @@ Notes:
   Habitat sensor emits path-relative heading error → policy receives garbage input.
 - PPO v2 (5.7%) confirms heading fix alone does not close the sim-to-real gap;
   high variance (0–9.1% across difficulties) reflects sparse reward in scanned scenes.
+- SAC v2 also fails to transfer on mined Habitat val (0/151), despite matching the v2
+  observation format. TD3 support is implemented in `train_sb3_v2.py`, but a full TD3
+  Habitat result is not reported here because the CPU training run did not finish in this pass.
 - PPO w/ geometry sensor 3-seed SR: 5.7%, 0.0%, 0.6% — high variance confirms
   training instability and sim-to-real collapse (99%+ train SR → <6% Habitat SR).
 - collision_rate=0% for all methods due to allow_sliding=False (navmesh boundary stop).
 - min_clearance<0 is a depth-sensor artifact at valid navmesh positions near walls,
   not physical wall penetration.
-- FSM ablation (full / no_recovery / no_alignment): all 100% on this val set;
-  differentiation shown on harder synthetic benchmark (Table 2).
+- FSM ablation (full / no_recovery / no_alignment): all 100% on unperturbed val;
+  the +60° Habitat stress ablation isolates heading alignment as the critical module.

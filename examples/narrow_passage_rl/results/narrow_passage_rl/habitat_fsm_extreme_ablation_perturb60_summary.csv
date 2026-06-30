@@ -1,0 +1,6 @@
+variant,success_rate,n_episodes,successes,avg_steps,heading_perturb_deg
+full,1.000,24,24,55.3,60
+no_recovery,1.000,24,24,55.3,60
+no_alignment,0.000,24,0,124.7,60
+no_heading_alignment,0.000,24,0,1.0,60
+no_lateral_alignment,1.000,24,24,55.3,60

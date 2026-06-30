@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Train PPO or SAC on HarderNarrowPassageEnv (v2) — fair RL baseline (Experiment ③④).
+"""Train PPO/SAC/TD3 on HarderNarrowPassageEnv (v2) — fair RL baseline (Experiment ③④).
 
 Key differences from train_sb3.py (v1):
   - Uses HarderNarrowPassageEnv (v2) instead of ProceduralNarrowPassageEnv (v1)
   - obs[10] = path-relative heading error (same as Habitat NarrowPassageGeometrySensor)
   - Includes all 7 corridor types (L-shaped, S-shaped, false_feasible, ...)
-  - Supports both PPO and SAC (pass --algo ppo|sac)
+  - Supports PPO, SAC, and TD3 (pass --algo ppo|sac|td3)
 
 The trained checkpoint can be directly evaluated on Habitat (no obs-format mismatch).
 
@@ -18,6 +18,10 @@ Usage
     # SAC (④)
     python examples/narrow_passage_rl/train_sb3_v2.py --algo sac \
         --total-steps 2000000 --save-dir data/narrow_passage_sb3_v2_sac
+
+    # TD3 (④)
+    python examples/narrow_passage_rl/train_sb3_v2.py --algo td3 \
+        --total-steps 2000000 --save-dir data/narrow_passage_sb3_v2_td3
 """
 
 import argparse
@@ -55,14 +59,14 @@ def make_env(rank: int, cfg: dict, seed: int):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--algo", choices=["ppo", "sac"], default="ppo",
+    ap.add_argument("--algo", choices=["ppo", "sac", "td3"], default="ppo",
                     help="RL algorithm")
     ap.add_argument("--total-steps", type=int, default=3_000_000)
     ap.add_argument("--save-dir", type=Path, default=None,
                     help="Directory to save checkpoint (default: auto)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--num-envs", type=int, default=8,
-                    help="Parallel envs (only PPO; SAC uses 1)")
+                    help="Parallel envs (only PPO; SAC/TD3 use 1)")
     ap.add_argument("--ctypes", choices=list(CTYPE_CONFIGS), default="full",
                     help="Corridor type set to train on")
     ap.add_argument("--load-model", type=Path, default=None,
@@ -118,7 +122,7 @@ def main():
                 device="cpu",
             )
 
-    else:  # SAC
+    elif args.algo == "sac":
         from stable_baselines3 import SAC
 
         single_env = make_env(0, env_cfg, args.seed)
@@ -135,6 +139,36 @@ def main():
                 gamma=0.99,
                 tau=0.005,
                 ent_coef="auto",
+                verbose=1,
+                tensorboard_log=str(args.save_dir / "tb"),
+                seed=args.seed,
+                device="cpu",
+            )
+
+    else:  # TD3
+        from stable_baselines3 import TD3
+        from stable_baselines3.common.noise import NormalActionNoise
+
+        single_env = make_env(0, env_cfg, args.seed)
+        action_noise = NormalActionNoise(
+            mean=np.zeros(single_env.action_space.shape[-1]),
+            sigma=0.10 * np.ones(single_env.action_space.shape[-1]),
+        )
+        if args.load_model:
+            model = TD3.load(str(args.load_model), env=single_env, device="cpu",
+                             verbose=1)
+        else:
+            model = TD3(
+                "MlpPolicy", single_env,
+                learning_rate=3e-4,
+                buffer_size=500_000,
+                learning_starts=5_000,
+                batch_size=256,
+                gamma=0.99,
+                tau=0.005,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                action_noise=action_noise,
                 verbose=1,
                 tensorboard_log=str(args.save_dir / "tb"),
                 seed=args.seed,

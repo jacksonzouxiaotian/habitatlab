@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Evaluate a stable-baselines3 PPO policy on the Habitat narrow-passage val set.
+"""Evaluate a stable-baselines3 policy on the Habitat narrow-passage val set.
 
-The SB3 policy was trained on ProceduralNarrowPassageEnv (19-dim obs).
+The SB3 policy was trained on a 19-dim synthetic narrow-passage env.
 Habitat's NarrowPassageGeometrySensor outputs the same 19-dim feature vector,
 so the policy can be evaluated directly on real HM3D scenes.
 
@@ -12,7 +12,7 @@ Making this evaluation directly comparable to the FSM / APF results.
 Run:
     conda run -n habitat python3 examples/narrow_passage_rl/eval_habitat_sb3.py
     conda run -n habitat python3 examples/narrow_passage_rl/eval_habitat_sb3.py \
-        --model data/narrow_passage_sb3_hard/ppo_narrow_passage.zip \
+        --algo ppo --model data/narrow_passage_sb3_hard/ppo_narrow_passage.zip \
         --output-csv results/narrow_passage_rl/habitat_sb3_hard_episodes.csv
 """
 
@@ -26,6 +26,30 @@ import habitat
 
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 FEATURE_DIM = 19
+
+
+def _load_model(algo: str, model_path: Path):
+    """Load PPO/SAC/TD3 from stable-baselines3.
+
+    algo="auto" infers from the model path, which keeps old command lines short.
+    """
+    try:
+        from stable_baselines3 import PPO, SAC, TD3
+    except ImportError:
+        raise ImportError("Install stable-baselines3: pip install stable-baselines3")
+
+    inferred = algo.lower()
+    if inferred == "auto":
+        name = str(model_path).lower()
+        if "sac" in name:
+            inferred = "sac"
+        elif "td3" in name:
+            inferred = "td3"
+        else:
+            inferred = "ppo"
+
+    cls = {"ppo": PPO, "sac": SAC, "td3": TD3}[inferred]
+    return inferred, cls.load(str(model_path), device="cpu")
 
 
 def make_env(data_path: str, split: str):
@@ -44,6 +68,7 @@ def make_env(data_path: str, split: str):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--algo", choices=["auto", "ppo", "sac", "td3"], default="auto")
     ap.add_argument("--model", type=Path,
                     default=Path("data/narrow_passage_sb3_hard/ppo_narrow_passage.zip"))
     ap.add_argument("--data-path",
@@ -54,13 +79,9 @@ def main():
     ap.add_argument("--output-csv", type=Path, default=None)
     args = ap.parse_args()
 
-    try:
-        from stable_baselines3 import PPO
-    except ImportError:
-        raise ImportError("Install stable-baselines3: pip install stable-baselines3")
-
     print(f"Loading model: {args.model}")
-    model = PPO.load(str(args.model), device="cpu")
+    algo, model = _load_model(args.algo, args.model)
+    print(f"Algorithm: {algo}")
 
     all_stats = []
 
@@ -138,8 +159,9 @@ def main():
     ncr = np.mean([s["near_collision"] for s in all_stats])
     avg_bm = np.mean([s["min_clearance"] for s in all_stats])
 
-    print(f"\n=== habitat_sb3  |  {n} episodes  |  split={args.split} ===")
+    print(f"\n=== habitat_sb3_{algo}  |  {n} episodes  |  split={args.split} ===")
     print(f"  model:               {args.model}")
+    print(f"  algo:                {algo}")
     print(f"  success_rate:        {sr:.3f}  ({sr*100:.1f}%)")
     print(f"  collision_rate:      {cr:.3f}")
     print(f"  near_collision_rate: {ncr:.3f}")
@@ -150,7 +172,9 @@ def main():
             d_sr = np.mean([r["success"] for r in rows])
             print(f"  {diff:6s}: SR={d_sr:.3f} ({sum(r['success']>0.5 for r in rows)}/{len(rows)})")
 
-    out_path = args.output_csv or (RESULTS / f"habitat_sb3_{args.model.parent.name}_episodes.csv")
+    out_path = args.output_csv or (
+        RESULTS / f"habitat_{algo}_{args.model.parent.name}_episodes.csv"
+    )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(all_stats[0].keys()))

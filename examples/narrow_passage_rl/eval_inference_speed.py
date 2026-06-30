@@ -12,6 +12,7 @@ Methods timed
   ppo_sb3_v1           — SB3 PPO trained on v1 env (MLP 64×64)
   ppo_sb3_v2           — SB3 PPO trained on v2 env (if checkpoint exists)
   sac_sb3_v2           — SB3 SAC trained on v2 env (if checkpoint exists)
+  td3_sb3_v2           — SB3 TD3 trained on v2 env (if checkpoint exists)
 
 Usage
 -----
@@ -38,6 +39,7 @@ _FSM_CHECKPOINTS = {
     "ppo_sb3_v1":  Path("data/narrow_passage_sb3_hard/ppo_narrow_passage.zip"),
     "ppo_sb3_v2":  Path("data/narrow_passage_sb3_v2_ppo/ppo_narrow_passage_v2.zip"),
     "sac_sb3_v2":  Path("data/narrow_passage_sb3_v2_sac/sac_narrow_passage_v2.zip"),
+    "td3_sb3_v2":  Path("data/narrow_passage_sb3_v2_td3/td3_narrow_passage_v2.zip"),
 }
 
 
@@ -119,8 +121,13 @@ def main():
             continue
         print(f"Timing {name} ...")
         try:
-            from stable_baselines3 import PPO, SAC
-            algo_cls = SAC if "sac" in name else PPO
+            from stable_baselines3 import PPO, SAC, TD3
+            if "sac" in name:
+                algo_cls = SAC
+            elif "td3" in name:
+                algo_cls = TD3
+            else:
+                algo_cls = PPO
             model = algo_cls.load(str(ckpt), device="cpu")
             lats = time_fn(
                 lambda obs, m=model: m.predict(obs, deterministic=True),
