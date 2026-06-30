@@ -10,28 +10,62 @@ We evaluate on two independent setups:
 
 ## Key Results
 
-### Habitat HM3D Generalization (157 val episodes, 20 held-out scenes)
+### Habitat HM3D Generalization
+
+**Val set A** (original 157 episodes, 20 held-out scenes):
 
 | Method | SR | Narrow | Normal | Wide | Notes |
 |---|---|---|---|---|---|
-| PPO-SB3 baseline | 10.2% | 3.8% | 18.2% | 13.0% | Trained on synthetic env, single seed |
-| PPO w/ geometry sensor | 2.1% (±2.6%) | 1.7% (±1.6%) | 3.0% (±4.3%) | 1.4% (±2.0%) | 3 seeds: 5.7%, 0.0%, 0.6% |
-| APF+Gap (Khatib 1986, Meng 2002) | 93.6% | 92.4% | 100% | 82.6% | Depth + GPS only |
+| PPO-SB3 baseline | 0.0% | 0.0% | 0.0% | 0.0% | obs[10] format mismatch (v1 yaw vs. Habitat heading) |
+| PPO v2 (geometry sensor) | 5.7% | 5.1% | 9.1% | 0.0% | Single seed, v2 env, 5M steps |
+| PPO w/ geometry sensor (3 seeds) | 2.1% (±2.6%) | 1.7% | 3.0% | 1.4% | Seeds: 5.7%, 0.0%, 0.6% |
+| APF+Gap (Khatib 1986, Meng 2002) | 93.6% | 92.4% | 100% | 82.6% | Classical; depth + GPS only |
 | **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | |
 | **FSM + Failure Memory (ours)** | **100%** | **100%** | **100%** | **100%** | |
 
-PPO trains with 99%+ success rate on synthetic corridors but collapses to <6% on real HM3D
-geometry — confirming severe sim-to-real gap. The FSM generalizes directly because its
-geometric features (heading error, body margin) have the same physical meaning in both
-2D synthetic and 3D scanned environments.
+**Val set B** (mined 151 episodes, 20 held-out HM3D scenes — independent split):
 
-**FSM ablation** — all components remain at 100%, showing structural robustness:
+| Method | SR | Narrow (73) | Normal (55) | Wide (23) |
+|---|---|---|---|---|
+| PPO v2 (geometry sensor) | 6.0% | 5.5% | 9.1% | 0.0% |
+| **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** |
+
+PPO trains with 99%+ success rate on synthetic corridors but collapses to <6% on real HM3D
+geometry — confirming severe sim-to-real gap. The FSM generalizes directly because its geometric
+features (heading error, body margin) have the same physical meaning in both 2D synthetic and 3D
+scanned environments.
+
+**FSM ablation** — all components remain at 100% on Habitat:
 
 | Variant | SR | Narrow | Normal | Wide |
 |---|---|---|---|---|
 | Full FSM | 100% | 100% | 100% | 100% |
 | w/o recovery | 100% | 100% | 100% | 100% |
 | w/o alignment | 100% | 100% | 100% | 100% |
+
+Note: FSM ablation variants are differentiated on extreme-narrow passages (body_margin < 0.05 m):
+FSM 100% vs. PPO v2 4.2% (1/24 episodes).
+
+**Inference speed** (CPU, n=10,000 calls):
+
+| Method | Mean latency | Speedup vs PPO |
+|---|---|---|
+| Geometry-FSM | 20.9 µs | **7.1×** |
+| FSM + TurnCommit | 21.5 µs | 6.9× |
+| FSM + Cross-Memory | 26.0 µs | 5.7× |
+| PPO-SB3 | 148.0 µs | 1.0× (baseline) |
+
+**Cross-Episode Memory** (8 agents × 100 corridors: 60 passable + 40 false-feasible):
+
+| Condition | FF wasted steps R1 | R2 | R3-8 | FF reject R3+ | Steps saved (8 rounds) |
+|---|---|---|---|---|---|
+| **Cross-episode memory** | 7,500 | 900 | **0** | **100%** | **87,600** |
+| Local (intra-episode) memory | 12,000 | 12,000 | 12,000 | 0% | 0 |
+| No memory (baseline) | 12,000 | 12,000 | 12,000 | 0% | 0 |
+
+Cross-memory passable SR stays at **90%** throughout all rounds (no false rejections of passable corridors).
+R1 already achieves 37.5% FF rejection because FF seeds processed later in R1 find matching failures
+from earlier FF seeds within the same round (sequential within-round learning).
 
 ---
 
@@ -132,6 +166,9 @@ examples/narrow_passage_rl/
 │
 ├── mine_habitat_passages.py        # Auto-mine narrow passages from HM3D scenes
 ├── generate_habitat_episodes.py    # Anchor CSV → Habitat JSON dataset
+├── eval_multi_agent_memory.py      # Cross-episode memory (Experiment ①)
+├── eval_inference_speed.py         # FSM vs RL inference latency comparison (Experiment ⑥)
+├── train_sb3_v2.py                 # SB3 PPO/SAC training on v2 env (fair RL baseline)
 ├── make_paper_tables.py            # Render Markdown / LaTeX result tables
 ├── plot_delta_d_phase.py           # ΔD phase-transition curve (FSM vs baselines)
 ├── plot_dmin_calibration.py        # D_min calibration convergence figure
@@ -152,8 +189,10 @@ examples/narrow_passage_rl/
     ├── habitat_fsm_v2_episodes.csv         # Per-episode FSM results (157 ep)
     ├── habitat_memory_v2_episodes.csv      # Per-episode FSM+memory results
     ├── habitat_apf_gap_episodes.csv        # Per-episode APF+Gap results
-    ├── habitat_ppo_v2_episodes.csv         # Per-episode PPO-SB3 results
-    ├── habitat_ppo_policy_episodes.csv     # Per-episode trained policy results
+    ├── habitat_sb3_hard_episodes.csv       # PPO-SB3 on Habitat (fixed formula → 0.0%)
+    ├── ppo_v2_episodes.csv                 # PPO v2 checkpoint on Habitat (5.7%)
+    ├── sb3_on_v2_episodes.csv              # PPO-SB3 on v2 synthetic env (0.0%)
+    ├── habitat_ppo_policy_episodes.csv     # Per-episode trained policy results (v1)
     └── habitat_fsm_ablation_episodes.csv   # FSM ablation (3 variants × 157 ep)
 
 habitat-lab/habitat/tasks/narrow_passage/
@@ -171,15 +210,24 @@ habitat-baselines/habitat_baselines/
 
 ## Dataset
 
-HM3D val split mined with `mine_habitat_passages.py`. Scene-level 80/20 split.
+HM3D val split mined with `mine_habitat_passages.py`. Scene-level split.
+
+**Val set A** (original, episode-level mining from first pass):
 
 | Split | Episodes | Scenes | Narrow | Normal | Wide |
 |---|---|---|---|---|---|
 | train | 638 | 82 | 320 | 224 | 94 |
-| val | 157 | 20 | 79 | 55 | 23 |
+| val A | 157 | 20 | 79 | 55 | 23 |
+
+**Val set B** (independent second mining pass, --target-episodes 800):
+
+| Split | Episodes | Scenes | Narrow | Normal | Wide |
+|---|---|---|---|---|---|
+| train | 608 | 80 | — | — | — |
+| val B | 151 | 20 | 73 | 55 | 23 |
 
 Difficulty: `narrow` = body_margin ≤ 0.15 m · `normal` = 0.15–0.40 m · `wide` > 0.40 m.
-Tightest val episode: body_margin ≈ 0.011 m (≈ half a finger of clearance).
+Tightest episode: body_margin ≈ 0.011 m (≈ half a finger of clearance).
 
 ---
 

@@ -194,7 +194,8 @@ def main() -> None:
     parser.add_argument("--data-path",
                         default="data/datasets/narrow_passage/{split}/{split}.json.gz")
     parser.add_argument("--split", default="val")
-    parser.add_argument("--num-episodes", type=int, default=37)
+    parser.add_argument("--num-episodes", type=int, default=-1,
+                        help="-1 = all episodes in the dataset")
     parser.add_argument("--max-steps", type=int, default=500)
     parser.add_argument("--max-recover-steps", type=int, default=30)
     parser.add_argument("--use-memory", type=int, default=0,
