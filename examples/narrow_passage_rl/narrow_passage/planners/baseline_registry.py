@@ -16,8 +16,13 @@ BASELINE_PLANNERS = {
     "teb": BaselinePlannerSpec("TEB", "classical_local_planner", "planned", "Timed Elastic Band baseline"),
     "rpp": BaselinePlannerSpec("RPP", "classical_local_planner", "ros2_adapter", "Regulated Pure Pursuit"),
     "mppi": BaselinePlannerSpec("MPPI", "sampling_mpc_planner", "ros2_adapter", "Nav2 MPPI controller"),
+    "smac_hybrid_astar": BaselinePlannerSpec(
+        "Smac Hybrid-A* / State Lattice",
+        "kinodynamic_global_planner",
+        "ros2_adapter",
+        "Nav2 Smac planner; tests whether stronger kinodynamic global planning is enough",
+    ),
     "ppo": BaselinePlannerSpec("PPO", "learning_baseline", "implemented", "SB3/Habitat PPO baselines"),
     "sac": BaselinePlannerSpec("SAC", "learning_baseline", "implemented", "SB3 SAC v2 baseline"),
     "td3": BaselinePlannerSpec("TD3", "learning_baseline", "train_entrypoint", "Training/eval entry points implemented"),
 }
-

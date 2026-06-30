@@ -14,6 +14,7 @@ Habitat modifications:
 examples/narrow_passage_rl/
   configs/                 # Reproducible train/eval protocol configs
   narrow_passage/
+    baselines/             # Four-layer baseline registry
     envs/                  # Habitat task adapters, passage generation, metrics
     models/                # Geometry encoder, risk head, memory, policy modes
     planners/              # Classical / sampling baseline registry
@@ -41,6 +42,7 @@ python examples/narrow_passage_rl/narrow_passage/scripts/run_ablation.py
 Core documents:
 
 - `examples/narrow_passage_rl/docs/method.md`
+- `examples/narrow_passage_rl/docs/baseline_taxonomy.md`
 - `examples/narrow_passage_rl/docs/experiment_protocol.md`
 - `examples/narrow_passage_rl/docs/reproducibility.md`
 - `examples/narrow_passage_rl/README.md`

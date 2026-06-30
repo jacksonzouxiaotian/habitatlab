@@ -176,10 +176,13 @@ examples/narrow_passage_rl/
 │   │   ├── risk_head.py            # Risk fusion / traversability estimator
 │   │   ├── failure_memory.py       # Geometry-aware failure memory bank
 │   │   └── policy.py               # Commit / Explore / Recover / Reject modes
+│   ├── baselines/
+│   │   └── registry.py             # Four-layer baseline taxonomy
 │   ├── planners/
 │   │   ├── astar_baseline.py       # Global graph-search baseline spec
 │   │   ├── rrt_baseline.py         # Sampling baseline spec
 │   │   ├── dwa_baseline.py         # DWB/DWA local planner adapter spec
+│   │   ├── smac_baseline.py        # Smac Hybrid-A* / State Lattice spec
 │   │   └── mppi_baseline.py        # MPPI local planner adapter spec
 │   └── scripts/
 │       ├── train.py                # Stable training entry point
@@ -190,6 +193,7 @@ examples/narrow_passage_rl/
 │
 ├── docs/
 │   ├── method.md                   # Five-module algorithm description
+│   ├── baseline_taxonomy.md        # Four-layer baseline suite and feasibility
 │   ├── experiment_protocol.md      # Seeds, scenes, metrics, definitions
 │   └── reproducibility.md          # Environment, checkpoints, commands
 │

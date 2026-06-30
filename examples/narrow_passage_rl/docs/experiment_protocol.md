@@ -25,16 +25,41 @@ Habitat episodes are mined from HM3D scenes using geodesic and clearance
 criteria.  The current mined validation set contains 151 episodes from 20 held
 out scenes, plus 24 extreme-narrow episodes.
 
-## Methods
+## Four-Layer Baseline Suite
 
-| Type | Methods |
+The baseline suite is organized into four layers.  The paper claim is not only
+"ours beats DWB"; the claim is that near the geometric feasibility boundary,
+methods without explicit failure memory and geometry-aware risk tend to hesitate,
+retry failed passages, or make unsafe local decisions.
+
+| Layer | Purpose | Methods |
+|---|---|---|
+| Traditional planning | Common real-robot navigation stacks | DWB, TEB, RPP, MPPI, Smac Hybrid-A* / State Lattice |
+| Learning navigation | Ordinary RL/IL without explicit failure memory | PPO-depth, PPO-geometry, Recurrent PPO, SAC/TD3, BC/DAgger |
+| Memory/history methods | Distinguish generic history from failure memory | GRU-PPO, kNN failure memory, replay-memory policy, Transformer history, vanilla episodic memory |
+| Recent strong navigation | Modern visual/semantic/diffusion-style comparison | ViPlanner-style, NoMaD-style, ViNT/GNM-style, quadruped confined-space style baselines |
+
+Implementation status and exact method names are listed in
+`docs/baseline_taxonomy.md` and `configs/eval_baselines.yaml`.
+
+## Core Ablations
+
+| Ablation | Question answered |
 |---|---|
-| Classical local planner | DWB, TEB, RPP |
-| Sampling/MPC planner | MPPI |
-| Learning baseline | PPO, SAC, TD3 |
-| Memory baseline | RL + vanilla replay memory |
-| Ours ablation | w/o geometry, w/o memory, w/o risk, w/o recovery |
-| Full method | Geometry-FSM + risk + failure memory |
+| Ours w/o Memory | Is failure memory useful beyond geometry/risk? |
+| Ours w/o Geometry | Are explicit passage features necessary? |
+| Ours w/o Risk Head | Does risk estimation improve boundary decisions? |
+| Ours w/o Recovery | Does recovery behavior matter after stuck/oscillation? |
+| Ours Full | Full Geometry-Guided Failure Memory method |
+
+## Memory Comparison Matrix
+
+| Method | Has history | Has failure labels | Geometry similarity | Decision mode |
+|---|---:|---:|---:|---:|
+| GRU-PPO | yes | no | no | no |
+| kNN Failure Memory | yes | yes | partial | no |
+| Vanilla Episodic Memory | yes | yes | no | no |
+| Geometry-Guided Failure Memory | yes | yes | yes | yes |
 
 ## Metrics
 

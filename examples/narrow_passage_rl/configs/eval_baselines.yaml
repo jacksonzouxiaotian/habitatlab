@@ -16,13 +16,71 @@ datasets:
     data_path: data/datasets/narrow_passage/{split}/{split}.json.gz
     splits: [val, extreme_narrow]
 
-methods:
-  classical_local_planner: [dwb, teb, rpp]
-  sampling_mpc_planner: [mppi]
-  learning_baseline: [ppo_v2, sac_v2, td3_v2]
-  memory_baseline: [rl_vanilla_replay_memory]
-  ours_ablation: [ours_no_geometry, ours_no_memory, ours_no_risk, ours_no_recovery]
-  ours_full: [geometry_fsm_memory]
+baseline_layers:
+  traditional_planning:
+    purpose: "Show that common robot navigation stacks hesitate/fail near narrow-passage boundaries."
+    methods:
+      - dwb
+      - teb
+      - rpp
+      - mppi
+      - smac_hybrid_astar
+  learning_navigation:
+    purpose: "Show that ordinary RL/IL is insufficient without explicit failure memory."
+    methods:
+      - ppo_depth
+      - ppo_geometry
+      - recurrent_ppo
+      - geometry_recurrent_ppo
+      - sac_geometry
+      - td3_geometry
+      - bc_dagger
+  memory_history:
+    purpose: "Show that generic history or memory is not the same as geometry-guided failure memory."
+    methods:
+      - gru_ppo
+      - knn_failure_memory
+      - replay_memory_policy
+      - transformer_history
+      - vanilla_episodic_memory
+      - geometry_guided_failure_memory
+  recent_strong_navigation:
+    purpose: "Respond to modern visual/semantic/diffusion navigation baselines without overclaiming full reproduction."
+    methods:
+      - viplanner_style
+      - nomad_style
+      - vint_gnm_style
+      - hierarchical_legged_rl
+      - privileged_geometry_rl
+
+ours_ablation:
+  - ours_no_geometry
+  - ours_no_memory
+  - ours_no_risk
+  - ours_no_recovery
+  - ours_full
+
+implementation_policy:
+  direct_habitatlab:
+    - ppo_depth
+    - ppo_geometry
+    - recurrent_ppo
+    - sac_geometry
+    - td3_geometry
+    - bc_dagger
+    - knn_failure_memory
+    - vanilla_episodic_memory
+    - transformer_history
+    - viplanner_style
+    - nomad_style
+  ros2_nav2_adapter:
+    - dwb
+    - rpp
+    - mppi
+    - smac_hybrid_astar
+  external_or_optional:
+    - teb
+    - vint_gnm_style
 
 metrics:
   - success_rate
@@ -35,3 +93,12 @@ metrics:
   - time_to_goal
   - spl
   - repeated_failure_rate
+
+paper_tables:
+  main_table:
+    - traditional_planning
+    - learning_navigation
+    - memory_history
+    - ours_full
+  appendix_table:
+    - recent_strong_navigation
