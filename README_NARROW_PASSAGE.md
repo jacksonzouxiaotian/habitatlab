@@ -32,12 +32,26 @@ Quick entry points:
 # Train RL baseline on the synthetic v2 benchmark
 python examples/narrow_passage_rl/narrow_passage/scripts/train.py --algo ppo
 
+# Run memory/history baselines
+python examples/narrow_passage_rl/eval_memory_baselines.py \
+  --n-rounds 5 --n-passable 20 --n-ff 15 --max-steps 220
+
+# Run lightweight GRU-PPO fallback baseline
+python examples/narrow_passage_rl/train_gru_ppo_v2.py \
+  --total-steps 5000 --eval-episodes 50 \
+  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/gru_ppo_v2_smoke
+
 # Evaluate Habitat baselines and FSM variants
 python examples/narrow_passage_rl/narrow_passage/scripts/evaluate.py --method fsm
 
 # Run FSM ablations
 python examples/narrow_passage_rl/narrow_passage/scripts/run_ablation.py
 ```
+
+New baseline result tables:
+
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_baselines.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_learning_baselines.md`
 
 Core documents:
 

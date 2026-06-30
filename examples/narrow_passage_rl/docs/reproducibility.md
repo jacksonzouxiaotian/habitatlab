@@ -58,6 +58,37 @@ python examples/narrow_passage_rl/narrow_passage/scripts/run_ablation.py
 python examples/narrow_passage_rl/narrow_passage/scripts/make_paper_tables.py
 ```
 
+Run the newly added memory/history baselines:
+
+```bash
+python examples/narrow_passage_rl/eval_memory_baselines.py \
+  --n-rounds 5 --n-passable 20 --n-ff 15 --max-steps 220
+```
+
+This writes:
+
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/memory_baselines.csv
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_baselines.md
+```
+
+Run the lightweight GRU-PPO fallback baseline:
+
+```bash
+python examples/narrow_passage_rl/train_gru_ppo_v2.py \
+  --total-steps 5000 --rollout-steps 512 --epochs 3 \
+  --batch-size 128 --eval-episodes 50 \
+  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/gru_ppo_v2_smoke
+```
+
+This writes:
+
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/gru_ppo_v2_eval.csv
+examples/narrow_passage_rl/results/narrow_passage_rl/gru_ppo_v2_summary.csv
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_learning_baselines.md
+```
+
 For Habitat experiments, use the `habitat` environment:
 
 ```bash
@@ -71,3 +102,7 @@ conda run -n habitat python examples/narrow_passage_rl/eval_habitat_fsm_ablation
 - PPO v2 training: multi-hour CPU run depending on `total_steps`.
 - SAC/TD3: slower CPU training; use GPU-capable PyTorch if available.
 - Habitat evaluation requires EGL/GPU access outside restricted sandboxes.
+- The current local Python environment used for the lightweight GRU-PPO run has
+  PyTorch but does not have `stable_baselines3` or `sb3_contrib`; therefore the
+  GRU-PPO result is marked as a PyTorch fallback. Install `sb3-contrib` to run a
+  full SB3-Contrib `RecurrentPPO` baseline.

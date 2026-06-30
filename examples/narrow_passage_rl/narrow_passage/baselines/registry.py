@@ -92,9 +92,9 @@ BASELINE_SPECS = [
         "learning_navigation",
         "Recurrent PPO / GRU-PPO",
         "Generic temporal memory RL baseline",
-        "planned",
-        "direct Habitat-Baselines or SB3-contrib",
-        "Answers whether hidden state alone replaces failure memory.",
+        "implemented",
+        "lightweight PyTorch fallback; SB3-contrib pending",
+        "5k-step CPU fallback evaluated; final SB3-Contrib run still pending.",
     ),
     BaselineSpec(
         "sac_geometry",
@@ -128,18 +128,18 @@ BASELINE_SPECS = [
         "memory_history",
         "kNN Failure Memory",
         "Failure retrieval from hand geometry features",
-        "planned",
+        "implemented",
         "direct current memory module",
-        "Simpler memory baseline with partial geometry similarity.",
+        "Evaluated in eval_memory_baselines.py.",
     ),
     BaselineSpec(
         "vanilla_episodic_memory",
         "memory_history",
         "Vanilla Episodic Memory",
         "Embedding-only failure retrieval",
-        "planned",
+        "implemented",
         "direct current memory module",
-        "Controls for memory without geometry-aware similarity.",
+        "Evaluated in eval_memory_baselines.py.",
     ),
     BaselineSpec(
         "transformer_history",
@@ -209,4 +209,3 @@ BASELINE_SPECS = [
 
 def by_layer(layer: str) -> list[BaselineSpec]:
     return [spec for spec in BASELINE_SPECS if spec.layer == layer]
-

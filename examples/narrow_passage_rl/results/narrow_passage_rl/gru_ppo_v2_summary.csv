@@ -1,0 +1,2 @@
+case,train_steps,success_rate,collision_rate,avg_min_clearance,notes,sr_asymmetric,sr_false_feasible,sr_l_shaped,sr_narrow_entry,sr_narrow_exit,sr_s_shaped,sr_straight
+v2_gru_ppo_lightweight,5000,0.0,0.98,1.935,PyTorch lightweight GRU-PPO; SB3-Contrib unavailable in current env,0.0,0.0,0.0,0.0,0.0,0.0,0.0

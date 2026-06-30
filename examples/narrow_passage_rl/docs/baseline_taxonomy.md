@@ -26,8 +26,8 @@ or repeated entry into a historically failed passage.
 |---|---|---|---|
 | PPO-depth | depth + local goal | End-to-end RL without explicit geometry | planned |
 | PPO-geometry | 19-D geometry vector | Geometry input without failure memory | implemented/evaluated |
-| Recurrent PPO / GRU-PPO | geometry + hidden state | Tests whether generic temporal memory is enough | planned |
-| Geometry + GRU PPO | geometry + recurrent state | Stronger recurrent RL baseline | planned |
+| Recurrent PPO / GRU-PPO | geometry + hidden state | Tests whether generic temporal memory is enough | lightweight PyTorch fallback evaluated; SB3-Contrib pending |
+| Geometry + GRU PPO | geometry + recurrent state | Stronger recurrent RL baseline | lightweight fallback evaluated |
 | SAC / TD3 | geometry + continuous action | Off-policy continuous-control baselines | SAC evaluated; TD3 entry point implemented |
 | BC / DAgger | expert trajectories | Imitation from planner/FSM expert | planned |
 
@@ -57,6 +57,12 @@ This is the most important comparison for the paper.  It separates generic
 history conditioning from explicit failure memory with geometric similarity and
 mode-level decisions.
 
+Current synthetic v2 memory baseline results are available in
+`results/narrow_passage_rl/paper_table_memory_baselines.md`.  In the 5-round
+repeated-passage benchmark, kNN failure memory and vanilla episodic memory both
+learn to reject false-feasible passages, but they reject more passable corridors
+and save fewer wasted steps than Geometry-Guided Failure Memory.
+
 ## Layer 4: Recent Strong Navigation Methods
 
 These methods should be treated as lightweight style baselines unless a full
@@ -82,9 +88,8 @@ References:
 
 | Feasibility | Baselines |
 |---|---|
-| Directly runnable in current codebase | PPO-geometry, SAC-geometry, FSM ablations, kNN/geometry failure memory, vanilla episodic memory, synthetic ViPlanner-style waypoint policy |
-| Needs modest new code | PPO-depth, Recurrent PPO, Transformer history, BC/DAgger, NoMaD-style diffusion waypoint policy |
+| Directly runnable in current codebase | PPO-geometry, SAC-geometry, FSM ablations, kNN/geometry failure memory, vanilla episodic memory, lightweight GRU-PPO, synthetic ViPlanner-style waypoint policy |
+| Needs modest new code | PPO-depth, SB3-Contrib Recurrent PPO, Transformer history, BC/DAgger, NoMaD-style diffusion waypoint policy |
 | Needs ROS2/Nav2 bridge | DWB, RPP, MPPI, Smac Hybrid-A* |
 | Needs external package/log replay | TEB, full ViNT/GNM/NoMaD/ViPlanner checkpoints |
 | Better treated as paper context or style baseline | full foundation navigation models, full quadruped locomotion policies |
-

@@ -80,6 +80,33 @@ Cross-memory passable SR stays at **90%** throughout all rounds (no false reject
 R1 already achieves 37.5% FF rejection because FF seeds processed later in R1 find matching failures
 from earlier FF seeds within the same round (sequential within-round learning).
 
+**Memory baseline comparison** (5 agents × 35 corridors: 20 passable + 15 false-feasible):
+
+| Method | Passable SR ↑ | Passable Reject ↓ | Final FF Reject ↑ | Wasted FF Steps ↓ | Steps Saved vs No Memory ↑ |
+|---|---:|---:|---:|---:|---:|
+| no_memory | 0.900 | 0.000 | 0.000 | 16500 | 0 |
+| kNN Failure Memory | 0.860 | 0.060 | 1.000 | 5500 | 11000 |
+| Vanilla Episodic Memory | 0.820 | 0.130 | 1.000 | 8140 | 8360 |
+| **Geometry-Guided Failure Memory** | **0.900** | **0.030** | **1.000** | **4400** | **12100** |
+
+This separates "has memory" from the proposed geometry-guided failure memory.
+kNN and embedding-only episodic memory both learn to reject false-feasible
+passages, but they reject more passable corridors and waste more repeated-failure
+steps. Raw results: `results/narrow_passage_rl/memory_baselines.csv`.
+
+**Learning baseline status**:
+
+| Method | Domain | Train budget | Eval episodes | Success ↑ | Collision ↓ | Notes |
+|---|---|---:|---:|---:|---:|---|
+| PPO v2 geometry | Habitat HM3D mined-val | 5M steps | 151 | 0.060 | - | Existing SB3 checkpoint |
+| SAC v2 geometry | Habitat HM3D mined-val | 2M steps | 151 | 0.000 | - | Existing SB3 checkpoint |
+| GRU-PPO lightweight | Synthetic v2 | 5k steps | 50 | 0.000 | 0.980 | PyTorch fallback; SB3-Contrib unavailable in current env |
+
+The GRU-PPO run is intentionally labeled as a lightweight fallback rather than
+a final SB3-Contrib RecurrentPPO result. It is useful as an early negative
+control: generic recurrent hidden state did not solve the boundary-passage
+problem under a small CPU training budget.
+
 ---
 
 ### Harder Synthetic Benchmark — v2 (500 episodes, 7 corridor types)
@@ -224,8 +251,10 @@ Legacy implementation scripts retained for reproducibility:
 ├── mine_habitat_passages.py        # Auto-mine narrow passages from HM3D scenes
 ├── generate_habitat_episodes.py    # Anchor CSV → Habitat JSON dataset
 ├── eval_multi_agent_memory.py      # Cross-episode memory (Experiment ①)
+├── eval_memory_baselines.py        # kNN / vanilla episodic / geometry-guided memory comparison
 ├── eval_inference_speed.py         # FSM vs RL inference latency comparison (Experiment ⑥)
 ├── train_sb3_v2.py                 # SB3 PPO/SAC/TD3 training on v2 env (fair RL baseline)
+├── train_gru_ppo_v2.py             # Lightweight PyTorch GRU-PPO baseline fallback
 ├── make_paper_tables.py            # Render Markdown / LaTeX result tables
 ├── plot_delta_d_phase.py           # ΔD phase-transition curve (FSM vs baselines)
 ├── plot_dmin_calibration.py        # D_min calibration convergence figure
@@ -239,6 +268,11 @@ Legacy implementation scripts retained for reproducibility:
     ├── paper_table_habitat.{md,tex}        # HM3D main comparison table
     ├── paper_table_habitat_ablation.{md,tex} # HM3D FSM ablation
     ├── memory_differentiation.csv          # Multi-round memory reject experiment
+    ├── memory_baselines.csv                # kNN / vanilla episodic / geometry-guided memory results
+    ├── paper_table_memory_baselines.md     # Memory baseline comparison table
+    ├── gru_ppo_v2_eval.csv                 # Lightweight GRU-PPO synthetic v2 evaluation
+    ├── gru_ppo_v2_summary.csv              # Lightweight GRU-PPO summary row
+    ├── paper_table_learning_baselines.md   # PPO / SAC / GRU-PPO status table
     ├── ppo_seed{0,1,2}_episodes.csv        # PPO 3-seed Habitat eval (5.7%, 0.0%, 0.6%)
     ├── delta_d_phase.png                   # ΔD phase-transition figure
     ├── dmin_calibration.png                # D_min calibration figure
@@ -314,6 +348,16 @@ python examples/narrow_passage_rl/eval_mode_fsm.py --use-memory 1
 
 # v2 harder benchmark (L/S-shaped, asymmetric, false-feasible)
 python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500
+
+# Memory/history baselines for repeated false-feasible passages
+python examples/narrow_passage_rl/eval_memory_baselines.py \
+    --n-rounds 5 --n-passable 20 --n-ff 15 --max-steps 220
+
+# Lightweight GRU-PPO baseline fallback when sb3-contrib is unavailable
+python examples/narrow_passage_rl/train_gru_ppo_v2.py \
+    --total-steps 5000 --rollout-steps 512 --epochs 3 \
+    --batch-size 128 --eval-episodes 50 \
+    --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/gru_ppo_v2_smoke
 
 # D_min self-calibration experiment (300 episodes)
 python examples/narrow_passage_rl/eval_dmin_calibration.py --n-episodes 300
