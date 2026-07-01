@@ -41,6 +41,26 @@ python examples/narrow_passage_rl/train_gru_ppo_v2.py \
   --total-steps 5000 --eval-episodes 50 \
   --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/gru_ppo_v2_smoke
 
+# Run formal SB3-Contrib RecurrentPPO smoke baseline
+python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
+  --total-steps 1024 --n-steps 128 --batch-size 64 --eval-episodes 40 \
+  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_v2_smoke
+
+# Collect expert data and run BC/DAgger smoke baselines
+python examples/narrow_passage_rl/collect_expert_trajectories.py \
+  --episodes 40 --output-npz examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz
+python examples/narrow_passage_rl/train_bc_dagger_v2.py \
+  --algo bc --dataset examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
+  --epochs 5 --eval-episodes 40
+python examples/narrow_passage_rl/train_bc_dagger_v2.py \
+  --algo dagger --dataset examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
+  --epochs 3 --dagger-iters 1 --dagger-episodes 10 --eval-episodes 40
+
+# Run generic replay-memory policy smoke baseline
+python examples/narrow_passage_rl/train_replay_memory_policy_v2.py \
+  --algo ppo --total-steps 1024 --eval-episodes 40 \
+  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/replay_memory_policy_v2_smoke
+
 # Evaluate Habitat baselines and FSM variants
 python examples/narrow_passage_rl/narrow_passage/scripts/evaluate.py --method fsm
 
@@ -52,6 +72,7 @@ New baseline result tables:
 
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_baselines.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_learning_baselines.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_new_baselines_smoke.md`
 
 Core documents:
 

@@ -89,6 +89,50 @@ examples/narrow_passage_rl/results/narrow_passage_rl/gru_ppo_v2_summary.csv
 examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_learning_baselines.md
 ```
 
+Run the formal SB3-Contrib RecurrentPPO smoke baseline:
+
+```bash
+python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
+  --total-steps 1024 --n-steps 128 --batch-size 64 --eval-episodes 40 \
+  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_v2_smoke \
+  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_smoke_eval.csv \
+  --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_smoke_summary.csv
+```
+
+Collect FSM expert trajectories and run BC/DAgger smoke baselines:
+
+```bash
+python examples/narrow_passage_rl/collect_expert_trajectories.py \
+  --episodes 40 --max-steps 300 \
+  --output-npz examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
+  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke_episodes.csv
+
+python examples/narrow_passage_rl/train_bc_dagger_v2.py \
+  --algo bc \
+  --dataset examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
+  --epochs 5 --batch-size 256 --eval-episodes 40 \
+  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/bc_v2_smoke_eval.csv \
+  --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/bc_v2_smoke_summary.csv
+
+python examples/narrow_passage_rl/train_bc_dagger_v2.py \
+  --algo dagger \
+  --dataset examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
+  --epochs 3 --batch-size 256 --dagger-iters 1 --dagger-episodes 10 \
+  --eval-episodes 40 \
+  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/dagger_v2_smoke_eval.csv \
+  --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/dagger_v2_smoke_summary.csv
+```
+
+Run the generic Replay Memory Policy smoke baseline:
+
+```bash
+python examples/narrow_passage_rl/train_replay_memory_policy_v2.py \
+  --algo ppo --total-steps 1024 --eval-episodes 40 \
+  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/replay_memory_policy_v2_smoke \
+  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/replay_memory_policy_v2_smoke_eval.csv \
+  --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/replay_memory_policy_v2_smoke_summary.csv
+```
+
 For Habitat experiments, use the `habitat` environment:
 
 ```bash
@@ -102,7 +146,7 @@ conda run -n habitat python examples/narrow_passage_rl/eval_habitat_fsm_ablation
 - PPO v2 training: multi-hour CPU run depending on `total_steps`.
 - SAC/TD3: slower CPU training; use GPU-capable PyTorch if available.
 - Habitat evaluation requires EGL/GPU access outside restricted sandboxes.
-- The current local Python environment used for the lightweight GRU-PPO run has
-  PyTorch but does not have `stable_baselines3` or `sb3_contrib`; therefore the
-  GRU-PPO result is marked as a PyTorch fallback. Install `sb3-contrib` to run a
-  full SB3-Contrib `RecurrentPPO` baseline.
+- The `habitat` environment used for the formal RecurrentPPO smoke run has
+  `stable-baselines3==2.7.1` and `sb3-contrib==2.7.1`.
+- The older lightweight GRU-PPO row remains as a fallback result from the base
+  Python environment; prefer `train_recurrent_ppo_v2.py` for final experiments.

@@ -101,11 +101,18 @@ steps. Raw results: `results/narrow_passage_rl/memory_baselines.csv`.
 | PPO v2 geometry | Habitat HM3D mined-val | 5M steps | 151 | 0.060 | - | Existing SB3 checkpoint |
 | SAC v2 geometry | Habitat HM3D mined-val | 2M steps | 151 | 0.000 | - | Existing SB3 checkpoint |
 | GRU-PPO lightweight | Synthetic v2 | 5k steps | 50 | 0.000 | 0.980 | PyTorch fallback; SB3-Contrib unavailable in current env |
+| RecurrentPPO | Synthetic v2 | 1024 steps | 40 | 0.000 | 0.000 | SB3-Contrib smoke run; full training pending |
+| BC-FSM | Synthetic v2 | 5179 expert transitions | 40 | 0.500 | 0.475 | Supervised imitation smoke |
+| DAgger-FSM | Synthetic v2 | 6346 transitions | 40 | 0.300 | 0.650 | One DAgger iteration smoke |
+| Replay Memory Policy | Synthetic v2 | 1024 steps | 40 | 0.000 | 0.025 | PPO + generic replay embedding smoke |
 
 The GRU-PPO run is intentionally labeled as a lightweight fallback rather than
 a final SB3-Contrib RecurrentPPO result. It is useful as an early negative
 control: generic recurrent hidden state did not solve the boundary-passage
 problem under a small CPU training budget.
+After installing `sb3-contrib==2.7.1` in the `habitat` environment, the formal
+SB3-Contrib `RecurrentPPO` path also runs end-to-end; the 1024-step entry above
+is a smoke result, not the final long-training baseline.
 
 ---
 
@@ -255,6 +262,11 @@ Legacy implementation scripts retained for reproducibility:
 ├── eval_inference_speed.py         # FSM vs RL inference latency comparison (Experiment ⑥)
 ├── train_sb3_v2.py                 # SB3 PPO/SAC/TD3 training on v2 env (fair RL baseline)
 ├── train_gru_ppo_v2.py             # Lightweight PyTorch GRU-PPO baseline fallback
+├── train_recurrent_ppo_v2.py       # Formal SB3-Contrib RecurrentPPO baseline
+├── collect_expert_trajectories.py  # FSM expert data collector for BC/DAgger
+├── train_bc_dagger_v2.py           # BC and DAgger imitation baselines
+├── replay_memory_wrapper.py        # Generic replay-memory observation wrapper
+├── train_replay_memory_policy_v2.py # PPO/SAC/TD3 with generic replay memory input
 ├── make_paper_tables.py            # Render Markdown / LaTeX result tables
 ├── plot_delta_d_phase.py           # ΔD phase-transition curve (FSM vs baselines)
 ├── plot_dmin_calibration.py        # D_min calibration convergence figure
@@ -273,6 +285,7 @@ Legacy implementation scripts retained for reproducibility:
     ├── gru_ppo_v2_eval.csv                 # Lightweight GRU-PPO synthetic v2 evaluation
     ├── gru_ppo_v2_summary.csv              # Lightweight GRU-PPO summary row
     ├── paper_table_learning_baselines.md   # PPO / SAC / GRU-PPO status table
+    ├── paper_table_new_baselines_smoke.md  # RecurrentPPO / BC / DAgger / replay smoke table
     ├── ppo_seed{0,1,2}_episodes.csv        # PPO 3-seed Habitat eval (5.7%, 0.0%, 0.6%)
     ├── delta_d_phase.png                   # ΔD phase-transition figure
     ├── dmin_calibration.png                # D_min calibration figure
@@ -358,6 +371,30 @@ python examples/narrow_passage_rl/train_gru_ppo_v2.py \
     --total-steps 5000 --rollout-steps 512 --epochs 3 \
     --batch-size 128 --eval-episodes 50 \
     --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/gru_ppo_v2_smoke
+
+# Formal SB3-Contrib RecurrentPPO smoke baseline
+python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
+    --total-steps 1024 --n-steps 128 --batch-size 64 --eval-episodes 40 \
+    --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_v2_smoke
+
+# Expert data → BC / DAgger smoke baselines
+python examples/narrow_passage_rl/collect_expert_trajectories.py \
+    --episodes 40 --max-steps 300 \
+    --output-npz examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke_episodes.csv
+python examples/narrow_passage_rl/train_bc_dagger_v2.py \
+    --algo bc \
+    --dataset examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
+    --epochs 5 --eval-episodes 40
+python examples/narrow_passage_rl/train_bc_dagger_v2.py \
+    --algo dagger \
+    --dataset examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
+    --epochs 3 --dagger-iters 1 --dagger-episodes 10 --eval-episodes 40
+
+# Replay Memory Policy smoke baseline
+python examples/narrow_passage_rl/train_replay_memory_policy_v2.py \
+    --algo ppo --total-steps 1024 --eval-episodes 40 \
+    --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/replay_memory_policy_v2_smoke
 
 # D_min self-calibration experiment (300 episodes)
 python examples/narrow_passage_rl/eval_dmin_calibration.py --n-episodes 300

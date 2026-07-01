@@ -1,0 +1,2 @@
+case,train_transitions,success_rate,collision_rate,avg_min_clearance,sr_asymmetric,sr_false_feasible,sr_l_shaped,sr_narrow_entry,sr_narrow_exit,sr_s_shaped,sr_straight
+v2_dagger,6346,0.3,0.65,2.0831,0.3333,0.0,0.0,0.0,0.375,0.0,0.5714
