@@ -74,6 +74,46 @@ New baseline result tables:
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_learning_baselines.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_new_baselines_smoke.md`
 
+## Current Results Snapshot
+
+Full per-episode CSVs, Markdown tables, and LaTeX tables are under
+`examples/narrow_passage_rl/results/narrow_passage_rl/`.  The most important
+current results are:
+
+### Habitat HM3D Mined-Val
+
+| Method | Episodes | Success | Notes |
+|---|---:|---:|---|
+| PPO v2 geometry | 151 | 6.0% | SB3 geometry policy |
+| SAC v2 geometry | 151 | 0.0% | SB3 SAC policy |
+| Geometry-FSM | 151 | 100.0% | Feature-driven controller |
+| Habitat FSM stress ablation, +60 deg heading | 24 | 100.0% full / 0.0% no heading alignment | Extreme-narrow subset |
+
+### Memory / History Baselines
+
+| Method | Passable SR | Passable Reject | Final False-Feasible Reject | Wasted FF Steps |
+|---|---:|---:|---:|---:|
+| no_memory | 0.900 | 0.000 | 0.000 | 16500 |
+| kNN Failure Memory | 0.860 | 0.060 | 1.000 | 5500 |
+| Vanilla Episodic Memory | 0.820 | 0.130 | 1.000 | 8140 |
+| Geometry-Guided Failure Memory | 0.900 | 0.030 | 1.000 | 4400 |
+
+### Newly Deployed Baselines
+
+These are smoke runs that verify training/evaluation paths; they are not final
+long-training scores.
+
+| Baseline | Train data / budget | Eval episodes | Success | Collision |
+|---|---:|---:|---:|---:|
+| FSM expert trajectories | 40 episodes / 5179 transitions | 40 | 0.750 | 0.100 |
+| BC-FSM | 5179 expert transitions / 5 epochs | 40 | 0.500 | 0.475 |
+| DAgger-FSM | 6346 transitions / 1 DAgger iter | 40 | 0.300 | 0.650 |
+| RecurrentPPO | 1024 env steps | 40 | 0.000 | 0.000 |
+| Replay Memory Policy | 1024 env steps | 40 | 0.000 | 0.025 |
+
+The 3M-step RecurrentPPO run should be logged as a final result only after its
+500-episode evaluation CSV is written.
+
 Core documents:
 
 - `examples/narrow_passage_rl/docs/method.md`
