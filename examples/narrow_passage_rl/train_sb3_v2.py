@@ -33,6 +33,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 
 from procedural_env_v2 import HarderNarrowPassageEnv
+from fair_reward_wrapper import FairNarrowPassageRewardWrapper
 
 
 # ── Corridor-type configurations ──────────────────────────────────────────────
@@ -46,14 +47,20 @@ CTYPE_CONFIGS = {
 }
 
 
-def make_env(rank: int, cfg: dict, seed: int):
+def maybe_wrap_reward(env, reward_mode: str):
+    if reward_mode == "fair":
+        return FairNarrowPassageRewardWrapper(env)
+    return env
+
+
+def make_env(rank: int, cfg: dict, seed: int, reward_mode: str = "fair"):
     try:
         from stable_baselines3.common.monitor import Monitor
     except ImportError:
         raise
     env_cfg = dict(cfg)
     env_cfg["seed"] = seed + rank
-    env = HarderNarrowPassageEnv(env_cfg)
+    env = maybe_wrap_reward(HarderNarrowPassageEnv(env_cfg), reward_mode)
     return Monitor(env)
 
 
@@ -69,6 +76,8 @@ def main():
                     help="Parallel envs (only PPO; SAC/TD3 use 1)")
     ap.add_argument("--ctypes", choices=list(CTYPE_CONFIGS), default="full",
                     help="Corridor type set to train on")
+    ap.add_argument("--reward-mode", choices=["fair", "native"], default="fair",
+                    help="fair clips open-space clearance reward and penalizes timeout")
     ap.add_argument("--load-model", type=Path, default=None,
                     help="Resume from existing checkpoint")
     ap.add_argument("--eval-episodes", type=int, default=200,
@@ -99,7 +108,10 @@ def main():
 
         n = args.num_envs
         vec_env = DummyVecEnv(
-            [lambda rank=i: make_env(rank, env_cfg, args.seed) for i in range(n)]
+            [
+                lambda rank=i: make_env(rank, env_cfg, args.seed, args.reward_mode)
+                for i in range(n)
+            ]
         )
 
         if args.load_model:
@@ -125,7 +137,7 @@ def main():
     elif args.algo == "sac":
         from stable_baselines3 import SAC
 
-        single_env = make_env(0, env_cfg, args.seed)
+        single_env = make_env(0, env_cfg, args.seed, args.reward_mode)
         if args.load_model:
             model = SAC.load(str(args.load_model), env=single_env, device="cpu",
                              verbose=1)
@@ -149,7 +161,7 @@ def main():
         from stable_baselines3 import TD3
         from stable_baselines3.common.noise import NormalActionNoise
 
-        single_env = make_env(0, env_cfg, args.seed)
+        single_env = make_env(0, env_cfg, args.seed, args.reward_mode)
         action_noise = NormalActionNoise(
             mean=np.zeros(single_env.action_space.shape[-1]),
             sigma=0.10 * np.ones(single_env.action_space.shape[-1]),
@@ -190,7 +202,7 @@ def main():
     # Quick eval
     if args.eval_episodes > 0:
         print(f"\n[eval] {args.eval_episodes} episodes on v2 env (all types)...")
-        eval_env = HarderNarrowPassageEnv({})
+        eval_env = maybe_wrap_reward(HarderNarrowPassageEnv({}), args.reward_mode)
         successes = []
         by_type: dict = {}
         for ep in range(args.eval_episodes):
@@ -219,7 +231,7 @@ def main():
         with eval_csv.open("w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=["episode", "ctype", "success"])
             writer.writeheader()
-            eval_env2 = HarderNarrowPassageEnv({})
+            eval_env2 = maybe_wrap_reward(HarderNarrowPassageEnv({}), args.reward_mode)
             for ep in range(args.eval_episodes):
                 obs, _ = eval_env2.reset(seed=10000 + ep)
                 done = False

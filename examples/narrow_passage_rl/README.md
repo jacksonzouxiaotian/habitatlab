@@ -158,6 +158,20 @@ From round 2 onward, with-memory correctly rejects all false-feasible passages (
 while the memoryless agent continues to waste 400 steps per episode. Narrow passages (true passable)
 are always attempted correctly by both methods (SR 100%).
 
+### Fair RL Reward Wrapper
+
+Learning baselines now use `FairNarrowPassageRewardWrapper` by default in
+`train_sb3_v2.py`, `train_recurrent_ppo_v2.py`, and
+`train_replay_memory_policy_v2.py`.  The wrapper removes an open-space reward
+loophole in the native v2 reward: raw `body_margin` is about 4.82 m outside the
+passage, so an RL policy could collect a large clearance bonus by staying near
+the entrance until timeout.  The fair reward clips clearance to the narrow-passage
+scale and adds timeout / no-progress / outside-idle penalties.
+
+Use `--reward-mode native` only to reproduce legacy runs.  New PPO, SAC, TD3,
+RecurrentPPO, and Replay Memory Policy baselines should use the default:
+`--reward-mode fair`.
+
 ```bash
 python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500
 ```
@@ -374,6 +388,7 @@ python examples/narrow_passage_rl/train_gru_ppo_v2.py \
 
 # Formal SB3-Contrib RecurrentPPO smoke baseline
 python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
+    --reward-mode fair \
     --total-steps 1024 --n-steps 128 --batch-size 64 --eval-episodes 40 \
     --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_v2_smoke
 
@@ -393,6 +408,7 @@ python examples/narrow_passage_rl/train_bc_dagger_v2.py \
 
 # Replay Memory Policy smoke baseline
 python examples/narrow_passage_rl/train_replay_memory_policy_v2.py \
+    --reward-mode fair \
     --algo ppo --total-steps 1024 --eval-episodes 40 \
     --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/replay_memory_policy_v2_smoke
 

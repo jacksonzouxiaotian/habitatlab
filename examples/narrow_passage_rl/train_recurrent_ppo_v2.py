@@ -11,21 +11,28 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 
 from procedural_env_v2 import HarderNarrowPassageEnv
+from fair_reward_wrapper import FairNarrowPassageRewardWrapper
 from train_sb3_v2 import CTYPE_CONFIGS
 
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 
 
-def make_env(seed: int, cfg: dict):
+def maybe_wrap_reward(env, reward_mode: str):
+    if reward_mode == "fair":
+        return FairNarrowPassageRewardWrapper(env)
+    return env
+
+
+def make_env(seed: int, cfg: dict, reward_mode: str):
     from stable_baselines3.common.monitor import Monitor
 
     env_cfg = dict(cfg)
     env_cfg["seed"] = seed
-    return Monitor(HarderNarrowPassageEnv(env_cfg))
+    return Monitor(maybe_wrap_reward(HarderNarrowPassageEnv(env_cfg), reward_mode))
 
 
-def evaluate(model, episodes: int, seed: int, output_csv: Path):
-    env = HarderNarrowPassageEnv({"seed": seed})
+def evaluate(model, episodes: int, seed: int, output_csv: Path, reward_mode: str):
+    env = maybe_wrap_reward(HarderNarrowPassageEnv({"seed": seed}), reward_mode)
     rows = []
     for ep in range(episodes):
         obs, _ = env.reset(seed=seed + ep)
@@ -109,6 +116,8 @@ def main():
     ap.add_argument("--eval-episodes", type=int, default=200)
     ap.add_argument("--n-steps", type=int, default=1024)
     ap.add_argument("--batch-size", type=int, default=256)
+    ap.add_argument("--reward-mode", choices=["fair", "native"], default="fair",
+                    help="fair clips open-space clearance reward and penalizes timeout")
     ap.add_argument("--output-csv", type=Path, default=RESULTS / "recurrent_ppo_v2_eval.csv")
     ap.add_argument("--output-summary", type=Path, default=RESULTS / "recurrent_ppo_v2_summary.csv")
     args = ap.parse_args()
@@ -123,7 +132,7 @@ def main():
     env_cfg = {}
     if corridor_types is not None:
         env_cfg["corridor_types"] = corridor_types
-    env = make_env(args.seed, env_cfg)
+    env = make_env(args.seed, env_cfg, args.reward_mode)
 
     if args.load_model:
         model = RecurrentPPO.load(str(args.load_model), env=env, device="cpu", verbose=1)
@@ -151,7 +160,13 @@ def main():
     print(f"[saved] {ckpt}.zip")
 
     if args.eval_episodes > 0:
-        rows = evaluate(model, args.eval_episodes, 10000 + args.seed, args.output_csv)
+        rows = evaluate(
+            model,
+            args.eval_episodes,
+            10000 + args.seed,
+            args.output_csv,
+            args.reward_mode,
+        )
         write_summary(rows, args.total_steps, args.output_summary)
 
 

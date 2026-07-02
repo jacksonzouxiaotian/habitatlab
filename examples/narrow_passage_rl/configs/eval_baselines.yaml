@@ -82,6 +82,15 @@ implementation_policy:
     - teb
     - vint_gnm_style
 
+reward_protocol:
+  learning_baselines_default: fair
+  wrapper: examples/narrow_passage_rl/fair_reward_wrapper.py
+  rationale: >
+    Clip open-space clearance reward and penalize timeout/no-progress behavior
+    so PPO/SAC/TD3/RecurrentPPO/ReplayMemoryPolicy cannot obtain high return by
+    staying outside the passage.
+  legacy_reproduction: "Pass --reward-mode native to reproduce older native-v2 reward runs."
+
 metrics:
   - success_rate
   - collision_rate

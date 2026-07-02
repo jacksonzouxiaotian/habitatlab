@@ -43,6 +43,7 @@ python examples/narrow_passage_rl/train_gru_ppo_v2.py \
 
 # Run formal SB3-Contrib RecurrentPPO smoke baseline
 python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
+  --reward-mode fair \
   --total-steps 1024 --n-steps 128 --batch-size 64 --eval-episodes 40 \
   --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_v2_smoke
 
@@ -58,6 +59,7 @@ python examples/narrow_passage_rl/train_bc_dagger_v2.py \
 
 # Run generic replay-memory policy smoke baseline
 python examples/narrow_passage_rl/train_replay_memory_policy_v2.py \
+  --reward-mode fair \
   --algo ppo --total-steps 1024 --eval-episodes 40 \
   --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/replay_memory_policy_v2_smoke
 
@@ -73,6 +75,11 @@ New baseline result tables:
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_baselines.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_learning_baselines.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_new_baselines_smoke.md`
+
+Learning baselines use `FairNarrowPassageRewardWrapper` by default.  It clips
+open-space clearance reward and penalizes timeout / no-progress behavior, which
+prevents policies from receiving high return by staying outside the passage.
+Use `--reward-mode native` only to reproduce legacy reward runs.
 
 ## Current Results Snapshot
 

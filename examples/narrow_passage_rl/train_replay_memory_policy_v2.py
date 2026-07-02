@@ -11,22 +11,32 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 
 from procedural_env_v2 import HarderNarrowPassageEnv
+from fair_reward_wrapper import FairNarrowPassageRewardWrapper
 from replay_memory_wrapper import ReplayMemoryObservationWrapper
 from train_sb3_v2 import CTYPE_CONFIGS
 
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 
 
-def make_env(seed: int, cfg: dict):
+def maybe_wrap_reward(env, reward_mode: str):
+    if reward_mode == "fair":
+        return FairNarrowPassageRewardWrapper(env)
+    return env
+
+
+def make_env(seed: int, cfg: dict, reward_mode: str):
     from stable_baselines3.common.monitor import Monitor
 
     env_cfg = dict(cfg)
     env_cfg["seed"] = seed
-    return Monitor(ReplayMemoryObservationWrapper(HarderNarrowPassageEnv(env_cfg)))
+    base = maybe_wrap_reward(HarderNarrowPassageEnv(env_cfg), reward_mode)
+    return Monitor(ReplayMemoryObservationWrapper(base))
 
 
-def evaluate(model, episodes: int, seed: int, output_csv: Path):
-    env = ReplayMemoryObservationWrapper(HarderNarrowPassageEnv({"seed": seed}))
+def evaluate(model, episodes: int, seed: int, output_csv: Path, reward_mode: str):
+    env = ReplayMemoryObservationWrapper(
+        maybe_wrap_reward(HarderNarrowPassageEnv({"seed": seed}), reward_mode)
+    )
     rows = []
     for ep in range(episodes):
         obs, _ = env.reset(seed=seed + ep)
@@ -34,7 +44,8 @@ def evaluate(model, episodes: int, seed: int, output_csv: Path):
         steps = 0
         min_bm = float("inf")
         info = {}
-        while not done and steps < env.env.max_steps:
+        raw_env = env.env.env if isinstance(env.env, FairNarrowPassageRewardWrapper) else env.env
+        while not done and steps < raw_env.max_steps:
             raw_obs = env._last_obs
             if raw_obs is not None:
                 min_bm = min(min_bm, float(raw_obs[9]))
@@ -103,6 +114,8 @@ def main():
     ap.add_argument("--ctypes", choices=list(CTYPE_CONFIGS), default="full")
     ap.add_argument("--save-dir", type=Path, default=RESULTS / "checkpoints" / "replay_memory_policy_v2")
     ap.add_argument("--eval-episodes", type=int, default=200)
+    ap.add_argument("--reward-mode", choices=["fair", "native"], default="fair",
+                    help="fair clips open-space clearance reward and penalizes timeout")
     ap.add_argument("--output-csv", type=Path, default=RESULTS / "replay_memory_policy_v2_eval.csv")
     ap.add_argument("--output-summary", type=Path, default=RESULTS / "replay_memory_policy_v2_summary.csv")
     args = ap.parse_args()
@@ -111,7 +124,7 @@ def main():
     env_cfg = {}
     if corridor_types is not None:
         env_cfg["corridor_types"] = corridor_types
-    env = make_env(args.seed, env_cfg)
+    env = make_env(args.seed, env_cfg, args.reward_mode)
     args.save_dir.mkdir(parents=True, exist_ok=True)
 
     if args.algo == "ppo":
@@ -181,7 +194,13 @@ def main():
     print(f"[saved] {ckpt}.zip")
 
     if args.eval_episodes > 0:
-        rows = evaluate(model, args.eval_episodes, 10000 + args.seed, args.output_csv)
+        rows = evaluate(
+            model,
+            args.eval_episodes,
+            10000 + args.seed,
+            args.output_csv,
+            args.reward_mode,
+        )
         write_summary(rows, args.total_steps, args.output_summary)
 
 

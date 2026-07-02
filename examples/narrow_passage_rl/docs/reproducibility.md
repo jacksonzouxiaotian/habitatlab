@@ -93,6 +93,7 @@ Run the formal SB3-Contrib RecurrentPPO smoke baseline:
 
 ```bash
 python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
+  --reward-mode fair \
   --total-steps 1024 --n-steps 128 --batch-size 64 --eval-episodes 40 \
   --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_v2_smoke \
   --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_smoke_eval.csv \
@@ -127,6 +128,7 @@ Run the generic Replay Memory Policy smoke baseline:
 
 ```bash
 python examples/narrow_passage_rl/train_replay_memory_policy_v2.py \
+  --reward-mode fair \
   --algo ppo --total-steps 1024 --eval-episodes 40 \
   --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/replay_memory_policy_v2_smoke \
   --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/replay_memory_policy_v2_smoke_eval.csv \
@@ -150,3 +152,7 @@ conda run -n habitat python examples/narrow_passage_rl/eval_habitat_fsm_ablation
   `stable-baselines3==2.7.1` and `sb3-contrib==2.7.1`.
 - The older lightweight GRU-PPO row remains as a fallback result from the base
   Python environment; prefer `train_recurrent_ppo_v2.py` for final experiments.
+- SB3 learning baselines default to `--reward-mode fair`, implemented by
+  `FairNarrowPassageRewardWrapper`.  This is the paper-facing reward protocol.
+  Use `--reward-mode native` only to reproduce older runs where open-space
+  clearance could create a conservative timeout solution.
