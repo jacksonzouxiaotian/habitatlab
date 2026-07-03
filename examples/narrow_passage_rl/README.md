@@ -63,10 +63,12 @@ episodes (body_margin < 0.05 m), revealing the alignment module:
 | w/o lateral alignment | 100% | 24/24 |
 
 Thus, heading alignment is the critical Habitat module under start-pose perturbation; lateral
-centering and recovery are not the bottleneck for these mined anchors.
-Additional stress tests should include randomized initial yaw, entrance lateral
-offset, additional passage anchors, dynamic obstacles, and false-feasible
-anchors before making broad claims about Habitat robustness.
+centering and recovery are not the bottleneck for these mined anchors.  The
+stress evaluator now also exposes lateral start offset, start-distance shift,
+feature noise, and depth-sector dropout knobs.  Goal perturbation,
+false-feasible Habitat anchors, dynamic obstacles, and unseen-room
+generalization still require regenerated datasets or simulator extensions before
+they should be claimed as completed.
 
 **Inference speed** (CPU, n=10,000 calls):
 
@@ -254,6 +256,7 @@ examples/narrow_passage_rl/
 │   ├── method.md                   # Five-module algorithm description
 │   ├── baseline_taxonomy.md        # Four-layer baseline suite and feasibility
 │   ├── experiment_protocol.md      # Seeds, scenes, metrics, definitions
+│   ├── habitat_stress_validation.md # Habitat 100% FSM stress-test protocol
 │   └── reproducibility.md          # Environment, checkpoints, commands
 │
 ├── results/
@@ -493,6 +496,22 @@ python examples/narrow_passage_rl/eval_habitat_ppo_policy.py \
 # FSM ablations (no_recovery / no_alignment)
 python examples/narrow_passage_rl/eval_habitat_fsm_ablations.py \
     --variants full no_recovery no_alignment
+
+# Stress validation: yaw perturbation on extreme-narrow anchors
+python examples/narrow_passage_rl/eval_habitat_fsm_ablations.py \
+    --split extreme_narrow \
+    --variants full no_heading_alignment no_lateral_alignment \
+    --heading-perturb-deg 60 \
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/habitat_fsm_stress_yaw60.csv
+
+# Stress validation: lateral offset and noisy geometry features
+python examples/narrow_passage_rl/eval_habitat_fsm_ablations.py \
+    --split extreme_narrow \
+    --variants full no_recovery no_alignment \
+    --lateral-perturb-m 0.2 \
+    --feature-noise-std 0.03 \
+    --depth-dropout-prob 0.10 \
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/habitat_fsm_stress_lat_noise.csv
 ```
 
 ### 5. Generate Paper Tables and Figures

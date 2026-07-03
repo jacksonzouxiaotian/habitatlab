@@ -12,6 +12,8 @@ Usage:
     conda run -n habitat python3 examples/narrow_passage_rl/eval_habitat_fsm_ablations.py
     conda run -n habitat python3 examples/narrow_passage_rl/eval_habitat_fsm_ablations.py \
         --variants full no_recovery no_alignment no_heading_alignment no_lateral_alignment
+    conda run -n habitat python3 examples/narrow_passage_rl/eval_habitat_fsm_ablations.py \
+        --split extreme_narrow --heading-perturb-deg 60 --lateral-perturb-m 0.2
 """
 
 import argparse
@@ -89,6 +91,62 @@ def _apply_heading_perturb(env, degrees: float) -> None:
     )
 
 
+def _apply_lateral_perturb(env, meters: float) -> None:
+    """Shift start pose sideways in the agent frame.
+
+    Positive values move to the agent's right.  This stress-tests lateral
+    centering without changing the episode goal.
+    """
+    if abs(meters) < 1e-6:
+        return
+    state = env.sim.get_agent_state()
+    yaw = _yaw_from_rotation(state.rotation)
+    right = np.array([math.cos(yaw), 0.0, -math.sin(yaw)], dtype=np.float32)
+    pos = np.array(state.position, dtype=np.float32) + meters * right
+    env.sim.set_agent_state(pos, state.rotation, reset_sensors=False)
+
+
+def _apply_start_distance_shift(env, meters: float) -> None:
+    """Move start pose along the current start-goal line.
+
+    Positive values move the robot closer to the goal; negative values move it
+    farther from the entrance.  Large values may leave the navigable region and
+    should be used as stress tests, not dataset regeneration.
+    """
+    if abs(meters) < 1e-6:
+        return
+    state = env.sim.get_agent_state()
+    ap = np.array(state.position, dtype=np.float32)
+    gp = np.array(env.current_episode.goals[0].position, dtype=np.float32)
+    direction = gp - ap
+    direction[1] = 0.0
+    norm = float(np.linalg.norm(direction))
+    if norm < 1e-6:
+        return
+    pos = ap + meters * direction / norm
+    env.sim.set_agent_state(pos, state.rotation, reset_sensors=False)
+
+
+def _stress_features(features: np.ndarray, args, rng: np.random.Generator) -> np.ndarray:
+    """Apply feature-level sensor stress to the 19-D geometry vector.
+
+    This simulates noisy depth/clearance estimates while leaving simulator state
+    and success/collision metrics unchanged.
+    """
+    out = np.array(features, dtype=np.float32).copy()
+    if args.feature_noise_std > 0.0:
+        # Depth sectors, clearances, passage width, body margin, and lateral offset.
+        idx = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11])
+        out[idx] += rng.normal(0.0, args.feature_noise_std, size=len(idx)).astype(np.float32)
+    if args.depth_dropout_prob > 0.0:
+        mask = rng.random(6) < args.depth_dropout_prob
+        depth = out[:6].copy()
+        depth[mask] = 0.0
+        out[:6] = depth
+    out[:10] = np.clip(out[:10], -1.0, 10.0)
+    return out
+
+
 def _wz(heading_error: float, lateral_offset: float, gain: float = 1.0) -> float:
     return float(np.clip((0.9 * heading_error - 1.2 * lateral_offset) * gain, -1.2, 1.2))
 
@@ -103,13 +161,16 @@ def _wz_variant(heading_error: float, lateral_offset: float, gain: float, varian
     return _wz(heading_error, lateral_offset, gain)
 
 
-def run_episode(env, features, variant: str, max_steps: int, max_recover: int) -> dict:
+def run_episode(env, features, variant: str, args, rng: np.random.Generator) -> dict:
     steps = 0
     any_collision = False
     min_bm = float("inf")
     near_collision = False
     recover_triggers = 0
     done = False
+
+    max_steps = args.max_steps
+    max_recover = args.max_recover_steps
 
     while not done and steps < max_steps:
         bm = float(features[9])
@@ -130,7 +191,10 @@ def run_episode(env, features, variant: str, max_steps: int, max_recover: int) -
         if dist < 0.25:
             obs = env.step(_stop_act())
             steps += 1
-            features = np.array(obs.get("narrow_passage_features", features), np.float32)
+            features = _stress_features(
+                np.array(obs.get("narrow_passage_features", features), np.float32),
+                args, rng,
+            )
             if env.episode_over:
                 done = True
             continue
@@ -159,7 +223,10 @@ def run_episode(env, features, variant: str, max_steps: int, max_recover: int) -
                 lat_r = float(features[11])
                 obs = env.step(_act(-0.12, _wz_variant(he_r, lat_r, 0.4, variant)))
                 steps += 1
-                features = np.array(obs.get("narrow_passage_features", features), np.float32)
+                features = _stress_features(
+                    np.array(obs.get("narrow_passage_features", features), np.float32),
+                    args, rng,
+                )
                 if float(features[9]) < min_bm:
                     min_bm = float(features[9])
                 if float(features[16]) > 0.5:
@@ -174,7 +241,10 @@ def run_episode(env, features, variant: str, max_steps: int, max_recover: int) -
             if not done:
                 obs = env.step(_act(0.0, 0.0))  # flush
                 steps += 1
-                features = np.array(obs.get("narrow_passage_features", features), np.float32)
+                features = _stress_features(
+                    np.array(obs.get("narrow_passage_features", features), np.float32),
+                    args, rng,
+                )
                 if env.episode_over:
                     done = True
             continue
@@ -182,7 +252,10 @@ def run_episode(env, features, variant: str, max_steps: int, max_recover: int) -
             obs = env.step(_stop_act())
 
         steps += 1
-        features = np.array(obs.get("narrow_passage_features", features), np.float32)
+        features = _stress_features(
+            np.array(obs.get("narrow_passage_features", features), np.float32),
+            args, rng,
+        )
         if env.episode_over:
             done = True
 
@@ -214,6 +287,7 @@ def eval_variant(variant: str, args) -> list:
     )
 
     all_stats = []
+    rng = np.random.default_rng(args.seed)
     with habitat.Env(config=config) as env:
         total = env.number_of_episodes
         n = total if args.num_episodes <= 0 else min(args.num_episodes, total)
@@ -224,14 +298,21 @@ def eval_variant(variant: str, args) -> list:
             episode = env.current_episode
             info = episode.info if hasattr(episode, "info") and episode.info else {}
             _apply_heading_perturb(env, args.heading_perturb_deg)
+            _apply_lateral_perturb(env, args.lateral_perturb_m)
+            _apply_start_distance_shift(env, args.start_distance_shift_m)
             features = np.array(
                 obs.get("narrow_passage_features", np.zeros(19, np.float32)), np.float32
             )
-            stat = run_episode(env, features, variant, args.max_steps, args.max_recover_steps)
+            features = _stress_features(features, args, rng)
+            stat = run_episode(env, features, variant, args, rng)
             stat["episode_id"] = str(episode.episode_id)
             stat["difficulty"] = str(info.get("difficulty", "?"))
             stat["body_margin"] = round(float(info.get("body_margin", float("nan"))), 4)
             stat["heading_perturb_deg"] = float(args.heading_perturb_deg)
+            stat["lateral_perturb_m"] = float(args.lateral_perturb_m)
+            stat["start_distance_shift_m"] = float(args.start_distance_shift_m)
+            stat["feature_noise_std"] = float(args.feature_noise_std)
+            stat["depth_dropout_prob"] = float(args.depth_dropout_prob)
             stat["variant"] = variant
             all_stats.append(stat)
 
@@ -274,6 +355,16 @@ def main():
     ap.add_argument("--max-recover-steps", type=int, default=30)
     ap.add_argument("--heading-perturb-deg", type=float, default=0.0,
                     help="Rotate the start pose after reset; stress-tests alignment modules")
+    ap.add_argument("--lateral-perturb-m", type=float, default=0.0,
+                    help="Shift start pose sideways in agent frame; + = right")
+    ap.add_argument("--start-distance-shift-m", type=float, default=0.0,
+                    help="Move start along start-goal line; + = closer to goal")
+    ap.add_argument("--feature-noise-std", type=float, default=0.0,
+                    help="Gaussian noise std applied to depth/clearance geometry features")
+    ap.add_argument("--depth-dropout-prob", type=float, default=0.0,
+                    help="Probability of dropping each of the six depth-sector features")
+    ap.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for feature noise/dropout stress tests")
     ap.add_argument("--output-csv", type=Path,
                     default=RESULTS / "habitat_fsm_ablation_episodes.csv")
     args = ap.parse_args()

@@ -123,9 +123,12 @@ L/S turns, narrow exits, and false-feasible safety.  This is the fair-reward
 replacement for the older native-reward timeout result.
 
 The 100% Habitat FSM rows are reported with the current mined-anchor protocol.
-They should be read together with the +60 deg yaw stress ablation and future
-harder stress tests with randomized yaw, lateral offset, dynamic obstacles,
-additional anchors, and false-feasible anchors.
+They should be read together with the +60 deg yaw stress ablation.  The Habitat
+stress evaluator now supports yaw perturbation, lateral offset, start-distance
+shift, feature noise, and depth-sector dropout.  Goal perturbation,
+false-feasible Habitat anchors, dynamic obstacles, and unseen-room
+generalization remain planned dataset/simulator extensions until new stress CSVs
+are generated.
 
 ### Newly Deployed Baselines
 

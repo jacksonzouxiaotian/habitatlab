@@ -132,9 +132,27 @@ The default body width is `0.36 m` unless an experiment config overrides it.
 
 Paper tables should report both aggregate rates and per-difficulty breakdowns.
 For Habitat FSM rows with 100% SR, also report the mined-anchor protocol,
-success/collision definitions, and stress-test variants.  Current stress tests
-include +60 degree initial yaw on extreme-narrow anchors; planned harder tests
-include randomized yaw, lateral offset, dynamic obstacles, additional anchors,
-and false-feasible anchors.
+success/collision definitions, and stress-test variants.
+
+Current implemented Habitat stress controls:
+
+| Stress type | Implemented as | Purpose |
+|---|---|---|
+| Initial yaw perturbation | `--heading-perturb-deg` on existing episodes | Heading alignment |
+| Lateral start offset | `--lateral-perturb-m` on existing episodes | Lateral centering |
+| Start distance shift | `--start-distance-shift-m` on existing episodes | Fixed entrance-distance overfitting |
+| Extreme-narrow anchors | `--split extreme_narrow` | Geometry-limit behavior |
+| Feature noise/dropout | `--feature-noise-std`, `--depth-dropout-prob` | Sensor robustness |
+
+Stress tests that still require new data or simulator extensions:
+
+| Stress type | Required work |
+|---|---|
+| Goal perturbation | Regenerate episodes with randomized exit-side goals |
+| False-feasible Habitat anchors | Mine and label blocked-inside passages |
+| Dynamic obstacles | Add temporary blockers or pedestrian proxies |
+| Unseen-room generalization | Build a held-out HM3D room/test split |
+
+The detailed command examples live in `docs/habitat_stress_validation.md`.
 For memory experiments, always include repeated-failure rate and wasted steps on
 false-feasible passages.
