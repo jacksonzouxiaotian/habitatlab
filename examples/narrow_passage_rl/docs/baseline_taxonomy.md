@@ -26,7 +26,7 @@ or repeated entry into a historically failed passage.
 |---|---|---|---|
 | PPO-depth | depth + local goal | End-to-end RL without explicit geometry | planned |
 | PPO-geometry | 19-D geometry vector | Geometry input without failure memory | implemented/evaluated |
-| Recurrent PPO / GRU-PPO | geometry + hidden state | Tests whether generic temporal memory is enough | SB3-Contrib smoke evaluated; full training pending |
+| Recurrent PPO / GRU-PPO | geometry + hidden state | Tests whether generic temporal memory is enough | SB3-Contrib 3M-step fair-reward result evaluated |
 | Geometry + GRU PPO | geometry + recurrent state | Stronger recurrent RL baseline | SB3-Contrib / lightweight fallback evaluated |
 | SAC / TD3 | geometry + continuous action | Off-policy continuous-control baselines | SAC evaluated; TD3 entry point implemented |
 | BC / DAgger | expert trajectories | Imitation from planner/FSM expert | smoke evaluated; full training pending |
@@ -63,9 +63,11 @@ repeated-passage benchmark, kNN failure memory and vanilla episodic memory both
 learn to reject false-feasible passages, but they reject more passable corridors
 and save fewer wasted steps than Geometry-Guided Failure Memory.
 
-Current smoke results for RecurrentPPO, BC, DAgger, and Replay Memory Policy are
-available in `results/narrow_passage_rl/paper_table_new_baselines_smoke.md`.
-These are deployment checks, not final long-training scores.
+Current smoke results for BC, DAgger, and Replay Memory Policy are available in
+`results/narrow_passage_rl/paper_table_new_baselines_smoke.md`.  The formal
+RecurrentPPO result is available in
+`results/narrow_passage_rl/recurrent_ppo_v2_summary.csv`: 3M fair-reward steps,
+500 evaluation episodes, 13.0% SR and 45.6% collision.
 
 ## Layer 4: Recent Strong Navigation Methods
 

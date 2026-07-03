@@ -100,6 +100,22 @@ python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
   --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_smoke_summary.csv
 ```
 
+Run the formal SB3-Contrib RecurrentPPO fair-reward baseline:
+
+```bash
+python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
+  --reward-mode fair \
+  --total-steps 3000000 --n-steps 1024 --batch-size 256 \
+  --eval-episodes 500 \
+  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_v2 \
+  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_eval.csv \
+  --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_summary.csv
+```
+
+Current result: 13.0% SR and 45.6% collision over 500 synthetic v2 episodes.
+The policy learns some straight/asymmetric passages but remains weak on L/S
+turns, narrow exits, and false-feasible safety.
+
 Collect FSM expert trajectories and run BC/DAgger smoke baselines:
 
 ```bash
@@ -148,7 +164,7 @@ conda run -n habitat python examples/narrow_passage_rl/eval_habitat_fsm_ablation
 - PPO v2 training: multi-hour CPU run depending on `total_steps`.
 - SAC/TD3: slower CPU training; use GPU-capable PyTorch if available.
 - Habitat evaluation requires EGL/GPU access outside restricted sandboxes.
-- The `habitat` environment used for the formal RecurrentPPO smoke run has
+- The `habitat` environment used for the formal RecurrentPPO run has
   `stable-baselines3==2.7.1` and `sb3-contrib==2.7.1`.
 - The older lightweight GRU-PPO row remains as a fallback result from the base
   Python environment; prefer `train_recurrent_ppo_v2.py` for final experiments.

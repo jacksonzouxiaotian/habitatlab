@@ -127,12 +127,11 @@ current_result_artifacts:
       - ppo_geometry
       - sac_geometry
       - recurrent_ppo_lightweight
-      - sb3_contrib_recurrent_ppo_smoke
+      - sb3_contrib_recurrent_ppo_fair_3m
       - bc_fsm_smoke
       - dagger_fsm_smoke
       - replay_memory_policy_smoke
     pending_full_runs:
       - td3_geometry
-      - sb3_contrib_recurrent_ppo_long
       - bc_dagger_long
       - replay_memory_policy_long

@@ -101,7 +101,7 @@ steps. Raw results: `results/narrow_passage_rl/memory_baselines.csv`.
 | PPO v2 geometry | Habitat HM3D mined-val | 5M steps | 151 | 0.060 | - | Existing SB3 checkpoint |
 | SAC v2 geometry | Habitat HM3D mined-val | 2M steps | 151 | 0.000 | - | Existing SB3 checkpoint |
 | GRU-PPO lightweight | Synthetic v2 | 5k steps | 50 | 0.000 | 0.980 | PyTorch fallback; SB3-Contrib unavailable in current env |
-| RecurrentPPO | Synthetic v2 | 1024 steps | 40 | 0.000 | 0.000 | SB3-Contrib smoke run; full training pending |
+| RecurrentPPO | Synthetic v2 | 3M steps | 500 | 0.130 | 0.456 | SB3-Contrib MlpLstmPolicy + fair reward |
 | BC-FSM | Synthetic v2 | 5179 expert transitions | 40 | 0.500 | 0.475 | Supervised imitation smoke |
 | DAgger-FSM | Synthetic v2 | 6346 transitions | 40 | 0.300 | 0.650 | One DAgger iteration smoke |
 | Replay Memory Policy | Synthetic v2 | 1024 steps | 40 | 0.000 | 0.025 | PPO + generic replay embedding smoke |
@@ -111,8 +111,10 @@ a final SB3-Contrib RecurrentPPO result. It is useful as an early negative
 control: generic recurrent hidden state did not solve the boundary-passage
 problem under a small CPU training budget.
 After installing `sb3-contrib==2.7.1` in the `habitat` environment, the formal
-SB3-Contrib `RecurrentPPO` path also runs end-to-end; the 1024-step entry above
-is a smoke result, not the final long-training baseline.
+SB3-Contrib `RecurrentPPO` path runs end-to-end.  With fair reward and 3M
+training steps, it reaches 13.0% SR but 45.6% collision on synthetic v2: it
+learns some straight/asymmetric passages, but still fails on L/S turns,
+narrow-exit cases, and false-feasible safety.
 
 ---
 

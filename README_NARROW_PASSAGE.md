@@ -105,6 +105,18 @@ current results are:
 | Vanilla Episodic Memory | 0.820 | 0.130 | 1.000 | 8140 |
 | Geometry-Guided Failure Memory | 0.900 | 0.030 | 1.000 | 4400 |
 
+### Learning Baselines
+
+| Method | Domain | Train budget | Eval episodes | Success | Collision | Notes |
+|---|---|---:|---:|---:|---:|---|
+| PPO v2 geometry | Habitat HM3D mined-val | 5M steps | 151 | 0.060 | - | Existing SB3 checkpoint |
+| SAC v2 geometry | Habitat HM3D mined-val | 2M steps | 151 | 0.000 | - | Existing SB3 checkpoint |
+| RecurrentPPO | Synthetic v2 | 3M steps | 500 | 0.130 | 0.456 | SB3-Contrib + fair reward |
+
+RecurrentPPO learns some straight/asymmetric passages, but it remains weak on
+L/S turns, narrow exits, and false-feasible safety.  This is the fair-reward
+replacement for the older native-reward timeout result.
+
 ### Newly Deployed Baselines
 
 These are smoke runs that verify training/evaluation paths; they are not final
@@ -115,11 +127,7 @@ long-training scores.
 | FSM expert trajectories | 40 episodes / 5179 transitions | 40 | 0.750 | 0.100 |
 | BC-FSM | 5179 expert transitions / 5 epochs | 40 | 0.500 | 0.475 |
 | DAgger-FSM | 6346 transitions / 1 DAgger iter | 40 | 0.300 | 0.650 |
-| RecurrentPPO | 1024 env steps | 40 | 0.000 | 0.000 |
 | Replay Memory Policy | 1024 env steps | 40 | 0.000 | 0.025 |
-
-The 3M-step RecurrentPPO run should be logged as a final result only after its
-500-episode evaluation CSV is written.
 
 Core documents:
 

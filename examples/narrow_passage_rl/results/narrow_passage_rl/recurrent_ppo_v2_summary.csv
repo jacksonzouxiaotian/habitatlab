@@ -1,0 +1,2 @@
+case,train_steps,success_rate,collision_rate,avg_min_clearance,sr_asymmetric,sr_false_feasible,sr_l_shaped,sr_narrow_entry,sr_narrow_exit,sr_s_shaped,sr_straight
+v2_recurrent_ppo,3000000,0.13,0.456,1.4442,0.3333,0.0,0.0,0.2368,0.0,0.0,0.4082
