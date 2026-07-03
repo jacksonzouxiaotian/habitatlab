@@ -280,6 +280,7 @@ Legacy implementation scripts retained for reproducibility:
 ├── eval_habitat_apf_gap.py         # APF+Gap classical baseline
 ├── eval_habitat_ppo_policy.py      # Trained NarrowPassagePolicy evaluator
 ├── eval_habitat_fsm_ablations.py   # FSM variant ablation (no_recovery / no_alignment)
+├── record_habitat_video.py         # RGB/depth MP4 recorder with overlays/keyframes
 ├── eval_dmin_calibration.py        # D_min self-calibration experiment
 ├── render_trajectories.py          # Top-down trajectory visualization (paper figures)
 │
@@ -512,7 +513,59 @@ python examples/narrow_passage_rl/eval_habitat_fsm_ablations.py \
     --feature-noise-std 0.03 \
     --depth-dropout-prob 0.10 \
     --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/habitat_fsm_stress_lat_noise.csv
+
+# Paper video: Geometry-FSM with overlay and keyframes
+python examples/narrow_passage_rl/record_habitat_video.py \
+    --method geometry_fsm \
+    --split val \
+    --episode-index 147 \
+    --view rgb_depth \
+    --heading-perturb-deg 60 \
+    --lateral-perturb-m 0.20 \
+    --fps 6 \
+    --output-dir video_dir/narrow_passage_habitat \
+    --save-keyframes
+
+# Paper video: SB3 PPO baseline
+python examples/narrow_passage_rl/record_habitat_video.py \
+    --method ppo_sb3 \
+    --model data/narrow_passage_sb3_v2_ppo/ppo_narrow_passage_v2.zip \
+    --split val \
+    --episode-index 0 \
+    --output-dir video_dir/narrow_passage_habitat \
+    --save-keyframes
+
+# List longer narrow episodes for clearer Commit-mode demonstrations
+python examples/narrow_passage_rl/record_habitat_video.py \
+    --split val \
+    --difficulty narrow \
+    --list-candidates 10
+
+# Automatically record the longest narrow episode
+python examples/narrow_passage_rl/record_habitat_video.py \
+    --method geometry_fsm \
+    --split val \
+    --difficulty narrow \
+    --select-longest \
+    --num-episodes 1 \
+    --view rgb_depth \
+    --heading-perturb-deg 60 \
+    --lateral-perturb-m 0.20 \
+    --fps 6 \
+    --output-dir video_dir/narrow_passage_habitat \
+    --save-keyframes
 ```
+
+Recorded paper-video artifacts currently checked into the repository:
+
+| Method | Episode | Video | Result |
+|---|---|---|---|
+| Geometry-FSM | `hm3d_narrow_000008` | `video_dir/narrow_passage_habitat/geometry_fsm_ep000_hm3d_narrow_000008.mp4` | 28 steps, success=1, collision=0, stuck=0 |
+| SB3 PPO synthetic-to-Habitat | `hm3d_narrow_000008` | `video_dir/narrow_passage_habitat/ppo_sb3_ep000_hm3d_narrow_000008.mp4` | 500 steps, success=0, collision=0, stuck=0 |
+
+Keyframes are saved under `results/narrow_passage_rl/keyframes/`.  Long-path
+demo recordings should be regenerated with the current script, which maps the
+JSON `--episode-index` to the matching Habitat `episode_id` before reset.
 
 ### 5. Generate Paper Tables and Figures
 

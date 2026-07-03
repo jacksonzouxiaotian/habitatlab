@@ -130,6 +130,19 @@ false-feasible Habitat anchors, dynamic obstacles, and unseen-room
 generalization remain planned dataset/simulator extensions until new stress CSVs
 are generated.
 
+### Paper Videos
+
+`examples/narrow_passage_rl/record_habitat_video.py` records RGB/depth MP4s for
+`geometry_fsm`, `ppo_sb3`, `apf_gap`, and `ppo_policy`, with overlayed episode
+state and optional keyframes.
+
+| Method | Episode | Artifact | Result |
+|---|---|---|---|
+| Geometry-FSM | `hm3d_narrow_000008` | `video_dir/narrow_passage_habitat/geometry_fsm_ep000_hm3d_narrow_000008.mp4` | 28 steps, success=1 |
+| SB3 PPO synthetic-to-Habitat | `hm3d_narrow_000008` | `video_dir/narrow_passage_habitat/ppo_sb3_ep000_hm3d_narrow_000008.mp4` | 500 steps, timeout |
+
+Keyframes are under `results/narrow_passage_rl/keyframes/`.
+
 ### Newly Deployed Baselines
 
 These are smoke runs that verify training/evaluation paths; they are not final
