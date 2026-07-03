@@ -10,7 +10,11 @@ We evaluate on two independent setups:
 
 ## Key Results
 
-### Habitat HM3D Generalization
+### Habitat HM3D Anchor Validation
+
+The HM3D rows below are scene-based anchor validation, not a blanket robustness
+claim.  Unperturbed mined anchors are mostly well aligned, so start-pose
+stress validation is reported to reveal module differences.
 
 **Val set A** (original 157 episodes, 20 held-out scenes):
 
@@ -20,8 +24,8 @@ We evaluate on two independent setups:
 | SB3 PPO synthetic-to-Habitat geometry | 5.7% | 5.1% | 9.1% | 0.0% | Single seed, synthetic v2 env, 5M steps |
 | PPO w/ geometry sensor (3 seeds) | 2.1% (±2.6%) | 1.7% | 3.0% | 1.4% | Seeds: 5.7%, 0.0%, 0.6% |
 | APF+Gap (Khatib 1986, Meng 2002) | 93.6% | 92.4% | 100% | 82.6% | Classical; depth + GPS only |
-| **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | |
-| **FSM + Failure Memory (ours)** | **100%** | **100%** | **100%** | **100%** | |
+| **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | Nominal anchors |
+| **FSM + Failure Memory (ours)** | **100%** | **100%** | **100%** | **100%** | Memory gain is not visible on one-shot passable anchors |
 
 **Val set B** (mined 151 episodes, 20 held-out HM3D scenes — independent split):
 
@@ -36,10 +40,11 @@ synthetic-to-Habitat transfer, and Habitat-Baselines smoke tests.  The rows
 above are synthetic-to-Habitat transfer baselines: policies trained on synthetic
 v2 geometry observations and evaluated on mined HM3D episodes.  They should not
 be described as complete Habitat-Baselines PPO training curves.  Their low HM3D
-SR is used as evidence that pure learned policies are unstable under narrow
-passage geometry transfer, motivating explicit geometry/risk/failure memory.
+SR is used as evidence that learning-only policies exhibit severe
+synthetic-to-Habitat transfer collapse near narrow-passage geometry boundaries,
+motivating explicit geometry/risk/failure memory.
 
-**FSM ablation** — all components remain at 100% on Habitat:
+**FSM stress validation** — nominal anchors alone do not separate modules:
 
 | Variant | SR | Narrow | Normal | Wide |
 |---|---|---|---|---|
@@ -48,9 +53,9 @@ passage geometry transfer, motivating explicit geometry/risk/failure memory.
 | w/o alignment | 100% | 100% | 100% | 100% |
 
 On unperturbed Habitat episodes, recovery/alignment ablations remain at 100%
-because the mined anchors are already well aligned.  The 100% Habitat rows are
-therefore not the only evidence for robustness; they must be reported with the
-stress ablations and the mining/success/collision protocol.  A controlled
+because the mined anchors are already well aligned.  These rows should therefore
+be reported as nominal HM3D anchor validation, alongside the mining,
+success/collision, near-clearance, and stress-test protocol.  A controlled
 Habitat stress test rotates the initial heading by 60° on the 24 extreme-narrow
 episodes (body_margin < 0.05 m), revealing the alignment module:
 
@@ -105,7 +110,7 @@ kNN and embedding-only episodic memory both learn to reject false-feasible
 passages, but they reject more passable corridors and waste more repeated-failure
 steps. Raw results: `results/narrow_passage_rl/memory_baselines.csv`.
 
-**Learning baseline status**:
+**Diagnostic / preliminary learning baselines**:
 
 | Method | Domain | Train budget | Eval episodes | Success ↑ | Collision ↓ | Notes |
 |---|---|---:|---:|---:|---:|---|
@@ -113,14 +118,17 @@ steps. Raw results: `results/narrow_passage_rl/memory_baselines.csv`.
 | SAC v2 geometry | Habitat HM3D mined-val | 2M steps | 151 | 0.000 | - | Existing SB3 checkpoint |
 | GRU-PPO lightweight | Synthetic v2 | 5k steps | 50 | 0.000 | 0.980 | PyTorch fallback; SB3-Contrib unavailable in current env |
 | RecurrentPPO | Synthetic v2 | 3M steps | 500 | 0.130 | 0.456 | SB3-Contrib MlpLstmPolicy + fair reward |
-| BC-FSM | Synthetic v2 | 5179 expert transitions | 40 | 0.500 | 0.475 | Supervised imitation smoke |
-| DAgger-FSM | Synthetic v2 | 6346 transitions | 40 | 0.300 | 0.650 | One DAgger iteration smoke |
-| Replay Memory Policy | Synthetic v2 | 1024 steps | 40 | 0.000 | 0.025 | PPO + generic replay embedding smoke |
+| BC-FSM | Synthetic v2 | 5179 expert transitions | 40 | 0.500 | 0.475 | Diagnostic smoke run; appendix only |
+| DAgger-FSM | Synthetic v2 | 6346 transitions | 40 | 0.300 | 0.650 | Diagnostic smoke run; appendix only |
+| Replay Memory Policy | Synthetic v2 | 1024 steps | 40 | 0.000 | 0.025 | Generic replay embedding smoke; appendix only |
 
-The GRU-PPO run is intentionally labeled as a lightweight fallback rather than
-a final SB3-Contrib RecurrentPPO result. It is useful as an early negative
-control: generic recurrent hidden state did not solve the boundary-passage
-problem under a small CPU training budget.
+These rows are diagnostic / preliminary baselines, not final main-table
+comparisons.  BC, DAgger, Replay Memory Policy, and lightweight GRU-PPO should
+be placed in an appendix or baseline-status table unless they are rerun with a
+full protocol. The GRU-PPO run is intentionally labeled as a lightweight
+fallback rather than a final SB3-Contrib RecurrentPPO result. It is useful as an
+early negative control: generic recurrent hidden state did not solve the
+boundary-passage problem under a small CPU training budget.
 After installing `sb3-contrib==2.7.1` in the `habitat` environment, the formal
 SB3-Contrib `RecurrentPPO` path runs end-to-end.  With fair reward and 3M
 training steps, it reaches 13.0% SR but 45.6% collision on synthetic v2: it

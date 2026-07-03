@@ -1,9 +1,12 @@
-# Table: Habitat HM3D Generalization
+# Table: Habitat HM3D Anchor Validation
 # Original val set (A): 157 episodes, 20 held-out scenes (NarrowPassageNav-v0)
 # Mined val set (B):    151 episodes automatically mined from 20 held-out HM3D val scenes
 #   Mining: geodesic/clearance-based; 73 narrow / 55 normal / 23 wide (608 train / 151 val)
 # PPO results: mean (std) across 3 independent training seeds
 # FSM/APF results: single run (deterministic policies — no variance)
+# Interpretation: unperturbed mined anchors are mostly well aligned.  The 100%
+# FSM rows are nominal anchor-validation results, not a blanket robustness
+# claim.  Stress validation isolates module sensitivity.
 
 # --- Inference speed (CPU, n=10k calls, separate from accuracy table) ---
 # fsm_action:       20.9 µs  (7.1× faster than SB3 PPO v1)
@@ -19,8 +22,8 @@
 | PPO v2 (geometry sensor, re-trained) | 5.7% | 5.1% | 9.1% | 0.0% | Single seed, v2 env + heading fix, 5M steps |
 | **PPO w/ geometry sensor** | **2.1% (±2.6%)** | **1.7% (±1.6%)** | **3.0% (±4.3%)** | **1.4% (±2.0%)** | 3 seeds: 5.7%, 0.0%, 0.6% |
 | APF+Gap (Khatib 1986) | 93.6% | 92.4% | 100% | 82.6% | Depth + GPS only |
-| **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | |
-| **FSM + Failure Memory (ours)** | **100%** | **100%** | **100%** | **100%** | |
+| **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | Nominal anchors |
+| **FSM + Failure Memory (ours)** | **100%** | **100%** | **100%** | **100%** | Memory gain is not visible on one-shot passable anchors |
 
 ## Val set B (mined 151 episodes, 20 held-out HM3D scenes)
 
@@ -62,8 +65,9 @@ R1 rejection of 37.5% FF occurs because FF seeds processed later in R1 already f
 from earlier FF seeds in the same round (sequential within-round learning).
 
 Notes:
-- PPO-SB3 0.0% with fixed heading formula (was 10.2% with buggy formula — atan2 sign error
-  inverted turn direction, inflating success rate artificially).
+- PPO-SB3 0.0% with fixed heading formula.  Pre-fix results used a buggy
+  atan2 sign convention that inverted turn direction and inflated success rate
+  artificially; do not report those legacy numbers.
   Root cause of 0%: obs[10] format mismatch — SB3 trained on v1 env (absolute yaw),
   Habitat sensor emits path-relative heading error → policy receives garbage input.
 - PPO v2 (5.7%) confirms heading fix alone does not close the sim-to-real gap;
@@ -78,3 +82,6 @@ Notes:
   not physical wall penetration.
 - FSM ablation (full / no_recovery / no_alignment): all 100% on unperturbed val;
   the +60° Habitat stress ablation isolates heading alignment as the critical module.
+- Failure memory should be argued primarily from repeated false-feasible /
+  cross-episode memory experiments, not from the one-shot Habitat passable-anchor
+  table where Geometry-FSM and FSM+Memory both reach 100%.

@@ -7,12 +7,14 @@
 
 This repository contains simulation experiments for a paper on geometry-guided,
 failure-aware narrow-passage navigation for quadruped robots. The approach uses a
-hand-crafted Finite State Machine (FSM) driven by live depth-derived passage geometry.
-Reinforcement learning is evaluated as a baseline and shown to fail at generalizing
-to unseen corridor geometries — motivating the geometry-first design.
+mode-switching controller driven by live depth-derived passage geometry, risk
+state, and repeated-failure memory. Reinforcement learning is treated as a
+diagnostic baseline: learning-only and generic recurrent policies often collapse
+under synthetic-to-Habitat transfer near geometric feasibility boundaries,
+motivating the geometry-first design.
 
-Real-robot experiments (quadruped hardware) are conducted separately and are
-referenced in the paper.
+Real-robot experiments are treated as pilot hardware validation / feasibility
+checks unless accompanied by separate hardware videos, bags, and statistics.
 
 ---
 
@@ -74,17 +76,41 @@ FSM ablation (entry jitter σ=0.25 m): removing alignment drops Overall from 64.
 L-shaped from 74.6% → 6.1%. `false_feasible` corridors yield 0% SR — correctly rejected by
 body-margin gating.
 
-### 2. Habitat HM3D Generalization (157 val episodes, 20 held-out scenes)
+### 2. Habitat HM3D Anchor Validation
+
+Unperturbed mined anchors are mostly well aligned, so the 100% FSM rows should
+be read as nominal HM3D anchor validation rather than a blanket robustness
+claim. Stress validation is used to reveal module differences.
+
+**Val set A** (original 157 episodes, 20 held-out HM3D scenes):
 
 | Method | SR | Narrow | Normal | Wide | Notes |
-|---|---|---|---|---|---|
-| PPO-SB3 baseline | 10.2% | 3.8% | 18.2% | 13.0% | Trained on synthetic env, fails to generalize |
-| PPO w/ geometry sensor | 6.4% | 2.5% | 10.9% | 8.7% | 5M steps, 99%+ train SR — sim-to-real gap |
+|---|---:|---:|---:|---:|---|
+| PPO-SB3 baseline (fixed formula) | 0.0% | 0.0% | 0.0% | 0.0% | Legacy v1 observation mismatch |
+| PPO v2 geometry, single seed | 5.7% | 5.1% | 9.1% | 0.0% | Synthetic v2 → Habitat transfer |
+| PPO v2 geometry, 3 seeds | 2.1% (±2.6%) | 1.7% | 3.0% | 1.4% | Seeds: 5.7%, 0.0%, 0.6% |
 | APF+Gap (Khatib 1986) | 93.6% | 92.4% | 100% | 82.6% | Depth + GPS only, no learning |
-| **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | |
-| **FSM + Failure Memory (ours)** | **100%** | **100%** | **100%** | **100%** | |
+| **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | Nominal anchors |
+| **FSM + Failure Memory (ours)** | **100%** | **100%** | **100%** | **100%** | Memory gain is not visible on one-shot passable anchors |
 
-FSM ablation — all variants stay at 100%, showing structural robustness.
+**Val set B** (mined 151 episodes, 20 held-out HM3D scenes):
+
+| Method | Episodes | SR | Notes |
+|---|---:|---:|---|
+| SB3 PPO synthetic-to-Habitat geometry | 151 | 6.0% | Learning-only transfer baseline |
+| SAC v2 geometry | 151 | 0.0% | Same observation interface as PPO v2 |
+| **Geometry-FSM (ours)** | 151 | **100%** | Feature-driven controller on nominal anchors |
+
+**Habitat stress validation**:
+
+| Setting | Full FSM | w/o recovery | w/o all alignment | w/o heading alignment | Notes |
+|---|---:|---:|---:|---:|---|
+| HM3D nominal anchors | 100% | 100% | 100% | - | Anchors are mostly well aligned |
+| Extreme narrow +60° yaw | 100% | 100% | 0% | 0% | Heading alignment is the exposed critical module |
+
+Failure memory is mainly evaluated in repeated false-feasible / cross-episode
+experiments, where it reduces wasted attempts. The one-shot Habitat passable
+anchor table is not the main evidence for memory.
 
 ### 3. D_min Self-Calibration (300 synthetic episodes)
 
@@ -225,12 +251,16 @@ Full experiment details: [examples/narrow_passage_rl/README.md](examples/narrow_
 
 ## Dataset
 
-HM3D val split, auto-mined with `mine_habitat_passages.py`. Scene-level 80/20 split.
+HM3D validation uses two historical splits.  Val set A is the original
+157-episode anchor set used in early tables; Val set B is the current mined
+151-episode split used for the main mined-val rows.  Keep the split name in the
+table caption to avoid mixing these results.
 
-| Split | Episodes | Narrow | Normal | Wide |
-|---|---|---|---|---|
-| train | 638 | 320 | 224 | 94 |
-| val | 157 | 79 | 55 | 23 |
+| Split | Episodes | Narrow | Normal | Wide | Notes |
+|---|---:|---:|---:|---:|---|
+| Val set A | 157 | 79 | 55 | 23 | Original held-out anchor set |
+| Val set B | 151 | 73 | 55 | 23 | Current automatically mined HM3D val split |
+| Train mined split | 608 | - | - | - | Current train split paired with Val set B |
 
 `narrow` = body_margin ≤ 0.15 m · `normal` = 0.15–0.40 m · `wide` > 0.40 m.
 
@@ -252,7 +282,9 @@ python examples/narrow_passage_rl/generate_habitat_episodes.py \
 **Heading error sign fix**: `atan2(delta_x, −delta_z)` caused `heading_error = 0`
 when the robot faced *away* from the goal. Habitat's forward direction is
 `[−sin(yaw), 0, −cos(yaw)]`; correct formula is `atan2(−delta_x, −delta_z)`.
-Without the fix, FSM achieved 2.7% on HM3D; after: 100%.
+Without the fix, FSM achieved 2.7% on the HM3D anchor validation split; with
+the corrected sign, the nominal mined-anchor split reaches 100%, which should
+be reported together with start-pose stress validation.
 
 **body_margin formula**: Uses `min(clearance_left, clearance_right) − robot_radius`
 (tight side, not average), reflecting actual worst-case clearance at the current

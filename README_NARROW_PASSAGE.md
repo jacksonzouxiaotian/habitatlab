@@ -87,13 +87,13 @@ Full per-episode CSVs, Markdown tables, and LaTeX tables are under
 `examples/narrow_passage_rl/results/narrow_passage_rl/`.  The most important
 current results are:
 
-### Habitat HM3D Mined-Val
+### Habitat HM3D Anchor Validation
 
 | Method | Episodes | Success | Notes |
 |---|---:|---:|---|
 | SB3 PPO synthetic-to-Habitat geometry | 151 | 6.0% | Trained on synthetic v2, evaluated on mined HM3D |
 | SAC v2 geometry | 151 | 0.0% | SB3 SAC policy |
-| Geometry-FSM | 151 | 100.0% | Feature-driven controller |
+| Geometry-FSM | 151 | 100.0% | Feature-driven controller on nominal anchors |
 | Habitat FSM stress ablation, +60 deg heading | 24 | 100.0% full / 0.0% no heading alignment | Extreme-narrow subset |
 
 The Habitat-Baselines `ppo_narrow_passage.yaml` config is a task/policy
@@ -122,8 +122,9 @@ RecurrentPPO learns some straight/asymmetric passages, but it remains weak on
 L/S turns, narrow exits, and false-feasible safety.  This is the fair-reward
 replacement for the older native-reward timeout result.
 
-The 100% Habitat FSM rows are reported with the current mined-anchor protocol.
-They should be read together with the +60 deg yaw stress ablation.  The Habitat
+The 100% Habitat FSM rows are nominal mined-anchor validation, not a blanket
+robustness claim. They should be read together with the +60 deg yaw stress
+ablation.  The Habitat
 stress evaluator now supports yaw perturbation, lateral offset, start-distance
 shift, feature noise, and depth-sector dropout.  Goal perturbation,
 false-feasible Habitat anchors, dynamic obstacles, and unseen-room
@@ -143,10 +144,11 @@ state and optional keyframes.
 
 Keyframes are under `results/narrow_passage_rl/keyframes/`.
 
-### Newly Deployed Baselines
+### Diagnostic / Smoke Baselines
 
 These are smoke runs that verify training/evaluation paths; they are not final
-long-training scores.
+long-training scores and should be reported in an appendix or baseline-status
+section rather than the main comparison table.
 
 | Baseline | Train data / budget | Eval episodes | Success | Collision |
 |---|---:|---:|---:|---:|
