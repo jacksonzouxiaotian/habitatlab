@@ -1,8 +1,11 @@
 # @package _global_
 
-# Smoke-test Habitat config for the narrow-passage task components. For the
-# first real paper curves, use examples/narrow_passage_rl/train_sb3.py because
-# it exposes a clean Box([vx, wz]) action space.
+# Smoke-test Habitat config for the narrow-passage task components.
+#
+# This is NOT the main paper PPO training curve.  It verifies Habitat task,
+# sensor, reward, and policy wiring.  Paper learning baselines should use the
+# SB3/SB3-Contrib scripts under examples/narrow_passage_rl/, which expose a
+# clean Box([vx, wz]) action space and the fair RL reward wrapper.
 
 defaults:
   - /benchmark/nav/pointnav: pointnav_habitat_test

@@ -58,6 +58,17 @@ python examples/narrow_passage_rl/narrow_passage/scripts/run_ablation.py
 python examples/narrow_passage_rl/narrow_passage/scripts/make_paper_tables.py
 ```
 
+PPO-family reproducibility notes:
+
+- `train_sb3_v2.py`, `train_recurrent_ppo_v2.py`, and
+  `train_replay_memory_policy_v2.py` are the runnable SB3/SB3-Contrib learning
+  baseline scripts.
+- `habitat-baselines/.../ppo_narrow_passage.yaml` is a Habitat-Baselines
+  smoke-test config for task/policy wiring, not the main paper PPO curve.
+- `configs/train_ppo.yaml` documents planned curriculum and reward protocol.
+  The current runnable SB3 scripts do not parse that YAML, so do not claim
+  width/body-ratio curriculum unless a staged training command is used.
+
 Run the newly added memory/history baselines:
 
 ```bash

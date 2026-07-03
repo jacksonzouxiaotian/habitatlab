@@ -133,5 +133,17 @@ current_result_artifacts:
       - replay_memory_policy_smoke
     pending_full_runs:
       - td3_geometry
+      - ppo_geometry_multi_seed_synthetic_v2
+      - ppo_geometry_multi_seed_habitat_mined_val
+      - recurrent_ppo_multi_seed
       - bc_dagger_long
       - replay_memory_policy_long
+  habitat_stress:
+    completed:
+      - extreme_narrow_yaw_perturb60
+    pending:
+      - randomized_initial_yaw
+      - entrance_lateral_offset
+      - dynamic_obstacles
+      - additional_passage_anchors
+      - false_feasible_habitat_anchors

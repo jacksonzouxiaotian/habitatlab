@@ -1,4 +1,12 @@
-# PPO training config for the narrow-passage v2 synthetic benchmark.
+# PPO training protocol notes for the narrow-passage v2 synthetic benchmark.
+#
+# Status:
+#   - train_sb3_v2.py is the runnable SB3 PPO/SAC/TD3 entry point.
+#   - This YAML is documentation for the intended paper protocol; it is not
+#     automatically parsed by train_sb3_v2.py.
+#   - Width/body-ratio curriculum is planned, not currently implemented in the
+#     runnable training script.  Do not claim curriculum learning unless a staged
+#     training runner is used.
 experiment: train_ppo_v2
 script: examples/narrow_passage_rl/narrow_passage/scripts/train.py
 
@@ -13,7 +21,8 @@ env:
     - NARROW_ENTRY
     - ASYMMETRIC
     - FALSE_FEASIBLE
-  width_body_ratio_curriculum: [1.20, 1.00, 0.95, 0.85, 0.75]
+  curriculum_status: planned_not_implemented
+  planned_width_body_ratio_curriculum: [1.20, 1.00, 0.95, 0.85, 0.75]
 
 robot:
   body_width_m: 0.36

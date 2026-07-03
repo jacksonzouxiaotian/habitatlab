@@ -42,6 +42,27 @@ retry failed passages, or make unsafe local decisions.
 Implementation status and exact method names are listed in
 `docs/baseline_taxonomy.md` and `configs/eval_baselines.yaml`.
 
+## PPO / RL Baseline Reporting
+
+PPO-family results must be reported under one of three categories:
+
+| Category | Meaning |
+|---|---|
+| Synthetic PPO | SB3/SB3-Contrib training and evaluation on synthetic v2 |
+| Synthetic-to-Habitat PPO | SB3 checkpoint trained on synthetic v2 and evaluated on HM3D mined-val |
+| Habitat-Baselines PPO smoke test | Habitat task/policy wiring check using `ppo_narrow_passage.yaml` |
+
+Do not describe the Habitat-Baselines smoke config as a complete paper PPO
+training curve.  The paper-facing learning baselines are the SB3/SB3-Contrib
+scripts in `examples/narrow_passage_rl/`.
+
+## Curriculum Status
+
+`configs/train_ppo.yaml` documents a planned width/body-ratio curriculum, but
+`train_sb3_v2.py` does not parse that YAML and does not currently implement
+staged curriculum scheduling.  Until a staged runner is added, papers and README
+text should not claim curriculum learning for PPO/SAC/TD3/RecurrentPPO runs.
+
 ## Core Ablations
 
 | Ablation | Question answered |
@@ -81,6 +102,8 @@ Implementation status and exact method names are listed in
 - Synthetic benchmark: 3 seeds by default (`0, 1, 2`), 500 episodes per seed.
 - Habitat deterministic methods: single deterministic pass over each split.
 - RL Habitat transfer: checkpoint-specific deterministic evaluation.
+- Learning baselines should report multiple seeds when used as strong baselines.
+  Single-seed or smoke-test rows must be labeled as such.
 
 ## Robot Body Width
 
@@ -108,5 +131,10 @@ The default body width is `0.36 m` unless an experiment config overrides it.
 ## Reporting
 
 Paper tables should report both aggregate rates and per-difficulty breakdowns.
+For Habitat FSM rows with 100% SR, also report the mined-anchor protocol,
+success/collision definitions, and stress-test variants.  Current stress tests
+include +60 degree initial yaw on extreme-narrow anchors; planned harder tests
+include randomized yaw, lateral offset, dynamic obstacles, additional anchors,
+and false-feasible anchors.
 For memory experiments, always include repeated-failure rate and wasted steps on
 false-feasible passages.

@@ -16,8 +16,8 @@ We evaluate on two independent setups:
 
 | Method | SR | Narrow | Normal | Wide | Notes |
 |---|---|---|---|---|---|
-| PPO-SB3 baseline | 0.0% | 0.0% | 0.0% | 0.0% | obs[10] format mismatch (v1 yaw vs. Habitat heading) |
-| PPO v2 (geometry sensor) | 5.7% | 5.1% | 9.1% | 0.0% | Single seed, v2 env, 5M steps |
+| PPO-SB3 baseline | 0.0% | 0.0% | 0.0% | 0.0% | Legacy obs[10] format mismatch (v1 yaw vs. Habitat heading) |
+| SB3 PPO synthetic-to-Habitat geometry | 5.7% | 5.1% | 9.1% | 0.0% | Single seed, synthetic v2 env, 5M steps |
 | PPO w/ geometry sensor (3 seeds) | 2.1% (±2.6%) | 1.7% | 3.0% | 1.4% | Seeds: 5.7%, 0.0%, 0.6% |
 | APF+Gap (Khatib 1986, Meng 2002) | 93.6% | 92.4% | 100% | 82.6% | Classical; depth + GPS only |
 | **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | |
@@ -27,14 +27,17 @@ We evaluate on two independent setups:
 
 | Method | SR | Narrow (73) | Normal (55) | Wide (23) |
 |---|---|---|---|---|
-| PPO v2 (geometry sensor) | 6.0% | 5.5% | 9.1% | 0.0% |
+| SB3 PPO synthetic-to-Habitat geometry | 6.0% | 5.5% | 9.1% | 0.0% |
 | SAC v2 (geometry sensor) | 0.0% | 0.0% | 0.0% | 0.0% |
 | **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** |
 
-PPO trains with 99%+ success rate on synthetic corridors but collapses to <6% on real HM3D
-geometry — confirming severe sim-to-real gap. The FSM generalizes directly because its geometric
-features (heading error, body margin) have the same physical meaning in both 2D synthetic and 3D
-scanned environments.
+PPO results are grouped into three distinct categories: synthetic PPO, SB3
+synthetic-to-Habitat transfer, and Habitat-Baselines smoke tests.  The rows
+above are synthetic-to-Habitat transfer baselines: policies trained on synthetic
+v2 geometry observations and evaluated on mined HM3D episodes.  They should not
+be described as complete Habitat-Baselines PPO training curves.  Their low HM3D
+SR is used as evidence that pure learned policies are unstable under narrow
+passage geometry transfer, motivating explicit geometry/risk/failure memory.
 
 **FSM ablation** — all components remain at 100% on Habitat:
 
@@ -44,9 +47,12 @@ scanned environments.
 | w/o recovery | 100% | 100% | 100% | 100% |
 | w/o alignment | 100% | 100% | 100% | 100% |
 
-On unperturbed Habitat episodes, recovery/alignment ablations remain at 100% because the mined
-anchors are already well aligned. A controlled Habitat stress test rotates the initial heading by
-60° on the 24 extreme-narrow episodes (body_margin < 0.05 m), revealing the alignment module:
+On unperturbed Habitat episodes, recovery/alignment ablations remain at 100%
+because the mined anchors are already well aligned.  The 100% Habitat rows are
+therefore not the only evidence for robustness; they must be reported with the
+stress ablations and the mining/success/collision protocol.  A controlled
+Habitat stress test rotates the initial heading by 60° on the 24 extreme-narrow
+episodes (body_margin < 0.05 m), revealing the alignment module:
 
 | Variant (+60° heading perturb) | SR | Successes |
 |---|---:|---:|
@@ -58,6 +64,9 @@ anchors are already well aligned. A controlled Habitat stress test rotates the i
 
 Thus, heading alignment is the critical Habitat module under start-pose perturbation; lateral
 centering and recovery are not the bottleneck for these mined anchors.
+Additional stress tests should include randomized initial yaw, entrance lateral
+offset, additional passage anchors, dynamic obstacles, and false-feasible
+anchors before making broad claims about Habitat robustness.
 
 **Inference speed** (CPU, n=10,000 calls):
 
@@ -98,7 +107,7 @@ steps. Raw results: `results/narrow_passage_rl/memory_baselines.csv`.
 
 | Method | Domain | Train budget | Eval episodes | Success ↑ | Collision ↓ | Notes |
 |---|---|---:|---:|---:|---:|---|
-| PPO v2 geometry | Habitat HM3D mined-val | 5M steps | 151 | 0.060 | - | Existing SB3 checkpoint |
+| SB3 PPO synthetic-to-Habitat geometry | Habitat HM3D mined-val | 5M synthetic steps | 151 | 0.060 | - | Synthetic v2 checkpoint transferred to HM3D |
 | SAC v2 geometry | Habitat HM3D mined-val | 2M steps | 151 | 0.000 | - | Existing SB3 checkpoint |
 | GRU-PPO lightweight | Synthetic v2 | 5k steps | 50 | 0.000 | 0.980 | PyTorch fallback; SB3-Contrib unavailable in current env |
 | RecurrentPPO | Synthetic v2 | 3M steps | 500 | 0.130 | 0.456 | SB3-Contrib MlpLstmPolicy + fair reward |
@@ -211,7 +220,7 @@ D_hat converges from 0.56 m → 0.39 m (9% error) within ~75 episodes.
 ```
 examples/narrow_passage_rl/
 ├── configs/
-│   ├── train_ppo.yaml              # PPO curriculum/reward protocol
+│   ├── train_ppo.yaml              # PPO protocol notes; curriculum planned, not auto-run
 │   ├── eval_baselines.yaml         # Baseline evaluation protocol
 │   ├── eval_ablation.yaml          # Module ablation protocol
 │   └── sim2real.yaml               # Synthetic-to-Habitat transfer checks
@@ -324,7 +333,7 @@ habitat-lab/habitat/tasks/narrow_passage/
 └── geometry.py                # Shared geometry helpers (FEATURE_NAMES, MEMORY_FEATURE_NAMES)
 
 habitat-baselines/habitat_baselines/
-├── config/narrow_passage/ppo_narrow_passage.yaml   # PPO training config
+├── config/narrow_passage/ppo_narrow_passage.yaml   # Habitat-Baselines smoke-test config
 └── rl/ppo/narrow_passage_policy.py                 # NarrowPassagePolicy (GRU + Gaussian)
 ```
 
@@ -446,7 +455,13 @@ python examples/narrow_passage_rl/generate_habitat_episodes.py \
     --split val --output data/datasets/narrow_passage/val/val.json.gz
 ```
 
-### 3. Train PPO Baseline
+### 3. Habitat-Baselines PPO Smoke Test
+
+`habitat-baselines/habitat_baselines/config/narrow_passage/ppo_narrow_passage.yaml`
+is a smoke-test config for the NarrowPassageNav-v0 task components and the
+custom policy wiring.  It is not the main paper PPO training pipeline.  The
+paper learning baselines use SB3/SB3-Contrib scripts under
+`examples/narrow_passage_rl/`.
 
 ```bash
 conda activate habitat

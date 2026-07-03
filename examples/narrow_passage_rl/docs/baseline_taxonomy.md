@@ -69,6 +69,17 @@ RecurrentPPO result is available in
 `results/narrow_passage_rl/recurrent_ppo_v2_summary.csv`: 3M fair-reward steps,
 500 evaluation episodes, 13.0% SR and 45.6% collision.
 
+Important reporting caveats:
+
+- `ppo_narrow_passage.yaml` is a Habitat-Baselines smoke-test config, not the
+  main PPO training pipeline.
+- `train_ppo.yaml` documents a planned width/body-ratio curriculum; the runnable
+  SB3 scripts do not implement that curriculum yet.
+- TD3, multi-seed RecurrentPPO, and full BC/DAgger training remain pending
+  before claiming strong learning-baseline coverage.
+- Habitat FSM 100% rows should be paired with stress tests and transparent
+  mined-anchor / success / collision definitions.
+
 ## Layer 4: Recent Strong Navigation Methods
 
 These methods should be treated as lightweight style baselines unless a full

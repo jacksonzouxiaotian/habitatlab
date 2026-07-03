@@ -91,10 +91,15 @@ current results are:
 
 | Method | Episodes | Success | Notes |
 |---|---:|---:|---|
-| PPO v2 geometry | 151 | 6.0% | SB3 geometry policy |
+| SB3 PPO synthetic-to-Habitat geometry | 151 | 6.0% | Trained on synthetic v2, evaluated on mined HM3D |
 | SAC v2 geometry | 151 | 0.0% | SB3 SAC policy |
 | Geometry-FSM | 151 | 100.0% | Feature-driven controller |
 | Habitat FSM stress ablation, +60 deg heading | 24 | 100.0% full / 0.0% no heading alignment | Extreme-narrow subset |
+
+The Habitat-Baselines `ppo_narrow_passage.yaml` config is a task/policy
+smoke-test config, not the main paper PPO training pipeline.  Learning-baseline
+claims should distinguish: synthetic PPO, SB3 synthetic-to-Habitat transfer, and
+Habitat-Baselines smoke tests.
 
 ### Memory / History Baselines
 
@@ -109,13 +114,18 @@ current results are:
 
 | Method | Domain | Train budget | Eval episodes | Success | Collision | Notes |
 |---|---|---:|---:|---:|---:|---|
-| PPO v2 geometry | Habitat HM3D mined-val | 5M steps | 151 | 0.060 | - | Existing SB3 checkpoint |
+| SB3 PPO synthetic-to-Habitat geometry | Habitat HM3D mined-val | 5M synthetic steps | 151 | 0.060 | - | Synthetic v2 checkpoint transferred to HM3D |
 | SAC v2 geometry | Habitat HM3D mined-val | 2M steps | 151 | 0.000 | - | Existing SB3 checkpoint |
 | RecurrentPPO | Synthetic v2 | 3M steps | 500 | 0.130 | 0.456 | SB3-Contrib + fair reward |
 
 RecurrentPPO learns some straight/asymmetric passages, but it remains weak on
 L/S turns, narrow exits, and false-feasible safety.  This is the fair-reward
 replacement for the older native-reward timeout result.
+
+The 100% Habitat FSM rows are reported with the current mined-anchor protocol.
+They should be read together with the +60 deg yaw stress ablation and future
+harder stress tests with randomized yaw, lateral offset, dynamic obstacles,
+additional anchors, and false-feasible anchors.
 
 ### Newly Deployed Baselines
 
