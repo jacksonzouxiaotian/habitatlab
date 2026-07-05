@@ -28,6 +28,20 @@ RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 FEATURE_DIM = 19
 
 
+def _to_habitat_action(action, action_space: str):
+    action = np.asarray(action, dtype=np.float32).reshape(-1)
+    lin = float(action[0])
+    ang = float(action[1])
+    if action_space == "synthetic":
+        # HarderNarrowPassageEnv checkpoints output physical-like synthetic
+        # ranges.  Habitat VelocityAction expects normalized [-1, 1].
+        lin = 2.0 * ((np.clip(lin, -0.15, 0.35) - (-0.15)) / (0.35 - (-0.15))) - 1.0
+        ang = float(np.clip(ang, -0.8, 0.8) / 0.8)
+    elif action_space != "normalized":
+        raise ValueError(f"Unknown action space: {action_space}")
+    return float(np.clip(lin, -1.0, 1.0)), float(np.clip(ang, -1.0, 1.0))
+
+
 def _load_model(algo: str, model_path: Path):
     """Load PPO/SAC/TD3 from stable-baselines3.
 
@@ -76,6 +90,25 @@ def main():
     ap.add_argument("--split", default="val")
     ap.add_argument("--num-episodes", type=int, default=-1, help="-1 = all")
     ap.add_argument("--max-steps", type=int, default=500)
+    ap.add_argument(
+        "--strict-clearance-threshold",
+        type=float,
+        default=-0.02,
+        help=(
+            "Minimum body-margin threshold for strict_success.  HM3D depth "
+            "features can produce small negative clearance artifacts near "
+            "valid navmesh positions, so the default is mildly tolerant."
+        ),
+    )
+    ap.add_argument(
+        "--action-space",
+        choices=["normalized", "synthetic"],
+        default="normalized",
+        help=(
+            "Use synthetic for checkpoints trained in HarderNarrowPassageEnv; "
+            "use normalized for Habitat-native SB3 checkpoints."
+        ),
+    )
     ap.add_argument("--output-csv", type=Path, default=None)
     args = ap.parse_args()
 
@@ -118,8 +151,9 @@ def main():
 
                 # SB3 model.predict expects flat numpy array
                 action, _ = model.predict(feats, deterministic=True)
-                lin_norm = float(np.clip(action[0], -1.0, 1.0))
-                ang_norm = float(np.clip(action[1], -1.0, 1.0))
+                lin_norm, ang_norm = _to_habitat_action(
+                    action, args.action_space
+                )
 
                 obs_dict = env.step({
                     "action": "velocity_control",
@@ -129,11 +163,36 @@ def main():
                     },
                 })
                 steps += 1
-                if env.episode_over:
+                metrics = env.get_metrics()
+                success_now = float(metrics.get("narrow_passage_success", 0.0))
+                stuck_now = float(metrics.get("narrow_passage_stuck", 0.0))
+                collision_now = float(metrics.get("narrow_passage_collision", 0.0))
+                if (
+                    env.episode_over
+                    or success_now > 0.5
+                    or stuck_now > 0.5
+                    or collision_now > 0.5
+                ):
                     done = True
 
             metrics = env.get_metrics()
             success = float(metrics.get("narrow_passage_success", 0.0))
+            final_collision = max(
+                float(any_collision),
+                float(metrics.get("narrow_passage_collision", 0.0)),
+            )
+            final_stuck = float(metrics.get("narrow_passage_stuck", 0.0))
+            min_clearance = float(min_bm) if np.isfinite(min_bm) else 0.0
+            clearance_safe = float(
+                min_clearance >= args.strict_clearance_threshold
+            )
+            strict_success = float(
+                success > 0.5
+                and final_collision < 0.5
+                and final_stuck < 0.5
+                and clearance_safe > 0.5
+            )
+            success_but_unsafe = float(success > 0.5 and strict_success < 0.5)
 
             stat = {
                 "episode_id": str(episode.episode_id),
@@ -142,19 +201,26 @@ def main():
                 "body_margin": round(body_margin, 4),
                 "steps": steps,
                 "success": success,
-                "collision": float(any_collision),
-                "stuck": float(metrics.get("narrow_passage_stuck", 0.0)),
+                "strict_success": strict_success,
+                "clearance_safe": clearance_safe,
+                "success_but_unsafe": success_but_unsafe,
+                "collision": final_collision,
+                "stuck": final_stuck,
                 "near_collision": float(near_collision),
-                "min_clearance": float(min_bm) if np.isfinite(min_bm) else 0.0,
+                "min_clearance": min_clearance,
             }
             all_stats.append(stat)
             print(
                 f"  ep {ep_idx:3d}  {difficulty:6s}  bm={body_margin:+.3f}"
-                f"  success={success:.0f}  steps={steps:3d}"
+                f"  success={success:.0f}  strict={strict_success:.0f}"
+                f"  steps={steps:3d}"
             )
 
     n = len(all_stats)
     sr = np.mean([s["success"] for s in all_stats])
+    strict_sr = np.mean([s["strict_success"] for s in all_stats])
+    unsafe_sr = np.mean([s["success_but_unsafe"] for s in all_stats])
+    safe_rate = np.mean([s["clearance_safe"] for s in all_stats])
     cr = np.mean([s["collision"] for s in all_stats])
     ncr = np.mean([s["near_collision"] for s in all_stats])
     avg_bm = np.mean([s["min_clearance"] for s in all_stats])
@@ -163,6 +229,9 @@ def main():
     print(f"  model:               {args.model}")
     print(f"  algo:                {algo}")
     print(f"  success_rate:        {sr:.3f}  ({sr*100:.1f}%)")
+    print(f"  strict_success_rate: {strict_sr:.3f}  ({strict_sr*100:.1f}%)")
+    print(f"  clearance_safe_rate: {safe_rate:.3f}")
+    print(f"  success_but_unsafe:  {unsafe_sr:.3f}")
     print(f"  collision_rate:      {cr:.3f}")
     print(f"  near_collision_rate: {ncr:.3f}")
     print(f"  avg_min_clearance:   {avg_bm:.3f}")
@@ -170,7 +239,12 @@ def main():
         rows = [s for s in all_stats if s["difficulty"] == diff]
         if rows:
             d_sr = np.mean([r["success"] for r in rows])
-            print(f"  {diff:6s}: SR={d_sr:.3f} ({sum(r['success']>0.5 for r in rows)}/{len(rows)})")
+            d_strict = np.mean([r["strict_success"] for r in rows])
+            print(
+                f"  {diff:6s}: SR={d_sr:.3f} "
+                f"strict={d_strict:.3f} "
+                f"({sum(r['success']>0.5 for r in rows)}/{len(rows)})"
+            )
 
     out_path = args.output_csv or (
         RESULTS / f"habitat_{algo}_{args.model.parent.name}_episodes.csv"

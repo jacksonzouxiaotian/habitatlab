@@ -99,6 +99,8 @@ claim. Stress validation is used to reveal module differences.
 |---|---:|---:|---|
 | SB3 PPO synthetic-to-Habitat geometry | 151 | 6.0% | Learning-only transfer baseline |
 | SAC v2 geometry | 151 | 0.0% | Same observation interface as PPO v2 |
+| TD3 v2 synthetic transfer | 151 | 2.0% | 77.8% synthetic SR does not transfer to HM3D |
+| TD3 Habitat-native | 151 | 100% nominal / 2.0% strict | 98.0% success-but-unsafe; near-collision 100% |
 | **Geometry-FSM (ours)** | 151 | **100%** | Feature-driven controller on nominal anchors |
 
 **Habitat stress validation**:
@@ -111,6 +113,14 @@ claim. Stress validation is used to reveal module differences.
 Failure memory is mainly evaluated in repeated false-feasible / cross-episode
 experiments, where it reduces wasted attempts. The one-shot Habitat passable
 anchor table is not the main evidence for memory.
+
+The Habitat-native TD3 row is intentionally reported with both nominal and
+strict success.  The nominal success measure checks distance/alignment to the
+local goal, while strict success additionally requires clearance-safe traversal.
+The 100% nominal / 2% strict split shows that ordinary RL can exploit a loose
+success metric by reaching the local goal while staying near geometric safety
+boundaries; it is therefore a diagnostic learning baseline rather than the main
+method.
 
 ### 3. D_min Self-Calibration (300 synthetic episodes)
 

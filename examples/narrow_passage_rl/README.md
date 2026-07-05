@@ -33,6 +33,8 @@ stress validation is reported to reveal module differences.
 |---|---|---|---|---|
 | SB3 PPO synthetic-to-Habitat geometry | 6.0% | 5.5% | 9.1% | 0.0% |
 | SAC v2 (geometry sensor) | 0.0% | 0.0% | 0.0% | 0.0% |
+| TD3 v2 synthetic transfer | 2.0% | 4.1% | 0.0% | 0.0% |
+| TD3 Habitat-native | 100% nominal / 2.0% strict | 100% / 0.0% | 100% / 0.0% | 100% / 13.0% |
 | **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** |
 
 PPO results are grouped into three distinct categories: synthetic PPO, SB3
@@ -43,6 +45,15 @@ be described as complete Habitat-Baselines PPO training curves.  Their low HM3D
 SR is used as evidence that learning-only policies exhibit severe
 synthetic-to-Habitat transfer collapse near narrow-passage geometry boundaries,
 motivating explicit geometry/risk/failure memory.
+
+TD3 now has both transfer and Habitat-native diagnostics.  Synthetic TD3 reaches
+77.8% SR in the 2-D procedural v2 benchmark but only 2.0% when transferred to
+HM3D.  Habitat-native TD3 can optimize the nominal distance/alignment success
+measure (100% SR after 1M Habitat steps), but clearance-aware strict success is
+only 2.0%; 98.0% of episodes are success-but-unsafe, near-collision is 100%, and
+average minimum clearance is -0.104 m.  This result should be reported as metric
+exploitation / unsafe learning baseline behavior, not as robust narrow-passage
+traversal.
 
 **FSM stress validation** — nominal anchors alone do not separate modules:
 
@@ -116,6 +127,8 @@ steps. Raw results: `results/narrow_passage_rl/memory_baselines.csv`.
 |---|---|---:|---:|---:|---:|---|
 | SB3 PPO synthetic-to-Habitat geometry | Habitat HM3D mined-val | 5M synthetic steps | 151 | 0.060 | - | Synthetic v2 checkpoint transferred to HM3D |
 | SAC v2 geometry | Habitat HM3D mined-val | 2M steps | 151 | 0.000 | - | Existing SB3 checkpoint |
+| TD3 synthetic-to-Habitat geometry | Habitat HM3D mined-val | 3M synthetic steps | 151 | 0.020 | 0.000 | Synthetic v2 SR=77.8%, transfer collapses |
+| TD3 Habitat-native | Habitat HM3D mined-val | 1M Habitat steps | 151 | 1.000 nominal / 0.020 strict | 0.000 | 98.0% success-but-unsafe; near-collision 100% |
 | GRU-PPO lightweight | Synthetic v2 | 5k steps | 50 | 0.000 | 0.980 | PyTorch fallback; SB3-Contrib unavailable in current env |
 | RecurrentPPO | Synthetic v2 | 3M steps | 500 | 0.130 | 0.456 | SB3-Contrib MlpLstmPolicy + fair reward |
 | BC-FSM | Synthetic v2 | 5179 expert transitions | 40 | 0.500 | 0.475 | Diagnostic smoke run; appendix only |
@@ -393,8 +406,21 @@ For Habitat experiments: install `habitat-sim` and place HM3D data under
 # Full ablation suite (primary synthetic env)
 python examples/narrow_passage_rl/run_rl_experiments.py
 
-# FSM + failure memory (quick eval)
-python examples/narrow_passage_rl/eval_mode_fsm.py --use-memory 1
+# Failure-aware mode FSM with risk/recovery skill hooks
+python examples/narrow_passage_rl/eval_mode_fsm.py \
+    --episodes 500 \
+    --csv examples/narrow_passage_rl/results/narrow_passage_rl/mode_fsm_skill_summary.csv
+
+# Local recovery skills used as diagnostic RL baselines
+python examples/narrow_passage_rl/eval_recovery_sb3.py \
+    --episodes 500 \
+    --csv examples/narrow_passage_rl/results/narrow_passage_rl/recovery_ppo_summary.csv
+python examples/narrow_passage_rl/eval_risk_recovery_sb3.py \
+    --episodes 500 \
+    --csv examples/narrow_passage_rl/results/narrow_passage_rl/risk_recovery_ppo_summary.csv
+python examples/narrow_passage_rl/eval_passage_with_recovery.py \
+    --episodes 500 --enable-risk-recovery \
+    --csv examples/narrow_passage_rl/results/narrow_passage_rl/passage_with_recovery_summary.csv
 
 # v2 harder benchmark (L/S-shaped, asymmetric, false-feasible)
 python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500

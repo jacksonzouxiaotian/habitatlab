@@ -31,6 +31,8 @@
 |:---|:---:|:---:|:---:|:---:|:---|
 | PPO v2 (geometry sensor) | 6.0% | 5.5% | 9.1% | 0.0% | 9/151; consistent with val set A (5.7%) |
 | SAC v2 (geometry sensor) | 0.0% | 0.0% | 0.0% | 0.0% | 0/151; same observation interface as PPO v2 |
+| TD3 v2 synthetic transfer | 2.0% | 4.1% | 0.0% | 0.0% | 3/151; action-mapped synthetic-to-Habitat transfer remains poor |
+| TD3 Habitat-native | 100% nominal / 2.0% strict | 100% / 0.0% | 100% / 0.0% | 100% / 13.0% | 1M Habitat steps; 98.0% success-but-unsafe, near-collision 100% |
 | **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | 151/151 |
 | FSM w/o recovery | **100%** | **100%** | **100%** | **100%** | Extreme-narrow subset: 24/24 |
 | FSM w/o alignment | **100%** | **100%** | **100%** | **100%** | Extreme-narrow subset: 24/24 |
@@ -73,8 +75,10 @@ Notes:
 - PPO v2 (5.7%) confirms heading fix alone does not close the sim-to-real gap;
   high variance (0–9.1% across difficulties) reflects sparse reward in scanned scenes.
 - SAC v2 also fails to transfer on mined Habitat val (0/151), despite matching the v2
-  observation format. TD3 support is implemented in `train_sb3_v2.py`, but a full TD3
-  Habitat result is not reported here because the CPU training run did not finish in this pass.
+  observation format. TD3 trained in synthetic v2 reaches high synthetic SR but
+  transfers to only 2.0% HM3D SR. Habitat-native TD3 can optimize the nominal
+  distance/alignment success measure (100% SR), but strict clearance-aware SR is
+  only 2.0%, with 98.0% success-but-unsafe and 100% near-collision.
 - PPO w/ geometry sensor 3-seed SR: 5.7%, 0.0%, 0.6% — high variance confirms
   training instability and sim-to-real collapse (99%+ train SR → <6% Habitat SR).
 - collision_rate=0% for all methods due to allow_sliding=False (navmesh boundary stop).
