@@ -1,112 +1,101 @@
 # Baseline Taxonomy
 
-The paper baseline suite is organized into four layers.  The goal is not merely
-to beat classical navigation, but to show that near the geometric feasibility
-boundary, standard planners, standard RL, generic history models, and recent
-visual navigation models all lack explicit failure memory and geometry-aware
-risk reasoning.
+Baselines are grouped by evidential role.  The main paper table should not mix
+formal baselines with diagnostic or smoke runs.
 
-## Layer 1: Traditional Planning
+## Formal Main Baselines
 
-| Baseline | Why it matters | Habitat-Lab implementation plan |
-|---|---|---|
-| DWB | Nav2 velocity-space local planner | ROS2/Nav2 adapter; replay same passage starts/goals |
-| TEB | Time-elastic-band optimization | ROS2 adapter or external log replay |
-| RPP | Robust path-following controller in Nav2 | ROS2/Nav2 adapter |
-| MPPI | Sampling/MPC local controller | ROS2/Nav2 MPPI adapter |
-| Smac Hybrid-A* / State Lattice | Kinodynamic global planning | Nav2 Smac global path + local controller evaluation |
+These baselines are suitable for the main comparison table.
 
-These baselines answer whether a stronger classical or kinodynamic planner is
-enough.  The expected failure mode is still local hesitation, unsafe clearance,
-or repeated entry into a historically failed passage.
+| Family | Method | Train domain | Eval domain | Purpose |
+|---|---|---|---|---|
+| Classical | APF+Gap | none | Habitat HM3D | Classical depth/GPS reactive navigation |
+| Learning | PPO v2 geometry sensor | Synthetic v2 | Habitat HM3D | On-policy learning-only transfer baseline |
+| Learning | SAC v2 geometry sensor | Synthetic v2 | Habitat HM3D | Off-policy continuous-control baseline |
+| Learning | TD3 synthetic-to-Habitat | Synthetic v2 | Habitat HM3D | Off-policy deterministic continuous-control baseline |
+| Ours | Geometry-FSM | none | Synthetic v2 / Habitat HM3D | Geometry/risk/mode controller |
 
-## Layer 2: Learning-Based Navigation
+Legacy PPO with the v1 `obs[10]` yaw/heading mismatch is excluded from formal
+baseline tables and is provenance only.
 
-| Baseline | Inputs | Purpose | Status |
-|---|---|---|---|
-| PPO-depth | depth + local goal | End-to-end RL without explicit geometry | planned |
-| PPO-geometry | 19-D geometry vector | Geometry input without failure memory | implemented/evaluated |
-| Recurrent PPO / GRU-PPO | geometry + hidden state | Tests whether generic temporal memory is enough | SB3-Contrib 3M-step fair-reward result evaluated |
-| Geometry + GRU PPO | geometry + recurrent state | Stronger recurrent RL baseline | SB3-Contrib / lightweight fallback evaluated |
-| SAC / TD3 | geometry + continuous action | Off-policy continuous-control baselines | SAC evaluated; TD3 entry point implemented |
-| BC / DAgger | expert trajectories | Imitation from planner/FSM expert | smoke evaluated; full training pending |
-
-The key comparison is:
+Formal table:
 
 ```text
-PPO
-PPO + GRU
-PPO + Geometry
-PPO + Geometry + GRU
-Ours w/o Failure Memory
-Ours Full
+results/narrow_passage_rl/paper_table_formal_baselines.md
 ```
 
-## Layer 3: Memory / History Methods
+## Diagnostic Baselines
 
-| Baseline | Has history | Has failure labels | Geometry similarity | Decision mode |
-|---|---:|---:|---:|---:|
-| GRU-PPO | yes | no | no | no |
-| kNN Failure Memory | yes | yes | partial | no |
-| Replay Memory Policy | yes | weak | no | no |
-| Transformer History | yes | no | no | no |
-| Vanilla Episodic Memory | yes | yes | no | no |
-| Geometry-Guided Failure Memory | yes | yes | yes | yes |
+Diagnostic baselines explain failure modes or metric weaknesses.
 
-This is the most important comparison for the paper.  It separates generic
-history conditioning from explicit failure memory with geometric similarity and
-mode-level decisions.
-
-Current synthetic v2 memory baseline results are available in
-`results/narrow_passage_rl/paper_table_memory_baselines.md`.  In the 5-round
-repeated-passage benchmark, kNN failure memory and vanilla episodic memory both
-learn to reject false-feasible passages, but they reject more passable corridors
-and save fewer wasted steps than Geometry-Guided Failure Memory.
-
-Current smoke results for BC, DAgger, and Replay Memory Policy are available in
-`results/narrow_passage_rl/paper_table_new_baselines_smoke.md`.  The formal
-RecurrentPPO result is available in
-`results/narrow_passage_rl/recurrent_ppo_v2_summary.csv`: 3M fair-reward steps,
-500 evaluation episodes, 13.0% SR and 45.6% collision.
-
-Important reporting caveats:
-
-- `ppo_narrow_passage.yaml` is a Habitat-Baselines smoke-test config, not the
-  main PPO training pipeline.
-- `train_ppo.yaml` documents a planned width/body-ratio curriculum; the runnable
-  SB3 scripts do not implement that curriculum yet.
-- TD3, multi-seed RecurrentPPO, and full BC/DAgger training remain pending
-  before claiming strong learning-baseline coverage.
-- Habitat FSM 100% rows should be paired with stress tests and transparent
-  mined-anchor / success / collision definitions.
-
-## Layer 4: Recent Strong Navigation Methods
-
-These methods should be treated as lightweight style baselines unless a full
-model/checkpoint is available.
-
-| Baseline | Why include it | Practical version in this benchmark |
-|---|---|---|
-| ViPlanner-style learned local planner | Learned local planning with geometry/semantic traversability costs | depth/local map + goal -> waypoint sequence, trained on narrow-passage v2 |
-| NoMaD-style diffusion waypoint policy | Modern diffusion navigation policy with history and goal conditioning | observation history + goal -> K-step action/waypoint sequence |
-| ViNT/GNM-style visual navigation | Foundation-style visual navigation | optional visual baseline, not the main narrow-geometry comparison |
-| Quadruped confined-space RL | Closest to legged narrow-space navigation | hierarchical RL waypoint follower / privileged-geometry RL |
-
-References:
-
-- ViPlanner: https://arxiv.org/abs/2310.00982
-- NoMaD: https://arxiv.org/abs/2310.07896
-- GNM: https://arxiv.org/abs/2210.03370
-- ViNT: https://arxiv.org/abs/2306.14846
-- Dexterous legged locomotion in confined 3D spaces: https://arxiv.org/abs/2403.03848
-- Quadrupedal narrow pipe inspection: https://arxiv.org/abs/2412.13621
-
-## What Can Be Implemented Directly in Habitat-Lab?
-
-| Feasibility | Baselines |
+| Method | Why diagnostic |
 |---|---|
-| Directly runnable in current codebase | PPO-geometry, SAC-geometry, FSM ablations, kNN/geometry failure memory, vanilla episodic memory, SB3-Contrib RecurrentPPO, BC/DAgger, replay-memory policy, lightweight GRU-PPO, synthetic ViPlanner-style waypoint policy |
-| Needs modest new code | PPO-depth, Transformer history, NoMaD-style diffusion waypoint policy |
-| Needs ROS2/Nav2 bridge | DWB, RPP, MPPI, Smac Hybrid-A* |
-| Needs external package/log replay | TEB, full ViNT/GNM/NoMaD/ViPlanner checkpoints |
-| Better treated as paper context or style baseline | full foundation navigation models, full quadruped locomotion policies |
+| TD3 Habitat-native | Shows that nominal success can be exploited; strict clearance-aware success remains low. |
+| Habitat-Baselines PPO config | Task/policy wiring smoke test, not a final PPO curve. |
+
+Diagnostic table:
+
+```text
+results/narrow_passage_rl/paper_table_diagnostic_baselines.md
+```
+
+## Smoke / Appendix-Only Learning Baselines
+
+These verify code paths and provide preliminary negative controls.  They should
+not be used as main baselines unless rerun with the full multi-seed protocol.
+
+| Method | Status | Purpose |
+|---|---|---|
+| GRU-PPO lightweight | smoke | Generic recurrent hidden-state negative control |
+| RecurrentPPO | smoke / single run | SB3-Contrib recurrent policy path |
+| BC-FSM | smoke | Imitation from Geometry-FSM expert |
+| DAgger-FSM | smoke | Interactive imitation baseline |
+| Replay Memory Policy | smoke | Generic history/replay observation baseline |
+
+Smoke table:
+
+```text
+results/narrow_passage_rl/paper_table_smoke_baselines.md
+```
+
+## Memory Baselines
+
+The memory claim is not one-shot success improvement.  The correct comparison is
+repeated false-feasible exposure and wasted-step reduction.
+
+| Method | History | Failure labels | Geometry similarity | Decision role |
+|---|---:|---:|---:|---:|
+| no memory | no | no | no | always attempt |
+| local intra-episode memory | within episode | yes | coarse | recovery only, no cross-round reject |
+| kNN failure memory | cross episode | yes | partial hand geometry | reject |
+| vanilla episodic memory | cross episode | yes | embedding similarity | reject |
+| geometry-guided cross-episode failure memory | cross episode | yes | explicit geometry/type similarity | reject / cautious mode |
+
+Memory table:
+
+```text
+results/narrow_passage_rl/paper_table_repeated_failure_memory.md
+```
+
+## FSM Ablations
+
+FSM ablations test which controller modules matter under perturbation.
+
+| Ablation | Removed component | Interpretation |
+|---|---|---|
+| w/o recovery | Backward recovery after collision/stuck | Tests recovery contribution |
+| w/o heading alignment | Goal/corridor heading correction | Critical under yaw perturbation |
+| w/o lateral alignment | Centerline lateral correction | Tests side-offset centering |
+
+In nominal HM3D anchors, ablations may also reach 100% because starts are mostly
+well aligned.  Use Habitat stress validation to expose differences.
+
+## Out-of-Scope Or External Baselines
+
+ROS/Nav2 planners such as DWB, TEB, RPP, MPPI, and Smac Hybrid-A* are relevant
+real-robot baselines, but they require ROS2/Nav2 integration or log replay and
+are not part of the current Habitat main table.
+
+Foundation or diffusion navigation models such as ViNT/GNM/NoMaD/ViPlanner can
+be discussed as related work or future stronger baselines unless full task-
+matched checkpoints and evaluation scripts are available.

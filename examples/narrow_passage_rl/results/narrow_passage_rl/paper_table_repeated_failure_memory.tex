@@ -1,0 +1,11 @@
+\begin{tabular}{lrrrrrr}
+\toprule
+Method & Pass SR & Pass FR & FF reject & Wasted FF & Saved & Precision \\
+\midrule
+no\_memory & 0.900 & 0.000 & 0.000 & 16500 & 0 & - \\
+local\_intra\_episode\_memory & 0.900 & 0.000 & 0.000 & 16500 & 0 & - \\
+knn\_failure\_memory & 0.860 & 0.060 & 1.000 & 5500 & 11000 & 0.916 \\
+vanilla\_episodic\_memory & 0.820 & 0.130 & 1.000 & 8140 & 8360 & 0.736 \\
+geometry\_guided\_cross\_episode\_failure\_memory & 0.900 & 0.030 & 1.000 & 4400 & 12100 & 0.963 \\
+\bottomrule
+\end{tabular}

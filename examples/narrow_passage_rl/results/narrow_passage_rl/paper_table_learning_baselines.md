@@ -1,18 +1,45 @@
-# Table: Learning Baselines and Diagnostic Smoke Runs
+# Table Index: Learning Baselines
 
-Rows labeled smoke/diagnostic verify code paths and failure modes. They should
-be reported in the appendix or baseline-status section unless rerun with the
-full multi-seed protocol. The main paper claim is that learning-only and generic
-history baselines transfer poorly near narrow-passage feasibility boundaries.
+Learning baselines are split into three groups to avoid mixing formal Habitat
+comparisons with diagnostic and smoke-test runs.
 
-| Method | Domain | Train budget | Eval episodes | Success ↑ | Collision ↓ | Notes |
-|---|---|---:|---:|---:|---:|---|
-| SB3 PPO synthetic-to-Habitat geometry | Habitat HM3D mined-val | 5M synthetic steps | 151 | 0.060 | - | Synthetic v2 checkpoint transferred to HM3D |
-| SAC v2 geometry | Habitat HM3D mined-val | 2M steps | 151 | 0.000 | - | Existing SB3 checkpoint |
-| TD3 synthetic-to-Habitat geometry | Habitat HM3D mined-val | 3M synthetic steps | 151 | 0.020 | 0.000 | Synthetic TD3 transfers poorly despite 77.8% synthetic v2 SR |
-| TD3 Habitat-native | Habitat HM3D mined-val | 1M Habitat steps | 151 | 1.000 nominal / 0.020 strict | 0.000 | 98.0% success-but-unsafe; near-collision 100% |
-| GRU-PPO lightweight | Synthetic v2 | 5k steps | 50 | 0.000 | 0.980 | PyTorch fallback; SB3-Contrib unavailable in current env |
-| RecurrentPPO | Synthetic v2 | 3M steps | 500 | 0.130 | 0.456 | SB3-Contrib MlpLstmPolicy + fair reward |
-| BC-FSM | Synthetic v2 | 5179 expert transitions | 40 | 0.500 | 0.475 | Diagnostic smoke; appendix only |
-| DAgger-FSM | Synthetic v2 | 6346 transitions | 40 | 0.300 | 0.650 | Diagnostic smoke; appendix only |
-| Replay Memory Policy | Synthetic v2 | 1024 steps | 40 | 0.000 | 0.025 | Generic replay embedding smoke; appendix only |
+## A. Formal Main Baselines
+
+Use `paper_table_formal_baselines.md` for the main paper table.
+
+Included:
+- PPO v2 geometry sensor, 3 seeds, synthetic-to-Habitat transfer.
+- SAC v2 geometry sensor.
+- TD3 synthetic-to-Habitat transfer.
+- APF+Gap classical baseline.
+- Geometry-FSM.
+
+Legacy PPO runs with the v1 `obs[10]` yaw/heading mismatch are excluded and
+should not be treated as main baselines.
+
+## B. Diagnostic Baselines
+
+Use `paper_table_diagnostic_baselines.md` for rows that explain metric failure
+modes rather than method ranking.
+
+Included:
+- TD3 Habitat-native nominal success vs. strict clearance-aware success.
+
+This row shows that nominal Habitat success can be exploited by a learned policy:
+TD3 reaches 100.0% nominal success but only 2.0% strict success, with 98.0%
+success-but-unsafe and 100.0% near-collision.
+
+## C. Smoke / Appendix-Only Baselines
+
+Use `paper_table_smoke_baselines.md` for code-path checks and preliminary
+negative controls.
+
+Included:
+- GRU-PPO lightweight.
+- RecurrentPPO smoke.
+- BC-FSM.
+- DAgger-FSM.
+- Replay Memory Policy.
+
+These rows should stay in an appendix/status table unless rerun under the full
+multi-seed, same-eval-domain protocol.

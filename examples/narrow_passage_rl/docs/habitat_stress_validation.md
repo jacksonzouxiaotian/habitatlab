@@ -1,75 +1,106 @@
 # Habitat Stress Validation
 
-The unperturbed HM3D mined-val FSM rows can reach 100% success because the
-mined anchors are reasonably aligned with the passage entrance.  Stress
-validation is therefore reported next to the main Habitat table to show which
-controller modules survive realistic start-pose and sensing perturbations.
+Habitat HM3D nominal anchors are useful scene-based validation, but they are not
+enough to claim broad robustness.  The mined starts are mostly aligned with the
+passage entrance, so full Geometry-FSM and some ablations can all reach 100% in
+the nominal table.  Stress validation perturbs the same task to reveal module
+sensitivity.
 
-## Implemented Stress Tests
+## Why Nominal Anchors Are Not Enough
 
-`eval_habitat_fsm_ablations.py` supports the following perturbations without
-regenerating the dataset:
+Nominal anchors mainly answer:
 
-| Stress type | CLI flag | Purpose |
-|---|---|---|
-| Initial yaw perturbation | `--heading-perturb-deg` | Tests heading alignment under start orientation error |
-| Lateral start offset | `--lateral-perturb-m` | Tests entrance centering under side offset |
-| Start distance shift | `--start-distance-shift-m` | Tests whether success depends on a fixed entrance distance |
-| Depth/geometry noise | `--feature-noise-std` | Tests noisy clearance and passage-width estimates |
-| Depth-sector dropout | `--depth-dropout-prob` | Tests robustness to missing local depth sectors |
-| Extreme-narrow subset | `--split extreme_narrow` | Tests anchors with body margin below 0.05 m |
+- Can the controller use HM3D depth-derived geometry features?
+- Does the controller reach the local passage goal on scanned scenes?
+- Does the mined dataset wiring work in `NarrowPassageNav-v0`?
 
-Example commands:
+They do not fully answer:
+
+- What happens if the robot starts with wrong yaw?
+- What happens if the robot is laterally offset from the entrance?
+- What happens when depth sectors drop out or geometry estimates are noisy?
+- Which FSM module actually matters near the clearance boundary?
+
+Therefore the 100% nominal row should be reported as **Habitat HM3D Anchor
+Validation**, and the stress table should be cited for robustness claims.
+
+## Stress Factors
+
+The formal script is:
 
 ```bash
-conda activate habitat
-
-# Yaw stress on extreme-narrow anchors.
-python examples/narrow_passage_rl/eval_habitat_fsm_ablations.py \
-    --split extreme_narrow \
-    --variants full no_heading_alignment no_lateral_alignment \
-    --heading-perturb-deg 60 \
-    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/habitat_fsm_stress_yaw60.csv
-
-# Lateral offset stress.
-python examples/narrow_passage_rl/eval_habitat_fsm_ablations.py \
-    --split extreme_narrow \
-    --variants full no_lateral_alignment no_alignment \
-    --lateral-perturb-m 0.2 \
-    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/habitat_fsm_stress_lat02.csv
-
-# Feature-level sensor stress.
-python examples/narrow_passage_rl/eval_habitat_fsm_ablations.py \
-    --split extreme_narrow \
-    --variants full no_recovery no_alignment \
-    --feature-noise-std 0.03 \
-    --depth-dropout-prob 0.10 \
-    --seed 0 \
-    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/habitat_fsm_stress_depth_noise.csv
+python examples/narrow_passage_rl/eval_habitat_stress_validation.py \
+    --preset paper \
+    --split val \
+    --num-episodes -1
 ```
 
-For the paper table, report the perturbation parameters in the row label, for
-example `Extreme-narrow +60 deg yaw` or `Extreme-narrow +0.2 m lateral offset`.
+It evaluates:
 
-## Planned Stress Tests
-
-The following tests require new mined anchors, dataset regeneration, or simulator
-extensions.  Do not report them as completed until the corresponding CSVs exist.
-
-| Stress type | Required work | Purpose |
+| Factor | Values | Purpose |
 |---|---|---|
-| Goal perturbation | Regenerate episodes with randomized exit-side goals | Checks overfitting to a fixed local goal point |
-| False-feasible Habitat anchors | Mine entrances that look passable but become blocked inside | Tests failure-memory reject decisions |
-| Dynamic obstacle | Add temporary blockers or pedestrian proxies near entrances | Tests recovery and re-planning under transient blockage |
-| Scene generalization | Build unseen HM3D val/test room split | Checks that success is not scene memorization |
+| start yaw perturbation | 0, 30, 60 degrees | Tests heading alignment |
+| lateral start offset | 0.0 m, 0.10 m, 0.20 m | Tests lateral centering |
+| depth-sector dropout | 0%, 10%, 30% | Tests missing local depth sectors |
+| feature Gaussian noise | sigma = 0.0, 0.02, 0.05 | Tests noisy geometry features |
+| extreme narrow subset | `body_margin < 0.05 m` | Tests near-limit clearance |
 
-## Reporting Rule
+Compared methods:
 
-When the main Habitat table contains 100% FSM success, include:
+- Full Geometry-FSM.
+- FSM w/o heading alignment.
+- FSM w/o recovery.
+- FSM w/o lateral alignment.
+- APF+Gap when the interface is available.
 
-- mined split size and body-margin distribution,
-- `allow_sliding=False`,
-- success/collision definitions,
-- at least one start-pose stress row,
-- whether each stress row is implemented from the existing dataset or from a
-  regenerated stress split.
+## Metrics
+
+Stress validation reports:
+
+- Success rate.
+- Strict success rate.
+- Collision rate.
+- Near-collision rate.
+- Average minimum clearance.
+- Average steps.
+- Timeout rate.
+
+Strict success should be used when comparing against learning baselines or
+when nominal success appears saturated.
+
+## How To Interpret Results
+
+Interpretation should focus on module sensitivity under perturbation.
+
+Examples:
+
+- If full FSM succeeds under +60 degree yaw but w/o heading alignment fails,
+  heading alignment is the exposed critical module.
+- If lateral-offset stress hurts w/o lateral alignment more than full FSM,
+  lateral centering is useful.
+- If dropout/noise reduces strict success while nominal success stays high,
+  report the safety degradation rather than only goal-reaching success.
+- If all methods remain saturated under a stress factor, the stress is not
+  strong enough to separate modules and should not be overinterpreted.
+
+## Outputs
+
+```text
+results/narrow_passage_rl/habitat_stress_validation.csv
+results/narrow_passage_rl/paper_table_habitat_stress.md
+results/narrow_passage_rl/paper_table_habitat_stress.tex
+```
+
+If these files are missing, rerun the script above before citing the stress
+table.
+
+## Limitations
+
+The current stress validation perturbs existing mined episodes.  The following
+require new data generation or simulator extensions and should not be claimed
+as completed unless corresponding CSVs exist:
+
+- Goal perturbation around the exit.
+- Habitat false-feasible anchors blocked inside the passage.
+- Dynamic obstacles near or inside the passage.
+- A separate unseen-room/test-room split.

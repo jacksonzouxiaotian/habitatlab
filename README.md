@@ -1,308 +1,324 @@
-# Geometry-Guided Narrow-Passage Navigation for Quadruped Robots
+# Geometry-Guided Failure-Aware Narrow-Passage Navigation
 
-> **This repository is a fork of [Habitat-Lab](https://github.com/facebookresearch/habitat-lab).**
-> Our contributions are confined to `examples/narrow_passage_rl/` and
-> `habitat-lab/habitat/tasks/narrow_passage/`. All other files are the
-> unmodified Habitat-Lab v0.3.3 codebase.
+This repository is a fork of
+[Habitat-Lab](https://github.com/facebookresearch/habitat-lab).  The fork keeps
+the Habitat-Lab v0.3.3 structure, but the narrow-passage research code is
+isolated in a small set of added directories.
 
-This repository contains simulation experiments for a paper on geometry-guided,
-failure-aware narrow-passage navigation for quadruped robots. The approach uses a
-mode-switching controller driven by live depth-derived passage geometry, risk
-state, and repeated-failure memory. Reinforcement learning is treated as a
-diagnostic baseline: learning-only and generic recurrent policies often collapse
-under synthetic-to-Habitat transfer near geometric feasibility boundaries,
-motivating the geometry-first design.
+The paper studies local navigation for quadruped robots near geometric
+feasibility limits: tight entrances, low clearance, misleading passable-looking
+openings, and repeated failed attempts.  The main system is not a general
+PointNav/ObjectNav policy.  It is a geometry-guided, risk-aware, failure-aware
+local navigation framework.
 
-Real-robot experiments are treated as pilot hardware validation / feasibility
-checks unless accompanied by separate hardware videos, bags, and statistics.
+## What This Repository Adds
 
----
+The primary contribution lives here:
 
-## Our Contributions
+```text
+examples/narrow_passage_rl/
+  procedural_env_v2.py                  # Synthetic v2 narrow-passage benchmark
+  eval_harder_benchmark.py              # Main procedural benchmark
+  eval_habitat_geometry_fsm.py          # Geometry-FSM on Habitat HM3D anchors
+  eval_habitat_stress_validation.py     # Habitat stress validation
+  eval_repeated_failure_memory.py       # Repeated infeasible commitment memory test
+  eval_habitat_sb3.py                   # SB3 PPO/SAC/TD3 Habitat evaluation
+  train_sb3_v2.py                       # PPO/SAC/TD3 synthetic v2 training
+  train_recurrent_ppo_v2.py             # RecurrentPPO smoke baseline
+  train_bc_dagger_v2.py                 # BC/DAgger smoke baselines
+  train_replay_memory_policy_v2.py      # Generic replay-memory smoke baseline
+  failure_memory.py                     # Episode-local passage memory
+  cross_episode_memory.py               # Cross-episode failure memory
+  fair_reward_wrapper.py                # Dense/fair reward wrapper for RL baselines
+  results/narrow_passage_rl/            # CSV, Markdown, LaTeX tables
 
-```
-examples/narrow_passage_rl/          ← all experiment code (new directory)
-│
-├── procedural_env.py                 # Synthetic 2-D corridor simulator
-├── procedural_env_v2.py              # v2: L/S-shaped, asymmetric, false-feasible
-├── risk_estimator.py                 # Geometric risk estimator
-├── failure_memory.py                 # Episode-local failure memory
-├── cross_episode_memory.py           # Cross-episode persistent failure memory
-├── dmin_calibrator.py                # Bayesian D_min self-calibration
-│
-├── eval_harder_benchmark.py          # v2 benchmark + TurnCommitFSM
-├── eval_habitat_geometry_fsm.py      # Geometry-FSM on Habitat HM3D
-├── eval_habitat_apf_gap.py           # APF+Gap classical baseline
-├── eval_habitat_ppo_policy.py        # Trained NarrowPassagePolicy (RL)
-├── eval_habitat_fsm_ablations.py     # FSM ablation variants
-├── eval_dmin_calibration.py          # D_min calibration experiment
-│
-├── mine_habitat_passages.py          # Auto-mine narrow passages from HM3D
-├── generate_habitat_episodes.py      # Anchor CSV → Habitat JSON dataset
-├── make_paper_tables.py              # Render Markdown / LaTeX tables
-├── plot_delta_d_phase.py             # ΔD phase-transition figure
-├── plot_dmin_calibration.py          # D_min calibration convergence figure
-│
-└── results/narrow_passage_rl/        # All result CSVs and paper tables
-
-habitat-lab/habitat/tasks/narrow_passage/   ← new Habitat task (new directory)
-├── narrow_passage_task.py            # NarrowPassageNav-v0 task + sensors
-├── rewards.py
-├── sensors.py                        # NarrowPassageGeometrySensor (depth → 19-dim)
-└── geometry.py
+habitat-lab/habitat/tasks/narrow_passage/
+  narrow_passage_task.py                # NarrowPassageNav-v0 task
+  sensors.py                            # 19-D geometry feature sensor
+  rewards.py                            # Narrow-passage reward/measures
+  geometry.py                           # Depth-to-geometry feature extraction
 
 habitat-baselines/habitat_baselines/
-├── config/narrow_passage/ppo_narrow_passage.yaml   ← new training config
-└── rl/ppo/narrow_passage_policy.py                 ← new policy network
+  config/narrow_passage/                # Narrow-passage PPO configs
+  rl/ppo/narrow_passage_policy.py       # Low-dimensional geometry policy
 ```
 
----
+Everything else is inherited Habitat-Lab infrastructure unless explicitly noted.
 
-## Key Results
+## Main Claim
 
-### 1. Harder Synthetic Benchmark — v2 (500 episodes, 7 corridor types)
+Near the boundary of geometric feasibility, learning-only policies and generic
+history mechanisms are brittle.  The central claim is that explicitly modeling
+passage geometry, clearance risk, decision mode, and failure history gives a
+more interpretable and stable local navigation system.
 
-Tests generalization to L-shaped, S-shaped, and false-feasible corridors.
-RL (PPO/SB3) achieves near-zero SR on L/S-shaped types.
+The method uses:
 
-Mean across 3 seeds (std in parentheses), 500 episodes per seed.
+- A 19-D depth-derived geometry feature vector.
+- A mode-switching controller: align, commit, explore, recover, reject.
+- Clearance/risk-aware decisions rather than only goal distance.
+- Cross-episode failure memory to avoid repeated commitment to infeasible
+  passages.
 
-| Method | Overall | Straight | L-shaped | S-shaped | Narrow exit | Narrow entry | Asymmetric | False-feas. |
-|---|---|---|---|---|---|---|---|---|
-| Rule baseline | 25.4 (1.0) | 60.5 | 8.2 | 6.5 | 27.2 | 24.8 | 33.5 | 0.0 |
-| **Geometry-FSM (ours)** | **70.3 (1.1)** | **92.8** | **79.6** | **70.0** | **96.7** | **61.4** | **50.6** | **0.0** |
+RL is used as a fair baseline and diagnostic local skill, not as the primary
+paper contribution.
 
-FSM ablation (entry jitter σ=0.25 m): removing alignment drops Overall from 64.1% → 19.1% (−45 pp),
-L-shaped from 74.6% → 6.1%. `false_feasible` corridors yield 0% SR — correctly rejected by
-body-margin gating.
+## Main Experiments
 
-### 2. Habitat HM3D Anchor Validation
+### 1. Procedural v2 Benchmark
 
-Unperturbed mined anchors are mostly well aligned, so the 100% FSM rows should
-be read as nominal HM3D anchor validation rather than a blanket robustness
-claim. Stress validation is used to reveal module differences.
+Synthetic v2 includes straight, L-shaped, S-shaped, narrow-entry, narrow-exit,
+asymmetric, and false-feasible corridors.
 
-**Val set A** (original 157 episodes, 20 held-out HM3D scenes):
+Main result:
 
-| Method | SR | Narrow | Normal | Wide | Notes |
-|---|---:|---:|---:|---:|---|
-| PPO-SB3 baseline (fixed formula) | 0.0% | 0.0% | 0.0% | 0.0% | Legacy v1 observation mismatch |
-| PPO v2 geometry, single seed | 5.7% | 5.1% | 9.1% | 0.0% | Synthetic v2 → Habitat transfer |
-| PPO v2 geometry, 3 seeds | 2.1% (±2.6%) | 1.7% | 3.0% | 1.4% | Seeds: 5.7%, 0.0%, 0.6% |
-| APF+Gap (Khatib 1986) | 93.6% | 92.4% | 100% | 82.6% | Depth + GPS only, no learning |
-| **Geometry-FSM (ours)** | **100%** | **100%** | **100%** | **100%** | Nominal anchors |
-| **FSM + Failure Memory (ours)** | **100%** | **100%** | **100%** | **100%** | Memory gain is not visible on one-shot passable anchors |
+| Method | Overall | Straight | L-shaped | S-shaped | Narrow exit | Narrow entry | Asymmetric | False-feasible |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Rule baseline | 25.4 | 60.5 | 8.2 | 6.5 | 27.2 | 24.8 | 33.5 | 0.0 |
+| Geometry-FSM | 70.3 | 92.8 | 79.6 | 70.0 | 96.7 | 61.4 | 50.6 | 0.0 |
 
-**Val set B** (mined 151 episodes, 20 held-out HM3D scenes):
+Removing alignment under entry jitter drops the FSM from 64.1% to 19.1% overall,
+which identifies heading/lateral alignment as a critical local-control module.
 
-| Method | Episodes | SR | Notes |
-|---|---:|---:|---|
-| SB3 PPO synthetic-to-Habitat geometry | 151 | 6.0% | Learning-only transfer baseline |
-| SAC v2 geometry | 151 | 0.0% | Same observation interface as PPO v2 |
-| TD3 v2 synthetic transfer | 151 | 2.0% | 77.8% synthetic SR does not transfer to HM3D |
-| TD3 Habitat-native | 151 | 100% nominal / 2.0% strict | 98.0% success-but-unsafe; near-collision 100% |
-| **Geometry-FSM (ours)** | 151 | **100%** | Feature-driven controller on nominal anchors |
+Primary files:
 
-**Habitat stress validation**:
+- `examples/narrow_passage_rl/eval_harder_benchmark.py`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_main.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_ablation.md`
 
-| Setting | Full FSM | w/o recovery | w/o all alignment | w/o heading alignment | Notes |
-|---|---:|---:|---:|---:|---|
-| HM3D nominal anchors | 100% | 100% | 100% | - | Anchors are mostly well aligned |
-| Extreme narrow +60° yaw | 100% | 100% | 0% | 0% | Heading alignment is the exposed critical module |
+### 2. Habitat HM3D Nominal Anchor Validation
 
-Failure memory is mainly evaluated in repeated false-feasible / cross-episode
-experiments, where it reduces wasted attempts. The one-shot Habitat passable
-anchor table is not the main evidence for memory.
+Habitat experiments use mined HM3D narrow-passage anchors and the
+`NarrowPassageNav-v0` task.  The nominal anchor table checks whether the
+geometry controller works on scanned scenes when the mined starts are mostly
+well aligned.
 
-The Habitat-native TD3 row is intentionally reported with both nominal and
-strict success.  The nominal success measure checks distance/alignment to the
-local goal, while strict success additionally requires clearance-safe traversal.
-The 100% nominal / 2% strict split shows that ordinary RL can exploit a loose
-success metric by reaching the local goal while staying near geometric safety
-boundaries; it is therefore a diagnostic learning baseline rather than the main
-method.
+| Method | Setting | Success |
+|---|---|---:|
+| PPO v2 geometry, 3 seeds | Synthetic-to-Habitat transfer | 2.1% +/- 2.6% |
+| SAC v2 geometry | Synthetic-to-Habitat transfer | 0.0% |
+| TD3 synthetic-to-Habitat | Synthetic-to-Habitat transfer | 2.0% |
+| APF+Gap | Classical depth/GPS baseline | 93.6% |
+| Geometry-FSM | Nominal HM3D anchors | 100.0% |
 
-### 3. D_min Self-Calibration (300 synthetic episodes)
+Important interpretation: the 100% Geometry-FSM result is nominal anchor
+validation, not a complete robustness proof.
 
-| Agent | SR | Reject rate | Notes |
-|---|---|---|---|
-| Oracle (D_true = 0.36 m) | 94.0% | 0% | Perfect body-width knowledge |
-| Fixed wrong (D_hat = 0.56 m) | 67.7% | 32% | Over-rejects feasible passages |
-| **Calibrated (ours)** | **89.3%** | 8% | Bayesian update from outcomes |
+Primary files:
 
-D_hat converges from 0.56 m → 0.39 m (9% error) within ~75 episodes.
+- `examples/narrow_passage_rl/eval_habitat_geometry_fsm.py`
+- `examples/narrow_passage_rl/eval_habitat_apf_gap.py`
+- `examples/narrow_passage_rl/eval_habitat_sb3.py`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md`
 
----
+### 3. Habitat Stress Validation
 
-## Method: Geometry-FSM
+Nominal HM3D anchors are mostly well aligned, so stress validation is used to
+expose module sensitivity under perturbation.
 
-A mode-switching controller driven by 19-dimensional depth-derived features:
+The stress protocol evaluates:
 
-```
-obs = [d_ln, d_cn, d_rn,          # near depth: left / center / right
-       d_lf, d_cf, d_rf,          # far depth
-       cl, cr,                    # clearance left / right
-       passage_width, body_margin, # passage geometry
-       heading_error, lateral_offset, dist_to_goal,
-       action[0], action[1],      # previous velocities
-       stuck_score, collision,
-       prev_action[0], prev_action[1]]
-```
+- Start yaw perturbation: 0, 30, 60 degrees.
+- Lateral start offset: 0.0 m, 0.10 m, 0.20 m.
+- Depth-sector dropout: 0%, 10%, 30%.
+- Feature Gaussian noise: sigma = 0.0, 0.02, 0.05.
+- Extreme-narrow subset: `body_margin < 0.05 m`.
 
-| Mode | Trigger | Action |
-|---|---|---|
-| ALIGN | \|heading_error\| > 40° | Rotate in place toward goal |
-| COMMIT | Normal geometry | 0.20 m/s forward + alignment correction |
-| EXPLORE | Medium misalignment | 0.08 m/s forward + stronger correction |
-| RECOVER | Collision or stuck\_score > 0.80 | Back up + reorient |
-| FOLLOW\_SPACE | L/S-junction: depth asymmetry > 2.0 m | Commit to open-arm direction |
+The +60 degree extreme-narrow slice exposes heading alignment as the key module:
+full FSM succeeds, while removing heading alignment fails.
 
-**TurnCommitFSM** (v2): wraps the base FSM with junction detection.
-Detects corner entry via near-ray asymmetry, commits to the open-arm direction
-for up to 60 steps. Natural exit fires when `peak_he > 30°` AND `|he| < 0.35 rad`.
+Primary files:
 
----
+- `examples/narrow_passage_rl/eval_habitat_stress_validation.py`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/habitat_stress_validation.csv`
 
-## Sim-to-Real Transfer
+### 4. Strict-Safety RL Diagnostic
 
-The FSM is a feature-driven controller: as long as the 19-dim feature vector can
-be reproduced on the real robot, the controller transfers without retraining.
+TD3 trained directly in Habitat can reach 100% nominal success, but only 2.0%
+strict clearance-aware success.  98.0% of episodes are success-but-unsafe and
+near-collision rate is 100%.
 
-### Sensor Mapping
+This diagnostic is included to show why nominal goal-reaching success is not a
+sufficient metric for narrow-passage traversal.
 
-| Feature | Real-robot source |
-|---|---|
-| `d_ln, d_cn, d_rn, d_lf, d_cf, d_rf` | Depth camera (e.g. RealSense D435): min-pool at 6 fixed azimuth angles on the horizontal projection |
-| `cl, cr, passage_width, body_margin` | Min-distance left/right obstacle from depth scan, minus robot effective radius |
-| `heading_error, lateral_offset` | SLAM / UWB localization + goal position |
-| `dist_to_goal` | Same localization |
-| `stuck_score, collision` | Velocity estimate + contact force sensors / IMU jerk |
+Primary files:
 
-### Control Interface
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_diagnostic_baselines.md`
+- `examples/narrow_passage_rl/eval_habitat_sb3.py`
 
-FSM outputs `(v_x, ω_z)` velocity commands. Map linearly to the quadruped's
-locomotion controller velocity interface. Confirm sign convention (CW/CCW for `ω_z`).
-The FSM's `v_x_max ≈ 0.06–0.12 m/s` is a soft limit; scale to the quadruped's
-gait range as needed.
+### 5. Repeated Failure Memory
 
-### Geometry Calibration
+Failure memory does not improve one-shot nominal Habitat success.  Its
+contribution is to suppress repeated commitments to previously failed infeasible
+passages.
 
-Thresholds in `_follow_space_mode` (`min_side < 0.30 m`, `asymmetry > 2.0`) were
-tuned for the synthetic 2-D environment. For the real robot:
+Repeated false-feasible evaluation uses 5 rounds of the same 20 passable and 15
+false-feasible corridors.
 
-1. Run `dmin_calibrator.py` in an open corridor — Bayesian-updates D_min from
-   traversal outcomes, converges within ~75 episodes.
-2. Log depth features from a known L-shaped corner and verify `asymmetry` reaches
-   the 2.0 threshold before the junction. If not, adjust the threshold down.
+| Method | Passable SR | Passable false reject | Final FF reject | Wasted FF steps | Steps saved |
+|---|---:|---:|---:|---:|---:|
+| no_memory | 0.900 | 0.000 | 0.000 | 16500 | 0 |
+| local_intra_episode_memory | 0.900 | 0.000 | 0.000 | 16500 | 0 |
+| kNN Failure Memory | 0.860 | 0.060 | 1.000 | 5500 | 11000 |
+| Vanilla Episodic Memory | 0.820 | 0.130 | 1.000 | 8140 | 8360 |
+| Geometry-Guided Cross-Episode Failure Memory | 0.900 | 0.030 | 1.000 | 4400 | 12100 |
 
-### Deployment Steps
+Primary files:
 
-1. **Feature reproduction** — log the 19-dim vector on the robot in a known corridor
-   and compare numerically against the simulator for the same geometry.
-2. **Straight-corridor test** — deploy FSM without TurnCommitFSM; verify
-   `CORRIDOR_FOLLOW` and `RECOVER` modes behave as expected.
-3. **L-shaped test** — enable TurnCommitFSM; verify `FOLLOW_SPACE` triggers at the
-   junction (check depth asymmetry signal in real time).
-4. **D_min calibration** — run `dmin_calibrator.py` on-robot to adapt to real
-   body dimensions.
-5. **Failure memory** — `cross_episode_memory.py` transfers unchanged.
+- `examples/narrow_passage_rl/eval_repeated_failure_memory.py`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_repeated_failure_memory.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/repeated_failure_memory.csv`
 
-### Main Sim-to-Real Risks
+### 6. D_min Calibration
 
-| Risk | Mitigation |
-|---|---|
-| Depth noise / missing values (glass, dark surfaces) | Median-filter depth sectors; require a minimum valid-point count |
-| Quadruped effective radius varies with gait | Use D_min calibrator; add 5 cm safety margin to `min_side` threshold |
-| Localization drift in long corridors | Use local odometry for short-horizon `lateral_offset`; global for `heading_error` |
-| `FOLLOW_SPACE` fails at real L-junction | Log asymmetry signal; lower threshold or add dead-reckoning fallback |
+The robot body-width threshold can be calibrated from outcomes.  Starting from a
+wrong conservative estimate, the Bayesian calibrator converges from 0.56 m to
+0.39 m within roughly 75 episodes.
 
----
+| Agent | Success | Reject rate |
+|---|---:|---:|
+| Oracle D_true = 0.36 m | 94.0% | 0% |
+| Fixed wrong D_hat = 0.56 m | 67.7% | 32% |
+| Calibrated | 89.3% | 8% |
 
-## Installation
+Primary files:
+
+- `examples/narrow_passage_rl/eval_dmin_calibration.py`
+- `examples/narrow_passage_rl/dmin_calibrator.py`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calibration.png`
+
+## Formal, Diagnostic, And Smoke Baselines
+
+The learning baselines are intentionally split by evidential role.
+
+Formal main baselines:
+
+- PPO v2 geometry sensor, 3 seeds, synthetic-to-Habitat transfer.
+- SAC v2 geometry sensor.
+- TD3 synthetic-to-Habitat transfer.
+- APF+Gap classical baseline.
+- Geometry-FSM.
+
+Diagnostic baselines:
+
+- TD3 Habitat-native nominal success vs strict clearance-aware success.
+
+Smoke / appendix-only baselines:
+
+- GRU-PPO lightweight.
+- RecurrentPPO smoke.
+- BC-FSM.
+- DAgger-FSM.
+- Replay Memory Policy.
+
+Legacy PPO runs with the v1 `obs[10]` yaw/heading mismatch are excluded from
+formal baseline tables.
+
+Tables:
+
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_diagnostic_baselines.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_smoke_baselines.md`
+
+## Current RL Interpretation
+
+The current RL results should be read as baseline and diagnostic evidence, not
+as the main narrow-passage solution.
+
+The fair comparison uses the same 19-D geometry sensor for PPO/SAC/TD3.  PPO v2
+geometry transfer reaches 2.1% +/- 2.6% on Habitat, SAC reaches 0.0%, and TD3
+synthetic-to-Habitat reaches 2.0% despite 77.8% success in the synthetic v2
+environment.  This supports the paper's claim that learning-only policies are
+fragile near geometric feasibility boundaries.
+
+The Habitat-native TD3 result is intentionally reported as a diagnostic:
+
+| Method | Nominal success | Strict success | Unsafe success | Interpretation |
+|---|---:|---:|---:|---|
+| TD3 Habitat-native | 100.0% | 2.0% | 98.0% | RL can exploit nominal goal-reaching without safe clearance |
+
+The split between nominal and strict success occurs because nominal success only
+checks the local goal/alignment condition, while strict success also requires
+clearance-safe traversal.  Therefore RL's 100% nominal result should be used to
+motivate strict clearance-aware evaluation, not to claim that RL safely solved
+the task.
+
+The next RL improvement should be framed as **risk-constrained local RL skill**:
+
+- train with strict-success reward, where success-but-unsafe does not receive
+  the terminal success bonus;
+- add an action shield that limits forward motion or triggers recovery when
+  `body_margin`, left/right clearance, or heading alignment are unsafe;
+- condition the policy on the FSM mode so RL learns local control inside
+  `ALIGN`, `COMMIT`, `EXPLORE`, and `RECOVER` rather than replacing the
+  geometry/risk decision layer.
+
+This keeps the RL contribution aligned with the paper: RL is useful as a local
+skill and safety diagnostic, while explicit geometry, risk, and failure memory
+remain the core method.
+
+## What Not To Overclaim
+
+- HM3D nominal 100% is not a complete robustness proof.  It is nominal anchor validation on
+  mined, mostly well-aligned starts.
+- Habitat stress validation is the evidence for module sensitivity under yaw,
+  lateral, dropout, noise, and extreme-clearance perturbations.
+- Failure memory is not for improving one-shot passable-anchor success.  It
+  reduces repeated infeasible commitment and wasted attempts.
+- Smoke RL baselines are not main baselines.  They verify code paths and belong
+  in appendix/status tables unless rerun under the full protocol.
+- Real-robot experiments should be described as pilot hardware validation unless
+  accompanied by full videos, logs, bags, and statistics.
+
+## Reproduction Commands
+
+Run from the repository root.
 
 ```bash
-# Base Habitat stack
-pip install -e habitat-lab/
-pip install -e habitat-baselines/
-
-# Experiment dependencies
-pip install stable-baselines3 gymnasium numpy matplotlib
-```
-
-For Habitat experiments: install `habitat-sim` and place HM3D data under
-`data/scene_datasets/hm3d/`. Use the `habitat` conda environment.
-
----
-
-## Quick Start
-
-```bash
-# Synthetic v2 harder benchmark (no Habitat required)
+# 1. Procedural v2 benchmark
 python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500
 
-# Habitat HM3D — Geometry-FSM
-conda run -n habitat python examples/narrow_passage_rl/eval_habitat_geometry_fsm.py
+# 2. Habitat stress validation
+python examples/narrow_passage_rl/eval_habitat_stress_validation.py \
+    --preset paper \
+    --split val \
+    --num-episodes -1
 
-# Habitat HM3D — APF+Gap baseline
-conda run -n habitat python examples/narrow_passage_rl/eval_habitat_apf_gap.py
+# 3. Repeated failure memory
+python examples/narrow_passage_rl/eval_repeated_failure_memory.py \
+    --n-rounds 5 \
+    --n-passable 20 \
+    --n-ff 15 \
+    --max-steps 220
 
-# D_min self-calibration
-python examples/narrow_passage_rl/eval_dmin_calibration.py --n-episodes 300
+# 4. D_min calibration
+python examples/narrow_passage_rl/eval_dmin_calibration.py
 
-# Generate paper tables
-python examples/narrow_passage_rl/make_paper_tables.py \
-    --input      examples/narrow_passage_rl/results/narrow_passage_rl/results_rl_summary.csv \
-    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl/
+# 5. Regenerate paper tables from existing CSV artifacts
+python examples/narrow_passage_rl/make_paper_tables.py
 ```
 
-Full experiment details: [examples/narrow_passage_rl/README.md](examples/narrow_passage_rl/README.md)
+Habitat commands require a working Habitat/HM3D installation and the generated
+narrow-passage dataset under:
 
----
-
-## Dataset
-
-HM3D validation uses two historical splits.  Val set A is the original
-157-episode anchor set used in early tables; Val set B is the current mined
-151-episode split used for the main mined-val rows.  Keep the split name in the
-table caption to avoid mixing these results.
-
-| Split | Episodes | Narrow | Normal | Wide | Notes |
-|---|---:|---:|---:|---:|---|
-| Val set A | 157 | 79 | 55 | 23 | Original held-out anchor set |
-| Val set B | 151 | 73 | 55 | 23 | Current automatically mined HM3D val split |
-| Train mined split | 608 | - | - | - | Current train split paired with Val set B |
-
-`narrow` = body_margin ≤ 0.15 m · `normal` = 0.15–0.40 m · `wide` > 0.40 m.
-
-```bash
-conda run -n habitat python examples/narrow_passage_rl/mine_habitat_passages.py \
-    --scenes-dir data/scene_datasets/hm3d/val --target-episodes 800 \
-    --out-train data/datasets/narrow_passage/anchors_train.csv \
-    --out-val   data/datasets/narrow_passage/anchors_val.csv
-
-python examples/narrow_passage_rl/generate_habitat_episodes.py \
-    --anchors data/datasets/narrow_passage/anchors_train.csv \
-    --split train --output data/datasets/narrow_passage/train/train.json.gz
+```text
+data/datasets/narrow_passage/{split}/{split}.json.gz
 ```
 
----
+## More Documentation
 
-## Implementation Notes
-
-**Heading error sign fix**: `atan2(delta_x, −delta_z)` caused `heading_error = 0`
-when the robot faced *away* from the goal. Habitat's forward direction is
-`[−sin(yaw), 0, −cos(yaw)]`; correct formula is `atan2(−delta_x, −delta_z)`.
-Without the fix, FSM achieved 2.7% on the HM3D anchor validation split; with
-the corrected sign, the nominal mined-anchor split reaches 100%, which should
-be reported together with start-pose stress validation.
-
-**body_margin formula**: Uses `min(clearance_left, clearance_right) − robot_radius`
-(tight side, not average), reflecting actual worst-case clearance at the current
-lateral position.
-
----
+- Detailed experiment scripts and tables:
+  `examples/narrow_passage_rl/README.md`
+- Method notes:
+  `examples/narrow_passage_rl/docs/method.md`
+- Reproducibility notes:
+  `examples/narrow_passage_rl/docs/reproducibility.md`
+- Experiment protocol:
+  `examples/narrow_passage_rl/docs/experiment_protocol.md`
 
 ## Habitat-Lab Base
 
-The rest of this repository is [Habitat-Lab v0.3.3](https://github.com/facebookresearch/habitat-lab)
-by Meta AI Research, released under the MIT License.
+This repository remains a Habitat-Lab fork.  Please cite Habitat-Lab and
+Habitat-Sim when using the underlying simulator infrastructure.

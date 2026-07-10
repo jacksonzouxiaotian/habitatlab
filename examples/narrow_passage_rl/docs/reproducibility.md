@@ -1,26 +1,39 @@
 # Reproducibility
 
+This document lists the environment, data paths, commands, expected outputs, and
+known limitations for reproducing the narrow-passage results.
+
 ## Environment
 
-Record the exact versions used for final experiments:
+The repository is a Habitat-Lab fork.  Habitat experiments require a working
+Habitat/HM3D setup with EGL-capable rendering.
+
+Recommended environment:
+
+| Component | Version / note |
+|---|---|
+| Python | 3.9+ |
+| Habitat-Lab | this fork, based on Habitat-Lab v0.3.3 |
+| Habitat-Sim | installed in the `habitat` conda environment |
+| NumPy | 1.26.x in the tested environment |
+| PyTorch | CUDA-capable install recommended for training |
+| Stable-Baselines3 | 2.7.1 for SB3 baselines |
+| sb3-contrib | 2.7.1 for RecurrentPPO |
+| GPU | NVIDIA GPU with EGL support for Habitat rendering |
+
+Useful checks:
 
 ```bash
 python --version
 python -c "import habitat; print(habitat.__version__)"
-python -c "import habitat_sim; print(habitat_sim.__version__)"
+python -c "import stable_baselines3; print(stable_baselines3.__version__)"
+python -c "import sb3_contrib; print(sb3_contrib.__version__)"
 nvidia-smi
 ```
 
-Expected setup:
+## Required Data Paths
 
-- Python: 3.9+
-- Habitat-Lab: this fork
-- Habitat-Sim: installed in the `habitat` conda environment
-- CUDA/GPU: NVIDIA GPU with EGL support for Habitat-Sim rendering
-
-## Data
-
-HM3D scenes should be placed under:
+HM3D scenes:
 
 ```text
 data/scene_datasets/hm3d/
@@ -31,155 +44,109 @@ Narrow-passage datasets:
 ```text
 data/datasets/narrow_passage/train/train.json.gz
 data/datasets/narrow_passage/val/val.json.gz
-data/datasets/narrow_passage/extreme_narrow/extreme_narrow.json.gz
 ```
 
-## Checkpoints
-
-Default checkpoint paths:
+Optional anchor CSVs:
 
 ```text
-data/narrow_passage_sb3_v2_ppo/ppo_narrow_passage_v2.zip
-data/narrow_passage_sb3_v2_sac/sac_narrow_passage_v2.zip
-data/narrow_passage_sb3_v2_td3/td3_narrow_passage_v2.zip
-data/narrow_passage_checkpoints/latest.pth
+data/datasets/narrow_passage/anchors_train.csv
+data/datasets/narrow_passage/anchors_val.csv
 ```
 
-Large checkpoints and HM3D data are not committed to the repository.
+Large HM3D assets and trained checkpoints are not committed to the repository.
 
-## Reproduce Tables
+## Main Commands
 
-Run the main experiments:
+Run from repository root.
 
 ```bash
-python examples/narrow_passage_rl/narrow_passage/scripts/train.py --algo ppo
-python examples/narrow_passage_rl/narrow_passage/scripts/evaluate.py --method fsm
-python examples/narrow_passage_rl/narrow_passage/scripts/run_ablation.py
-python examples/narrow_passage_rl/narrow_passage/scripts/make_paper_tables.py
+# Procedural v2 benchmark
+python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500
+
+# Habitat stress validation
+python examples/narrow_passage_rl/eval_habitat_stress_validation.py \
+    --preset paper \
+    --split val \
+    --num-episodes -1
+
+# Repeated failure memory
+python examples/narrow_passage_rl/eval_repeated_failure_memory.py \
+    --n-rounds 5 \
+    --n-passable 20 \
+    --n-ff 15 \
+    --max-steps 220
+
+# D_min calibration
+python examples/narrow_passage_rl/eval_dmin_calibration.py
+
+# Regenerate paper tables from available CSV artifacts
+python examples/narrow_passage_rl/make_paper_tables.py
 ```
 
-PPO-family reproducibility notes:
+Use `conda run -n habitat` or activate the `habitat` environment for Habitat
+commands if your default shell is not already in that environment.
 
-- `train_sb3_v2.py`, `train_recurrent_ppo_v2.py`, and
-  `train_replay_memory_policy_v2.py` are the runnable SB3/SB3-Contrib learning
-  baseline scripts.
-- `habitat-baselines/.../ppo_narrow_passage.yaml` is a Habitat-Baselines
-  smoke-test config for task/policy wiring, not the main paper PPO curve.
-- `configs/train_ppo.yaml` documents planned curriculum and reward protocol.
-  The current runnable SB3 scripts do not parse that YAML, so do not claim
-  width/body-ratio curriculum unless a staged training command is used.
+## Dataset Generation
 
-Run the newly added memory/history baselines:
+If the narrow-passage dataset is missing, mine anchors and generate episodes:
 
 ```bash
-python examples/narrow_passage_rl/eval_memory_baselines.py \
-  --n-rounds 5 --n-passable 20 --n-ff 15 --max-steps 220
+python examples/narrow_passage_rl/mine_habitat_passages.py \
+    --scenes-dir data/scene_datasets/hm3d/val \
+    --target-episodes 800 \
+    --out-train data/datasets/narrow_passage/anchors_train.csv \
+    --out-val data/datasets/narrow_passage/anchors_val.csv
+
+python examples/narrow_passage_rl/generate_habitat_episodes.py \
+    --anchors data/datasets/narrow_passage/anchors_val.csv \
+    --split val \
+    --output data/datasets/narrow_passage/val/val.json.gz
 ```
 
-This writes:
+## Expected Output Files
+
+Main Markdown/LaTeX tables:
 
 ```text
-examples/narrow_passage_rl/results/narrow_passage_rl/memory_baselines.csv
-examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_baselines.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_main.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_ablation.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_diagnostic_baselines.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_smoke_baselines.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_repeated_failure_memory.md
 ```
 
-Run the lightweight GRU-PPO fallback baseline:
-
-```bash
-python examples/narrow_passage_rl/train_gru_ppo_v2.py \
-  --total-steps 5000 --rollout-steps 512 --epochs 3 \
-  --batch-size 128 --eval-episodes 50 \
-  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/gru_ppo_v2_smoke
-```
-
-This writes:
+Important raw CSVs:
 
 ```text
-examples/narrow_passage_rl/results/narrow_passage_rl/gru_ppo_v2_eval.csv
-examples/narrow_passage_rl/results/narrow_passage_rl/gru_ppo_v2_summary.csv
-examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_learning_baselines.md
+examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv
+examples/narrow_passage_rl/results/narrow_passage_rl/habitat_stress_validation.csv
+examples/narrow_passage_rl/results/narrow_passage_rl/repeated_failure_memory.csv
+examples/narrow_passage_rl/results/narrow_passage_rl/habitat_td3_habitat_native_strict_eval.csv
 ```
 
-Run the formal SB3-Contrib RecurrentPPO smoke baseline:
+Figures/videos:
 
-```bash
-python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
-  --reward-mode fair \
-  --total-steps 1024 --n-steps 128 --batch-size 64 --eval-episodes 40 \
-  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_v2_smoke \
-  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_smoke_eval.csv \
-  --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_smoke_summary.csv
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calibration.png
+video_dir/narrow_passage_habitat/
+results/narrow_passage_rl/keyframes/
 ```
 
-Run the formal SB3-Contrib RecurrentPPO fair-reward baseline:
+## Known Limitations
 
-```bash
-python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
-  --reward-mode fair \
-  --total-steps 3000000 --n-steps 1024 --batch-size 256 \
-  --eval-episodes 500 \
-  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_v2 \
-  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_eval.csv \
-  --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_summary.csv
-```
-
-Current result: 13.0% SR and 45.6% collision over 500 synthetic v2 episodes.
-The policy learns some straight/asymmetric passages but remains weak on L/S
-turns, narrow exits, and false-feasible safety.
-
-Collect FSM expert trajectories and run BC/DAgger smoke baselines:
-
-```bash
-python examples/narrow_passage_rl/collect_expert_trajectories.py \
-  --episodes 40 --max-steps 300 \
-  --output-npz examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
-  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke_episodes.csv
-
-python examples/narrow_passage_rl/train_bc_dagger_v2.py \
-  --algo bc \
-  --dataset examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
-  --epochs 5 --batch-size 256 --eval-episodes 40 \
-  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/bc_v2_smoke_eval.csv \
-  --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/bc_v2_smoke_summary.csv
-
-python examples/narrow_passage_rl/train_bc_dagger_v2.py \
-  --algo dagger \
-  --dataset examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
-  --epochs 3 --batch-size 256 --dagger-iters 1 --dagger-episodes 10 \
-  --eval-episodes 40 \
-  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/dagger_v2_smoke_eval.csv \
-  --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/dagger_v2_smoke_summary.csv
-```
-
-Run the generic Replay Memory Policy smoke baseline:
-
-```bash
-python examples/narrow_passage_rl/train_replay_memory_policy_v2.py \
-  --reward-mode fair \
-  --algo ppo --total-steps 1024 --eval-episodes 40 \
-  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/replay_memory_policy_v2_smoke \
-  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/replay_memory_policy_v2_smoke_eval.csv \
-  --output-summary examples/narrow_passage_rl/results/narrow_passage_rl/replay_memory_policy_v2_smoke_summary.csv
-```
-
-For Habitat experiments, use the `habitat` environment:
-
-```bash
-conda run -n habitat python examples/narrow_passage_rl/eval_habitat_geometry_fsm.py
-conda run -n habitat python examples/narrow_passage_rl/eval_habitat_sb3.py --algo ppo
-conda run -n habitat python examples/narrow_passage_rl/eval_habitat_fsm_ablations.py
-```
-
-## Runtime Notes
-
-- PPO v2 training: multi-hour CPU run depending on `total_steps`.
-- SAC/TD3: slower CPU training; use GPU-capable PyTorch if available.
-- Habitat evaluation requires EGL/GPU access outside restricted sandboxes.
-- The `habitat` environment used for the formal RecurrentPPO run has
-  `stable-baselines3==2.7.1` and `sb3-contrib==2.7.1`.
-- The older lightweight GRU-PPO row remains as a fallback result from the base
-  Python environment; prefer `train_recurrent_ppo_v2.py` for final experiments.
-- SB3 learning baselines default to `--reward-mode fair`, implemented by
-  `FairNarrowPassageRewardWrapper`.  This is the paper-facing reward protocol.
-  Use `--reward-mode native` only to reproduce older runs where open-space
-  clearance could create a conservative timeout solution.
+- Habitat nominal 100% is nominal anchor validation, not a complete robustness
+  proof.
+- Habitat stress validation currently perturbs existing mined episodes; dynamic
+  obstacles, false-feasible Habitat anchors, goal perturbation, and unseen-room
+  splits require additional data/simulator work.
+- Failure memory is evaluated through repeated false-feasible exposure and
+  wasted-step reduction, not one-shot passable-anchor success.
+- Habitat-Baselines PPO config is a smoke-test path; the paper-facing learning
+  baselines are the SB3/SB3-Contrib scripts.
+- Smoke baselines such as BC/DAgger/RecurrentPPO/Replay Memory Policy should
+  remain appendix/status rows unless rerun with the full protocol.
+- `make_paper_tables.py` regenerates tables from available CSV artifacts; it
+  does not train models or mine HM3D scenes by itself.

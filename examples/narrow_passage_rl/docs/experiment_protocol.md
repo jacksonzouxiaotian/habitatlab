@@ -1,158 +1,114 @@
 # Experiment Protocol
 
-## Benchmarks
+This document defines the splits, metrics, and reporting rules used by the
+narrow-passage experiments.  It follows the same interpretation as the root
+README: Habitat nominal 100% is anchor validation, not a complete robustness
+proof, and memory is evaluated through repeated infeasible commitment reduction.
 
-### Synthetic Narrow-Passage Benchmark
+## Dataset Splits
 
-Four scenario families are used:
+### Procedural v2
 
-| Scenario | Purpose |
+`procedural_env_v2.py` generates the synthetic benchmark.  The main benchmark
+contains seven corridor types:
+
+| Type | Purpose |
 |---|---|
-| Straight Passage | Basic narrow-passage traversal |
-| Angled Entrance | Entrance-angle and alignment robustness |
-| Asymmetric Obstacles | Uneven left/right clearance |
-| Multi-Passage Choice | Avoid repeated failed passages with memory |
+| straight | Basic passage traversal |
+| l_shaped | Junction following and turn commitment |
+| s_shaped | Multi-turn local geometry |
+| narrow_entry | Entrance alignment |
+| narrow_exit | Exit clearance |
+| asymmetric | Uneven left/right clearance |
+| false_feasible | Looks feasible at entry but is physically infeasible |
 
-Each family is evaluated at width/body ratios:
+Main table protocol:
 
-```text
-0.70, 0.75, 0.85, 0.95, 1.10
-```
+- 500 episodes per seed.
+- 3 seeds for the main synthetic table.
+- Report mean and standard deviation across seeds.
 
-### Habitat HM3D NarrowPassageNav-v0
+Repeated-failure memory protocol:
 
-Habitat episodes are mined from HM3D scenes using geodesic and clearance
-criteria.  The current mined validation set contains 151 episodes from 20 held
-out scenes, plus 24 extreme-narrow episodes.
+- 5 repeated rounds.
+- 20 passable corridors and 15 false-feasible corridors per round.
+- Same corridor seeds are replayed across rounds.
+- Report wasted false-feasible steps and steps saved vs no memory.
 
-## Four-Layer Baseline Suite
+### Habitat HM3D
 
-The baseline suite is organized into four layers.  The paper claim is not only
-"ours beats DWB"; the claim is that near the geometric feasibility boundary,
-methods without explicit failure memory and geometry-aware risk tend to hesitate,
-retry failed passages, or make unsafe local decisions.
+Habitat uses the custom `NarrowPassageNav-v0` task and mined HM3D anchors.
 
-| Layer | Purpose | Methods |
-|---|---|---|
-| Traditional planning | Common real-robot navigation stacks | DWB, TEB, RPP, MPPI, Smac Hybrid-A* / State Lattice |
-| Learning navigation | Ordinary RL/IL without explicit failure memory | PPO-depth, PPO-geometry, Recurrent PPO, SAC/TD3, BC/DAgger |
-| Memory/history methods | Distinguish generic history from failure memory | GRU-PPO, kNN failure memory, replay-memory policy, Transformer history, vanilla episodic memory |
-| Recent strong navigation | Modern visual/semantic/diffusion-style comparison | ViPlanner-style, NoMaD-style, ViNT/GNM-style, quadruped confined-space style baselines |
+| Split | Episodes | Scenes | Use |
+|---|---:|---:|---|
+| Val set A | 157 | 20 held-out HM3D scenes | Original Habitat anchor table |
+| Val set B | 151 | 20 held-out HM3D scenes | Current mined validation split |
+| Extreme-narrow subset | 24 | subset of Val anchors | `body_margin < 0.05 m` stress slice |
 
-Implementation status and exact method names are listed in
-`docs/baseline_taxonomy.md` and `configs/eval_baselines.yaml`.
+The mined anchors are mostly well aligned.  Therefore the nominal Habitat table
+is called **Habitat HM3D Anchor Validation**.
 
-## PPO / RL Baseline Reporting
+## Seeds
 
-PPO-family results must be reported under one of three categories:
-
-| Category | Meaning |
+| Experiment | Seeds |
 |---|---|
-| Synthetic PPO | SB3/SB3-Contrib training and evaluation on synthetic v2 |
-| Synthetic-to-Habitat PPO | SB3 checkpoint trained on synthetic v2 and evaluated on HM3D mined-val |
-| Habitat-Baselines PPO smoke test | Habitat task/policy wiring check using `ppo_narrow_passage.yaml` |
+| Synthetic v2 main benchmark | `0, 1, 2` |
+| Repeated failure memory | deterministic fixed corridor seeds, replayed by round |
+| Habitat deterministic FSM/APF | deterministic pass over episode split |
+| PPO v2 geometry transfer | 3 seeds, reported as 5.7%, 0.0%, 0.6% |
+| SAC/TD3 transfer rows | single checkpoint unless otherwise stated |
+| Smoke baselines | single seed unless explicitly rerun |
 
-Do not describe the Habitat-Baselines smoke config as a complete paper PPO
-training curve.  The paper-facing learning baselines are the SB3/SB3-Contrib
-scripts in `examples/narrow_passage_rl/`.
+Single-seed or smoke rows must be labeled as such and should not be mixed into
+the formal main baseline table.
 
-## Curriculum Status
+## Difficulty Bins
 
-`configs/train_ppo.yaml` documents a planned width/body-ratio curriculum, but
-`train_sb3_v2.py` does not parse that YAML and does not currently implement
-staged curriculum scheduling.  Until a staged runner is added, papers and README
-text should not claim curriculum learning for PPO/SAC/TD3/RecurrentPPO runs.
+Habitat difficulty is derived from `body_margin`.
 
-## Core Ablations
-
-| Ablation | Question answered |
+| Bin | Definition |
 |---|---|
-| Ours w/o Memory | Is failure memory useful beyond geometry/risk? |
-| Ours w/o Geometry | Are explicit passage features necessary? |
-| Ours w/o Risk Head | Does risk estimation improve boundary decisions? |
-| Ours w/o Recovery | Does recovery behavior matter after stuck/oscillation? |
-| Ours Full | Full Geometry-Guided Failure Memory method |
+| narrow | `body_margin <= 0.15 m` |
+| normal | `0.15 m < body_margin <= 0.40 m` |
+| wide | `body_margin > 0.40 m` |
+| extreme-narrow | `body_margin < 0.05 m` |
 
-## Memory Comparison Matrix
-
-| Method | Has history | Has failure labels | Geometry similarity | Decision mode |
-|---|---:|---:|---:|---:|
-| GRU-PPO | yes | no | no | no |
-| kNN Failure Memory | yes | yes | partial | no |
-| Vanilla Episodic Memory | yes | yes | no | no |
-| Geometry-Guided Failure Memory | yes | yes | yes | yes |
-
-## Metrics
+## Metric Definitions
 
 | Metric | Definition |
 |---|---|
-| Success Rate | Reaches the goal and calls stop within the success radius |
-| Collision Rate | Any collision or body-intersection event |
-| Near Collision Rate | Clearance below the safety threshold |
-| Oscillation Count | Repeated left/right command sign changes near the entrance |
-| Stuck Rate | Timeout or low progress for the stuck window |
-| Recovery Success | Recovers after entering Recover mode |
-| Min Clearance | Minimum body clearance over the episode |
-| Time to Goal | Number of steps or seconds until success |
-| SPL | Success weighted by path efficiency |
-| Repeated Failure Rate | Re-enters a passage with prior failed memory |
+| success | Reaches the local goal under the task's distance/alignment condition. |
+| strict success | Success plus no collision/stuck and clearance above the strict threshold. |
+| collision | Simulator collision flag or task collision measure. With `allow_sliding=False`, boundary stopping may suppress physical penetration. |
+| near collision | Minimum body margin below the safety threshold, default `0.05 m`. |
+| minimum clearance | Minimum observed `body_margin` over the episode. Negative values in Habitat can arise from depth artifacts near walls and should be reported transparently. |
+| timeout | Reaches `max_steps` without success, collision, or stuck termination. |
+| stuck | Low progress or high stuck score under the task/window definition. |
+| passable false reject | A method rejects a passable corridor before attempting it. |
+| false-feasible reject | A method rejects an infeasible false-feasible corridor before committing to it. |
+| wasted FF steps | Steps spent attempting false-feasible passages that are not rejected. |
+| retrieval precision | Among rejected passages, the fraction that are truly false-feasible. |
 
-## Seeds and Repetitions
+The strict-success diagnostic is especially important for learning baselines.
+TD3 Habitat-native reaches high nominal success but low strict success, showing
+that nominal goal-reaching alone is insufficient for this task.
 
-- Synthetic benchmark: 3 seeds by default (`0, 1, 2`), 500 episodes per seed.
-- Habitat deterministic methods: single deterministic pass over each split.
-- RL Habitat transfer: checkpoint-specific deterministic evaluation.
-- Learning baselines should report multiple seeds when used as strong baselines.
-  Single-seed or smoke-test rows must be labeled as such.
+## False-Feasible Definition
 
-## Robot Body Width
+In procedural v2, a false-feasible passage is an entrance that appears locally
+passable but becomes blocked or too narrow inside.  The correct behavior is not
+to count success; repeated-failure memory should reduce future commitment to
+the same infeasible passage.
 
-The robot body width is treated as a physical parameter and is used to compute:
+In Habitat, false-feasible anchors are not currently part of the main mined
+HM3D split.  Do not claim Habitat false-feasible results unless a separate
+mined/labeled dataset and CSV exist.
 
-```text
-body_margin = passage_width / 2 - robot_body_width / 2
-width_body_ratio = passage_width / robot_body_width
-```
+## Reporting Rules
 
-The default body width is `0.36 m` unless an experiment config overrides it.
-
-## Outcome Definitions
-
-- `success`: goal reached and stop action called.
-- `collision`: simulator collision, body intersection, or negative body margin
-  depending on the benchmark.
-- `near_collision`: body margin below `0.05 m`.
-- `oscillation`: repeated alternation of steering direction near the entrance.
-- `stuck`: low progress or high stuck score for the configured window.
-- `recovery`: the controller enters Recover mode and later returns to Commit or
-  Explore.
-- `reject`: the memory/risk gate refuses to enter a passage.
-
-## Reporting
-
-Paper tables should report both aggregate rates and per-difficulty breakdowns.
-For Habitat FSM rows with 100% SR, also report the mined-anchor protocol,
-success/collision definitions, and stress-test variants.
-
-Current implemented Habitat stress controls:
-
-| Stress type | Implemented as | Purpose |
-|---|---|---|
-| Initial yaw perturbation | `--heading-perturb-deg` on existing episodes | Heading alignment |
-| Lateral start offset | `--lateral-perturb-m` on existing episodes | Lateral centering |
-| Start distance shift | `--start-distance-shift-m` on existing episodes | Fixed entrance-distance overfitting |
-| Extreme-narrow anchors | `--split extreme_narrow` | Geometry-limit behavior |
-| Feature noise/dropout | `--feature-noise-std`, `--depth-dropout-prob` | Sensor robustness |
-
-Stress tests that still require new data or simulator extensions:
-
-| Stress type | Required work |
-|---|---|
-| Goal perturbation | Regenerate episodes with randomized exit-side goals |
-| False-feasible Habitat anchors | Mine and label blocked-inside passages |
-| Dynamic obstacles | Add temporary blockers or pedestrian proxies |
-| Unseen-room generalization | Build a held-out HM3D room/test split |
-
-The detailed command examples live in `docs/habitat_stress_validation.md`.
-For memory experiments, always include repeated-failure rate and wasted steps on
-false-feasible passages.
+- Report Habitat nominal 100% as **nominal anchor validation**.
+- Pair nominal Habitat results with stress validation.
+- Report strict success for RL diagnostics.
+- Report repeated-failure metrics for memory claims.
+- Keep smoke baselines in appendix/status tables unless rerun with the full
+  multi-seed, same-eval-domain protocol.
