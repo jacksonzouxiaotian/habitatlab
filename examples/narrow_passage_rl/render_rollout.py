@@ -278,8 +278,13 @@ def save_video(frames, args):
     if suffix == ".gif":
         ani.save(args.output, writer=animation.PillowWriter(fps=args.fps))
     else:
-        writer = animation.FFMpegWriter(fps=args.fps, bitrate=args.bitrate)
-        ani.save(args.output, writer=writer)
+        try:
+            writer = animation.FFMpegWriter(fps=args.fps, bitrate=args.bitrate)
+            ani.save(args.output, writer=writer)
+        except Exception as exc:
+            fallback = args.output.with_suffix(".gif")
+            print(f"[warn] mp4 failed for {args.output}: {exc}; writing {fallback}")
+            ani.save(fallback, writer=animation.PillowWriter(fps=args.fps))
     plt.close(fig)
 
 

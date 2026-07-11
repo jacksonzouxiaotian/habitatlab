@@ -1,0 +1,12 @@
+\begin{tabular}{lllrrrrrrr}
+\toprule
+Method & Input & Decision type & Overall SR & Strict SR & Collision & Near collision & Reject & Correct reject & False reject \\
+\midrule
+PPO direct velocity (single-run mined-val) & 19-D geometry observation; single-run provenance & Direct velocity & 6.0\% & 0.0\% & 0.0\% & 100.0\% & 0.0\% & not run & not run \\
+SAC direct velocity & 19-D geometry observation & Direct velocity & 0.0\% & 0.0\% & 0.0\% & 100.0\% & not run & not run & not run \\
+TD3 direct velocity & 19-D geometry observation & Direct velocity & 2.0\% & 0.0\% & 0.0\% & 100.0\% & not run & not run & not run \\
+APF+Gap & Depth + local goal & Classical reactive planner & 93.6\% & not run & not run & not run & not run & not run & not run \\
+DEGNAV-Rule / Geometry-FSM & 19-D geometry observation + rule belief & Rule mode selector & 100.0\% & 0.0\% & 0.0\% & 100.0\% & 0.0\% & not run & not run \\
+DEGNAV-RL & Explicit feasibility belief state & Learned high-level mode selector & not run & not run & not run & not run & not run & not run & not run \\
+\bottomrule
+\end{tabular}

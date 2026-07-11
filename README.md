@@ -11,6 +11,17 @@ openings, and repeated failed attempts.  The main system is not a general
 PointNav/ObjectNav policy.  It is a geometry-guided, risk-aware, failure-aware
 local navigation framework.
 
+Naming convention for the paper:
+
+- `Geometry-FSM` is the implementation name used in scripts and CSV files.
+- `DEGNAV-Rule` is the paper-facing name for `Geometry-FSM`.
+- `DEGNAV-RL` is the learning variant that learns only the high-level mode
+  selector `pi(m_t | b_t)` over an explicit feasibility-belief state.
+- PPO/SAC/TD3 are learning-only direct-control baselines that map geometry
+  observations directly to velocity actions.
+
+Geometry-FSM is referred to as DEGNAV-Rule in the paper.
+
 ## What This Repository Adds
 
 The primary contribution lives here:
@@ -19,17 +30,24 @@ The primary contribution lives here:
 examples/narrow_passage_rl/
   procedural_env_v2.py                  # Synthetic v2 narrow-passage benchmark
   eval_harder_benchmark.py              # Main procedural benchmark
-  eval_habitat_geometry_fsm.py          # Geometry-FSM on Habitat HM3D anchors
+  eval_habitat_geometry_fsm.py          # Geometry-FSM / DEGNAV-Rule on Habitat HM3D anchors
   eval_habitat_stress_validation.py     # Habitat stress validation
   eval_repeated_failure_memory.py       # Repeated infeasible commitment memory test
-  eval_habitat_sb3.py                   # SB3 PPO/SAC/TD3 Habitat evaluation
-  train_sb3_v2.py                       # PPO/SAC/TD3 synthetic v2 training
+  eval_memory_transfer_interference.py  # Memory transfer/interference test
+  eval_habitat_sb3.py                   # SB3 PPO/SAC/TD3 direct-control Habitat evaluation
+  train_belief_mode_ppo.py              # DEGNAV-RL high-level mode-selection PPO
+  eval_belief_mode_ppo.py               # DEGNAV-RL procedural v2 evaluation
+  train_sb3_v2.py                       # PPO/SAC/TD3 direct-control synthetic v2 training
   train_recurrent_ppo_v2.py             # RecurrentPPO smoke baseline
   train_bc_dagger_v2.py                 # BC/DAgger smoke baselines
   train_replay_memory_policy_v2.py      # Generic replay-memory smoke baseline
+  plot_margin_phase.py                  # Width-margin phase diagram
   failure_memory.py                     # Episode-local passage memory
   cross_episode_memory.py               # Cross-episode failure memory
   fair_reward_wrapper.py                # Dense/fair reward wrapper for RL baselines
+  narrow_passage/models/belief_state.py # Compact feasibility-belief state
+  narrow_passage/envs/belief_mode_env.py# Discrete mode wrapper for DEGNAV-RL
+  narrow_passage/metrics/strict_metrics.py # Shared strict safety metrics
   results/narrow_passage_rl/            # CSV, Markdown, LaTeX tables
 
 habitat-lab/habitat/tasks/narrow_passage/
@@ -60,8 +78,12 @@ The method uses:
 - Cross-episode failure memory to avoid repeated commitment to infeasible
   passages.
 
-RL is used as a fair baseline and diagnostic local skill, not as the primary
-paper contribution.
+DEGNAV-RL is the high-level mode-selector variant:
+`pi(m_t | b_t)`, where `m_t` is one of `Commit`, `Explore`, `Recover`, and
+`Reject`.  The low-level velocity realization remains the same
+mode-conditioned controller used by DEGNAV-Rule.  PPO/SAC/TD3 are separate
+direct-control baselines: they map the same geometry observations directly to
+velocity actions.
 
 ## Main Experiments
 
@@ -74,8 +96,8 @@ Main result:
 
 | Method | Overall | Straight | L-shaped | S-shaped | Narrow exit | Narrow entry | Asymmetric | False-feasible |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Rule baseline | 25.4 | 60.5 | 8.2 | 6.5 | 27.2 | 24.8 | 33.5 | 0.0 |
-| Geometry-FSM | 70.3 | 92.8 | 79.6 | 70.0 | 96.7 | 61.4 | 50.6 | 0.0 |
+| Reactive rule baseline | 25.4 | 60.5 | 8.2 | 6.5 | 27.2 | 24.8 | 33.5 | 0.0 |
+| DEGNAV-Rule / Geometry-FSM | 70.3 | 92.8 | 79.6 | 70.0 | 96.7 | 61.4 | 50.6 | 0.0 |
 
 Removing alignment under entry jitter drops the FSM from 64.1% to 19.1% overall,
 which identifies heading/lateral alignment as a critical local-control module.
@@ -95,14 +117,15 @@ well aligned.
 
 | Method | Setting | Success |
 |---|---|---:|
-| PPO v2 geometry, 3 seeds | Synthetic-to-Habitat transfer | 2.1% +/- 2.6% |
-| SAC v2 geometry | Synthetic-to-Habitat transfer | 0.0% |
-| TD3 synthetic-to-Habitat | Synthetic-to-Habitat transfer | 2.0% |
+| PPO v2 geometry, 3 seeds | Synthetic-to-Habitat direct-control transfer | 2.1% +/- 2.6% |
+| SAC v2 geometry | Synthetic-to-Habitat direct-control transfer | 0.0% |
+| TD3 synthetic-to-Habitat | Synthetic-to-Habitat direct-control transfer | 2.0% |
 | APF+Gap | Classical depth/GPS baseline | 93.6% |
-| Geometry-FSM | Nominal HM3D anchors | 100.0% |
+| DEGNAV-Rule / Geometry-FSM | Nominal HM3D anchors | 100.0% |
 
-Important interpretation: the 100% Geometry-FSM result is nominal anchor
-validation, not a complete robustness proof.
+Important interpretation: the 100.0% DEGNAV-Rule / Geometry-FSM result is
+nominal anchor validation under the current mining protocol, not a complete
+robustness proof.
 
 Primary files:
 
@@ -171,7 +194,20 @@ Primary files:
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_repeated_failure_memory.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/repeated_failure_memory.csv`
 
-### 6. D_min Calibration
+### 6. Memory Transfer And Interference
+
+The repeated-failure table uses repeated identical false-feasible passages.  A
+separate transfer/interference script tests whether geometry-anchored memory
+also rejects similar-but-new false-feasible passages without over-rejecting
+similar feasible passages.
+
+Primary files:
+
+- `examples/narrow_passage_rl/eval_memory_transfer_interference.py`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_transfer_interference.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/memory_transfer_interference.csv`
+
+### 7. D_min Calibration
 
 The robot body-width threshold can be calibrated from outcomes.  Starting from a
 wrong conservative estimate, the Bayesian calibrator converges from 0.56 m to
@@ -195,11 +231,11 @@ The learning baselines are intentionally split by evidential role.
 
 Formal main baselines:
 
-- PPO v2 geometry sensor, 3 seeds, synthetic-to-Habitat transfer.
-- SAC v2 geometry sensor.
-- TD3 synthetic-to-Habitat transfer.
+- PPO v2 geometry sensor, 3 seeds, synthetic-to-Habitat direct-control transfer.
+- SAC v2 geometry sensor direct-control baseline.
+- TD3 synthetic-to-Habitat direct-control baseline.
 - APF+Gap classical baseline.
-- Geometry-FSM.
+- DEGNAV-Rule / Geometry-FSM.
 
 Diagnostic baselines:
 
@@ -233,6 +269,10 @@ synthetic-to-Habitat reaches 2.0% despite 77.8% success in the synthetic v2
 environment.  This supports the paper's claim that learning-only policies are
 fragile near geometric feasibility boundaries.
 
+These PPO/SAC/TD3 policies are direct-control baselines.  They do not implement
+DEGNAV-RL because they output velocity actions directly instead of selecting a
+high-level mode from an explicit belief state.
+
 The Habitat-native TD3 result is intentionally reported as a diagnostic:
 
 | Method | Nominal success | Strict success | Unsafe success | Interpretation |
@@ -245,24 +285,30 @@ clearance-safe traversal.  Therefore RL's 100% nominal result should be used to
 motivate strict clearance-aware evaluation, not to claim that RL safely solved
 the task.
 
-The next RL improvement should be framed as **risk-constrained local RL skill**:
+DEGNAV-RL is framed as a risk-constrained mode-selection skill:
 
-- train with strict-success reward, where success-but-unsafe does not receive
-  the terminal success bonus;
-- add an action shield that limits forward motion or triggers recovery when
-  `body_margin`, left/right clearance, or heading alignment are unsafe;
-- condition the policy on the FSM mode so RL learns local control inside
-  `ALIGN`, `COMMIT`, `EXPLORE`, and `RECOVER` rather than replacing the
-  geometry/risk decision layer.
+- build an explicit belief state
+  `b_t = (p_feas, E[Delta], Var[Delta], heading_error, lateral_error,
+  stuckness, contact, memory_risk)`;
+- learn only `pi(m_t | b_t)` over `Commit`, `Explore`, `Recover`, and `Reject`;
+- keep the mode-conditioned low-level controller and strict clearance-aware
+  safety checks outside the learned policy.
 
-This keeps the RL contribution aligned with the paper: RL is useful as a local
-skill and safety diagnostic, while explicit geometry, risk, and failure memory
-remain the core method.
+This keeps the RL contribution aligned with the paper: learning can choose the
+mode, while explicit geometry, risk, and failure memory remain the core method.
+
+DEGNAV-RL entry points:
+
+- `examples/narrow_passage_rl/train_belief_mode_ppo.py`
+- `examples/narrow_passage_rl/eval_belief_mode_ppo.py`
+- `examples/narrow_passage_rl/narrow_passage/envs/belief_mode_env.py`
+- `examples/narrow_passage_rl/narrow_passage/models/belief_state.py`
 
 ## What Not To Overclaim
 
-- HM3D nominal 100% is not a complete robustness proof.  It is nominal anchor validation on
-  mined, mostly well-aligned starts.
+- HM3D nominal 100.0% is not a complete robustness proof.  It is nominal anchor
+  validation under the current mining protocol on mined, mostly well-aligned
+  starts.
 - Habitat stress validation is the evidence for module sensitivity under yaw,
   lateral, dropout, noise, and extreme-clearance perturbations.
 - Failure memory is not for improving one-shot passable-anchor success.  It
@@ -293,10 +339,38 @@ python examples/narrow_passage_rl/eval_repeated_failure_memory.py \
     --n-ff 15 \
     --max-steps 220
 
-# 4. D_min calibration
+# 4. Memory transfer/interference
+python examples/narrow_passage_rl/eval_memory_transfer_interference.py \
+    --preset paper
+
+# 5. D_min calibration
 python examples/narrow_passage_rl/eval_dmin_calibration.py
 
-# 5. Regenerate paper tables from existing CSV artifacts
+# 6. DEGNAV-RL smoke training and evaluation
+python examples/narrow_passage_rl/train_belief_mode_ppo.py \
+    --total-steps 2048 \
+    --num-envs 1 \
+    --ctypes straight_only \
+    --ablation full \
+    --eval-episodes 20 \
+    --save-dir data/degnav_rl_belief_mode_smoke
+
+python examples/narrow_passage_rl/eval_belief_mode_ppo.py \
+    --model data/degnav_rl_belief_mode_smoke/belief_mode_ppo.zip \
+    --episodes 50 \
+    --ctypes full \
+    --ablation full \
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv
+
+# 7. Width-margin phase diagram
+python examples/narrow_passage_rl/plot_margin_phase.py \
+    --inputs \
+      examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv \
+    --labels DEGNAV-Rule DEGNAV-RL \
+    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl
+
+# 8. Regenerate paper tables from existing CSV artifacts
 python examples/narrow_passage_rl/make_paper_tables.py
 ```
 

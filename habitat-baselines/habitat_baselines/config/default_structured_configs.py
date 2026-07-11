@@ -275,6 +275,14 @@ class HierarchicalPolicyConfig(HabitatBaselinesBaseConfig):
 class PolicyConfig(HabitatBaselinesBaseConfig):
     name: str = "PointNavResNetPolicy"
     action_distribution_type: str = "categorical"  # or 'gaussian'
+    feature_key: str = "narrow_passage_features"
+    memory_key: str = "narrow_passage_memory"
+    use_geometry_features: bool = True
+    use_clearance_features: bool = True
+    use_risk_features: bool = True
+    use_recurrent: bool = True
+    use_memory_features: bool = False
+    ablation: str = "full"
     # If the list is empty, all keys will be included.
     # For gaussian action distribution:
     action_dist: ActionDistributionConfig = ActionDistributionConfig()
@@ -311,6 +319,15 @@ class PPOConfig(HabitatBaselinesBaseConfig):
     # policy inference time during rollout generation
     # Not that this does not change the memory requirements
     use_double_buffered_sampler: bool = False
+
+
+@dataclass
+class NarrowPassageRewardConfig(HabitatBaselinesBaseConfig):
+    collision_penalty: float = 6.0
+    stuck_penalty: float = 2.0
+    progress_weight: float = 5.0
+    clearance_weight: float = 0.2
+    oscillation_weight: float = 0.25
 
 
 @dataclass
@@ -395,6 +412,7 @@ class RLConfig(HabitatBaselinesBaseConfig):
         default_factory=lambda: {"main_agent": PolicyConfig()}
     )
     ppo: PPOConfig = PPOConfig()
+    reward: NarrowPassageRewardConfig = NarrowPassageRewardConfig()
     ddppo: DDPPOConfig = DDPPOConfig()
     ver: VERConfig = VERConfig()
     auxiliary_losses: Dict[str, AuxLossConfig] = field(default_factory=dict)

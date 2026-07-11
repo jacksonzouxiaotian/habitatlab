@@ -33,6 +33,7 @@ Usage
 import argparse
 import math
 import sys
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -41,6 +42,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from failure_memory import FailureMemoryConfig, PassageFailureMemory
 from risk_estimator import RiskConfig  # noqa: F401  (kept for future use)
+from narrow_passage.metrics.strict_metrics import compute_strict_metrics
+from narrow_passage.models.belief_state import BeliefState
 
 import habitat  # noqa: E402  (import after sys.path setup)
 
@@ -52,6 +55,30 @@ import habitat  # noqa: E402  (import after sys.path setup)
 # ---------------------------------------------------------------------------
 _LIN_MIN, _LIN_MAX = -0.15, 0.35   # m/s
 _ANG_MIN, _ANG_MAX = -45.0, 45.0   # deg/s
+
+
+def _mode_bucket(mode: str) -> str:
+    m = str(mode or "").upper()
+    if "REJECT" in m:
+        return "reject"
+    if "RECOVER" in m:
+        return "recover"
+    if "EXPLORE" in m or "ALIGN" in m:
+        return "explore"
+    return "commit"
+
+
+def _belief_metrics(features: np.ndarray, memory_risk: float = 0.0) -> dict:
+    belief = BeliefState.from_obs(features, memory_risk=memory_risk)
+    risk = float(np.clip(1.0 - belief.p_feas + belief.memory_risk, 0.0, 1.0))
+    return {
+        "d_hat": belief.d_hat,
+        "w_req_cons": belief.w_req_cons,
+        "delta_mean": belief.delta_mean,
+        "delta_var": belief.delta_var,
+        "p_feas": belief.p_feas,
+        "risk": risk,
+    }
 
 
 def _norm_lin(vx_ms: float) -> float:
@@ -264,7 +291,8 @@ def main() -> None:
             memory_writes = 0
             any_collision = False
             min_bm = float("inf")   # min body_margin seen this episode
-            near_collision = False
+            mode_counts: Counter[str] = Counter()
+            last_mode = ""
 
             done = False
             while not done and steps < args.max_steps:
@@ -272,8 +300,6 @@ def main() -> None:
                 bm = float(features[9])
                 if bm < min_bm:
                     min_bm = bm
-                if bm < 0.05:
-                    near_collision = True
 
                 # ---- collision flag from this step ----
                 step_collision = float(features[16]) > 0.5
@@ -308,6 +334,8 @@ def main() -> None:
                     mode = "EXPLORE"
                 else:
                     mode = "COMMIT"
+                last_mode = str(mode)
+                mode_counts[_mode_bucket(last_mode)] += 1
 
                 # ---- execute mode ----
                 if mode == "STOP":
@@ -334,6 +362,7 @@ def main() -> None:
                         memory_writes += 1
 
                     for _ in range(args.max_recover_steps):
+                        mode_counts["recover"] += 1
                         he_r = _compute_heading_error(env)
                         observations = env.step(_recover_action(he_r))
                         steps += 1
@@ -390,19 +419,35 @@ def main() -> None:
 
             if not np.isfinite(min_bm):
                 min_bm = float(features[9])
+            strict_metrics = compute_strict_metrics(
+                success=success,
+                collision=collision,
+                stuck=stuck,
+                min_clearance=min_bm,
+            )
+            belief_row = _belief_metrics(features)
 
             stat = {
                 "episode_id": str(episode.episode_id),
                 "scene_id": str(episode.scene_id).split("/")[-2],
                 "steps": steps,
                 "success": success,
+                "strict_success": strict_metrics["strict_success"],
+                "clearance_safe": strict_metrics["clearance_safe"],
+                "success_but_unsafe": strict_metrics["success_but_unsafe"],
                 "collision": collision,
                 "stuck": stuck,
                 "rejected": float(rejected),
-                "near_collision": float(near_collision),
+                "near_collision": strict_metrics["near_collision"],
                 "min_clearance": float(min_bm),
                 "recover_triggers": recover_triggers,
                 "memory_writes": memory_writes,
+                **belief_row,
+                "mode": last_mode,
+                "mode_commit_count": int(mode_counts.get("commit", 0)),
+                "mode_explore_count": int(mode_counts.get("explore", 0)),
+                "mode_recover_count": int(mode_counts.get("recover", 0)),
+                "mode_reject_count": int(mode_counts.get("reject", 0)),
             }
             all_stats.append(stat)
 

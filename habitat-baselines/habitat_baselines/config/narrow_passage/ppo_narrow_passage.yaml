@@ -1,11 +1,10 @@
 # @package _global_
 
-# Smoke-test Habitat config for the narrow-passage task components.
+# Stable Habitat-Baselines PPO config for the narrow-passage task components.
 #
-# This is NOT the main paper PPO training curve.  It verifies Habitat task,
-# sensor, reward, and policy wiring.  Paper learning baselines should use the
-# SB3/SB3-Contrib scripts under examples/narrow_passage_rl/, which expose a
-# clean Box([vx, wz]) action space and the fair RL reward wrapper.
+# This is still a diagnostic Habitat-Baselines local-control baseline, not the
+# main geometry-FSM/failure-memory contribution.  Use the debug/full variants
+# in this directory to switch training budget.
 
 defaults:
   - /benchmark/nav/pointnav: pointnav_habitat_test
@@ -15,7 +14,7 @@ defaults:
 
 habitat:
   environment:
-    max_episode_steps: 500
+    max_episode_steps: 400
   dataset:
     type: PointNav-v1
     split: train
@@ -29,20 +28,31 @@ habitat:
           depth_sensor:
             width: 128
             height: 128
+  task:
+    measurements:
+      narrow_passage_reward:
+        progress_weight: ${habitat_baselines.rl.reward.progress_weight}
+        clearance_weight: ${habitat_baselines.rl.reward.clearance_weight}
+        collision_penalty: ${habitat_baselines.rl.reward.collision_penalty}
+        stuck_penalty: ${habitat_baselines.rl.reward.stuck_penalty}
+        oscillation_weight: ${habitat_baselines.rl.reward.oscillation_weight}
 
 habitat_baselines:
   trainer_name: "ppo"
   torch_gpu_id: 0
   tensorboard_dir: "tb/narrow_passage_habitat"
   video_dir: "video_dir/narrow_passage_habitat"
-  test_episode_count: 20
+  test_episode_count: 100
   eval_ckpt_path_dir: "data/narrow_passage_checkpoints"
-  num_environments: 4
+  num_environments: 8
   checkpoint_folder: "data/narrow_passage_checkpoints"
-  total_num_steps: 5e6
+  total_num_steps: 1.0e7
   num_updates: -1
   log_interval: 10
-  num_checkpoints: 50
+  # Use checkpoint_interval for reproducible local-control experiments.
+  # With 8 envs x 128 rollout steps, 500 updates is about 512k env steps.
+  num_checkpoints: -1
+  checkpoint_interval: 500
   force_torch_single_threaded: True
 
   rl:
@@ -50,21 +60,39 @@ habitat_baselines:
       main_agent:
         name: "NarrowPassagePolicy"
         action_distribution_type: "gaussian"
+        feature_key: "narrow_passage_features"
+        memory_key: "narrow_passage_memory"
+        use_geometry_features: True
+        use_clearance_features: True
+        use_risk_features: True
+        use_recurrent: False
+        # Options: full / without_geometry / without_clearance / without_risk
+        ablation: "full"
+        # Keep false for the smoke-test PPO baseline; failure-memory logic is
+        # evaluated separately by the FSM/memory experiments.
+        use_memory_features: False
 
     ppo:
-      clip_param: 0.2
-      ppo_epoch: 4
-      num_mini_batch: 1
-      value_loss_coef: 0.5
-      entropy_coef: 0.05
-      lr: 2.5e-4
+      clip_param: 0.15
+      ppo_epoch: 3
+      num_mini_batch: 4
+      value_loss_coef: 0.75
+      entropy_coef: 0.01
+      lr: 1.0e-4
       eps: 1e-5
-      max_grad_norm: 0.5
-      num_steps: 64
+      max_grad_norm: 0.3
+      num_steps: 128
       hidden_size: 256
       use_gae: True
-      gamma: 0.99
-      tau: 0.95
+      gamma: 0.98
+      tau: 0.92
       use_linear_clip_decay: True
       use_linear_lr_decay: True
-      reward_window_size: 50
+      reward_window_size: 100
+
+    reward:
+      collision_penalty: 6.0
+      stuck_penalty: 2.0
+      progress_weight: 5.0
+      clearance_weight: 0.2
+      oscillation_weight: 0.25

@@ -10,6 +10,7 @@ from rl_eval_utils import (
     make_episode_trace,
     summarize_episode_stats,
     update_episode_trace,
+    write_summary_csv,
 )
 from train_sb3 import DIFFICULTY_CONFIGS
 
@@ -86,6 +87,12 @@ def main():
     parser.add_argument("--risk-clearance-threshold", type=float, default=0.10)
     parser.add_argument("--risk-lateral-threshold", type=float, default=0.30)
     parser.add_argument("--risk-heading-threshold", type=float, default=0.65)
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        default=None,
+        help="Optional one-row summary CSV path for paper tables.",
+    )
     args = parser.parse_args()
 
     from stable_baselines3 import PPO
@@ -190,6 +197,27 @@ def main():
     print(f"avg_recovery_successes: {np.mean([s['recovery_successes'] for s in stats]):.3f}")
     print(f"avg_recovery_steps: {np.mean([s['recovery_steps'] for s in stats]):.1f}")
     print(f"avg_min_clearance: {np.mean([s['min_clearance'] for s in stats]):.3f}")
+    if args.csv is not None:
+        row = {
+            "policy": "passage_ppo_plus_recovery_ppo",
+            "difficulty": args.difficulty,
+            "episodes": args.episodes,
+            "max_retries": args.max_retries,
+            "enable_risk_recovery": float(args.enable_risk_recovery),
+            **summary,
+            "avg_retries": round(float(np.mean([s["retries"] for s in stats])), 4),
+            "avg_risk_triggers": round(
+                float(np.mean([s["risk_triggers"] for s in stats])), 4
+            ),
+            "avg_recovery_successes": round(
+                float(np.mean([s["recovery_successes"] for s in stats])), 4
+            ),
+            "avg_recovery_steps": round(
+                float(np.mean([s["recovery_steps"] for s in stats])), 2
+            ),
+        }
+        write_summary_csv(args.csv, [row])
+        print(f"[write] {args.csv}")
 
 
 if __name__ == "__main__":

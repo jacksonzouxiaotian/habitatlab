@@ -1,0 +1,50 @@
+# @package _global_
+
+defaults:
+  - ppo_narrow_passage
+  - _self_
+
+habitat:
+  environment:
+    max_episode_steps: 500
+
+habitat_baselines:
+  tensorboard_dir: "tb/narrow_passage_habitat_full"
+  video_dir: "video_dir/narrow_passage_habitat_full"
+  test_episode_count: 500
+  eval_ckpt_path_dir: "data/narrow_passage_checkpoints_full"
+  num_environments: 16
+  checkpoint_folder: "data/narrow_passage_checkpoints_full"
+  total_num_steps: 2.0e7
+  log_interval: 10
+  num_checkpoints: -1
+  checkpoint_interval: 1000
+
+  rl:
+    policy:
+      main_agent:
+        use_recurrent: False
+        use_geometry_features: True
+        use_clearance_features: True
+        use_risk_features: True
+        ablation: "full"
+
+    ppo:
+      clip_param: 0.12
+      ppo_epoch: 4
+      num_mini_batch: 8
+      value_loss_coef: 0.75
+      entropy_coef: 0.005
+      lr: 7.5e-5
+      max_grad_norm: 0.3
+      num_steps: 128
+      gamma: 0.985
+      tau: 0.92
+      reward_window_size: 200
+
+    reward:
+      collision_penalty: 8.0
+      stuck_penalty: 2.5
+      progress_weight: 5.0
+      clearance_weight: 0.25
+      oscillation_weight: 0.30

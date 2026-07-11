@@ -1,0 +1,12 @@
+\begin{tabular}{llrrrrrrr}
+\toprule
+Ablation & Policy input & Overall SR & Strict SR & Collision & Near collision & Reject & Correct reject & False reject \\
+\midrule
+full & All belief features & not run & not run & not run & not run & not run & not run & not run \\
+no\_p\_feas & p\_feas replaced by 0.5 & not run & not run & not run & not run & not run & not run & not run \\
+no\_delta\_var & delta\_var replaced by constant & not run & not run & not run & not run & not run & not run & not run \\
+no\_memory & memory\_risk replaced by 0 & not run & not run & not run & not run & not run & not run & not run \\
+no\_alignment & heading/lateral errors replaced by 0 & not run & not run & not run & not run & not run & not run & not run \\
+geometry\_only & d\_hat, body margin, clearances, heading/lateral & not run & not run & not run & not run & not run & not run & not run \\
+\bottomrule
+\end{tabular}

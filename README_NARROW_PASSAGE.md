@@ -7,164 +7,283 @@ Habitat-Lab.  The research code lives under:
 examples/narrow_passage_rl/
 ```
 
-The directory is organized as a paper-facing framework rather than a loose set of
-Habitat modifications:
+Geometry-FSM is the implementation name used by scripts and result files.
+Geometry-FSM is referred to as DEGNAV-Rule in the paper.
+
+Paper-facing naming:
+
+- `DEGNAV-Rule / Geometry-FSM`: interpretable feasibility-belief controller.
+- `DEGNAV-RL`: learning variant that learns only the high-level mode selector
+  `pi(m_t | b_t)` over `Commit`, `Explore`, `Recover`, and `Reject`.
+- `PPO/SAC/TD3 direct-control baselines`: learning-only policies that map the
+  19-D geometry observation directly to velocity actions.
+- `Diagnostic/smoke baselines`: code-path checks or metric diagnostics, not the
+  main method ranking.
+
+## Where The Code Lives
 
 ```text
 examples/narrow_passage_rl/
-  configs/                 # Reproducible train/eval protocol configs
-  narrow_passage/
-    baselines/             # Four-layer baseline registry
-    envs/                  # Habitat task adapters, passage generation, metrics
-    models/                # Geometry encoder, risk head, memory, policy modes
-    planners/              # Classical / sampling baseline registry
-    scripts/               # Stable command entry points
-  results/
-    raw/                   # Raw per-episode outputs
-    tables/                # Paper-ready tables
-    figures/               # Paper figures
-  docs/                    # Method, protocol, reproducibility notes
+  procedural_env_v2.py                  # Synthetic v2 benchmark
+  eval_harder_benchmark.py              # Main procedural benchmark
+  eval_habitat_geometry_fsm.py          # Geometry-FSM / DEGNAV-Rule on HM3D anchors
+  eval_habitat_apf_gap.py               # APF+Gap Habitat baseline
+  eval_habitat_sb3.py                   # PPO/SAC/TD3 direct-control Habitat evaluation
+  eval_habitat_stress_validation.py     # Formal Habitat stress validation
+  eval_repeated_failure_memory.py       # Repeated false-feasible memory test
+  eval_memory_transfer_interference.py  # Memory transfer/interference test
+  eval_dmin_calibration.py              # D_min self-calibration
+  train_belief_mode_ppo.py              # DEGNAV-RL high-level mode-selection PPO
+  eval_belief_mode_ppo.py               # DEGNAV-RL procedural v2 evaluation
+  train_sb3_v2.py                       # PPO/SAC/TD3 direct-control training
+  train_recurrent_ppo_v2.py             # RecurrentPPO smoke baseline
+  train_bc_dagger_v2.py                 # BC/DAgger smoke baselines
+  train_replay_memory_policy_v2.py      # Generic replay-memory smoke baseline
+  plot_margin_phase.py                  # Width-margin phase diagram
+  record_habitat_video.py               # Habitat video/keyframe generation
+  narrow_passage/models/belief_state.py # Compact feasibility-belief state
+  narrow_passage/envs/belief_mode_env.py# Discrete mode wrapper for DEGNAV-RL
+  narrow_passage/metrics/strict_metrics.py # Shared strict safety metrics
+  results/narrow_passage_rl/            # CSV/Markdown/LaTeX/figures
 ```
 
-Quick entry points:
+The Habitat task and sensors used by these scripts live in:
+
+```text
+habitat-lab/habitat/tasks/narrow_passage/
+```
+
+## Formal Baseline Summary
+
+Use this file as the single main formal baseline table for the paper:
+
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md
+```
+
+Headline values from that table:
+
+| Method | Role | Train domain | Eval domain | Seeds | Success |
+|---|---|---|---|---:|---:|
+| PPO v2 geometry sensor | Direct-control RL baseline | Synthetic v2 -> Habitat | HM3D Val set A | 3 | 2.1% +/- 2.6% |
+| SAC v2 geometry sensor | Direct-control RL baseline | Synthetic v2 -> Habitat | HM3D mined Val set B | 1 | 0.0% |
+| TD3 synthetic-to-Habitat | Direct-control RL baseline | Synthetic v2 -> Habitat | HM3D mined Val set B | 1 | 2.0% |
+| APF+Gap | Classical local baseline | None | HM3D Val set A | deterministic | 93.6% |
+| DEGNAV-Rule / Geometry-FSM | Proposed rule controller | None | HM3D mined Val set B | deterministic | 100.0% nominal anchor validation |
+
+The 100.0% DEGNAV-Rule / Geometry-FSM row is **nominal anchor validation under
+the current mining protocol**, not a complete robustness claim.  The mined HM3D
+starts are mostly well aligned, so this table must be read together with the
+stress-validation table.
+
+Older single-run PPO mined-val logs reported 6.0% on 151 episodes.  That number
+is kept only as legacy/single-run provenance and is not the formal 3-seed
+baseline.
+
+## Habitat Stress Validation
+
+Stress validation is the module-sensitivity evidence for DEGNAV-Rule /
+Geometry-FSM.  It perturbs yaw, lateral offset, depth-sector dropout, feature
+noise, and the extreme-narrow subset.
 
 ```bash
-# Train RL baseline on the synthetic v2 benchmark
-python examples/narrow_passage_rl/narrow_passage/scripts/train.py --algo ppo
-
-# Run memory/history baselines
-python examples/narrow_passage_rl/eval_memory_baselines.py \
-  --n-rounds 5 --n-passable 20 --n-ff 15 --max-steps 220
-
-# Run lightweight GRU-PPO fallback baseline
-python examples/narrow_passage_rl/train_gru_ppo_v2.py \
-  --total-steps 5000 --eval-episodes 50 \
-  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/gru_ppo_v2_smoke
-
-# Run formal SB3-Contrib RecurrentPPO smoke baseline
-python examples/narrow_passage_rl/train_recurrent_ppo_v2.py \
-  --reward-mode fair \
-  --total-steps 1024 --n-steps 128 --batch-size 64 --eval-episodes 40 \
-  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_v2_smoke
-
-# Collect expert data and run BC/DAgger smoke baselines
-python examples/narrow_passage_rl/collect_expert_trajectories.py \
-  --episodes 40 --output-npz examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz
-python examples/narrow_passage_rl/train_bc_dagger_v2.py \
-  --algo bc --dataset examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
-  --epochs 5 --eval-episodes 40
-python examples/narrow_passage_rl/train_bc_dagger_v2.py \
-  --algo dagger --dataset examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke.npz \
-  --epochs 3 --dagger-iters 1 --dagger-episodes 10 --eval-episodes 40
-
-# Run generic replay-memory policy smoke baseline
-python examples/narrow_passage_rl/train_replay_memory_policy_v2.py \
-  --reward-mode fair \
-  --algo ppo --total-steps 1024 --eval-episodes 40 \
-  --save-dir examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/replay_memory_policy_v2_smoke
-
-# Evaluate Habitat baselines and FSM variants
-python examples/narrow_passage_rl/narrow_passage/scripts/evaluate.py --method fsm
-
-# Run FSM ablations
-python examples/narrow_passage_rl/narrow_passage/scripts/run_ablation.py
+python examples/narrow_passage_rl/eval_habitat_stress_validation.py \
+    --preset paper \
+    --split val \
+    --num-episodes -1
 ```
 
-New baseline result tables:
+Outputs:
 
-- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_baselines.md`
-- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_learning_baselines.md`
-- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_new_baselines_smoke.md`
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/habitat_stress_validation.csv
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.tex
+```
 
-Learning baselines use `FairNarrowPassageRewardWrapper` by default.  It clips
-open-space clearance reward and penalizes timeout / no-progress behavior, which
-prevents policies from receiving high return by staying outside the passage.
-Use `--reward-mode native` only to reproduce legacy reward runs.
+## Diagnostic Baselines
 
-## Current Results Snapshot
+Diagnostic baselines are not the main method ranking.  They explain metric
+failure modes.  The current key diagnostic is Habitat-native TD3:
 
-Full per-episode CSVs, Markdown tables, and LaTeX tables are under
-`examples/narrow_passage_rl/results/narrow_passage_rl/`.  The most important
-current results are:
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_diagnostic_baselines.md
+```
 
-### Habitat HM3D Anchor Validation
+| Method | Purpose | Nominal success | Strict success | Success-but-unsafe | Near collision |
+|---|---|---:|---:|---:|---:|
+| TD3 Habitat-native | Nominal metric exploitation diagnostic | 100.0% | 2.0% | 98.0% | 100.0% |
 
-| Method | Episodes | Success | Notes |
-|---|---:|---:|---|
-| SB3 PPO synthetic-to-Habitat geometry | 151 | 6.0% | Trained on synthetic v2, evaluated on mined HM3D |
-| SAC v2 geometry | 151 | 0.0% | SB3 SAC policy |
-| Geometry-FSM | 151 | 100.0% | Feature-driven controller on nominal anchors |
-| Habitat FSM stress ablation, +60 deg heading | 24 | 100.0% full / 0.0% no heading alignment | Extreme-narrow subset |
+This row shows that nominal Habitat success can be optimized without safe
+clearance.  It should not be presented as a safe TD3 traversal result.
+
+## Smoke / Appendix-Only Baselines
+
+Smoke baselines verify that training/evaluation paths run end to end.  They are
+not main paper baselines unless rerun under the full protocol.
+
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_smoke_baselines.md
+```
+
+Examples:
+
+- GRU-PPO lightweight.
+- RecurrentPPO smoke.
+- BC-FSM.
+- DAgger-FSM.
+- Replay Memory Policy.
 
 The Habitat-Baselines `ppo_narrow_passage.yaml` config is a task/policy
-smoke-test config, not the main paper PPO training pipeline.  Learning-baseline
-claims should distinguish: synthetic PPO, SB3 synthetic-to-Habitat transfer, and
-Habitat-Baselines smoke tests.
+smoke-test config, not the main paper PPO training pipeline.
 
-### Memory / History Baselines
+## Memory Contribution
 
-| Method | Passable SR | Passable Reject | Final False-Feasible Reject | Wasted FF Steps |
-|---|---:|---:|---:|---:|
-| no_memory | 0.900 | 0.000 | 0.000 | 16500 |
-| kNN Failure Memory | 0.860 | 0.060 | 1.000 | 5500 |
-| Vanilla Episodic Memory | 0.820 | 0.130 | 1.000 | 8140 |
-| Geometry-Guided Failure Memory | 0.900 | 0.030 | 1.000 | 4400 |
+Memory does not improve one-shot nominal Habitat success.  Its contribution is
+to suppress repeated commitments to previously failed infeasible passages.
 
-### Learning Baselines
+```bash
+python examples/narrow_passage_rl/eval_repeated_failure_memory.py \
+    --n-rounds 5 \
+    --n-passable 20 \
+    --n-ff 15 \
+    --max-steps 220
+```
 
-| Method | Domain | Train budget | Eval episodes | Success | Collision | Notes |
-|---|---|---:|---:|---:|---:|---|
-| SB3 PPO synthetic-to-Habitat geometry | Habitat HM3D mined-val | 5M synthetic steps | 151 | 0.060 | - | Synthetic v2 checkpoint transferred to HM3D |
-| SAC v2 geometry | Habitat HM3D mined-val | 2M steps | 151 | 0.000 | - | Existing SB3 checkpoint |
-| RecurrentPPO | Synthetic v2 | 3M steps | 500 | 0.130 | 0.456 | SB3-Contrib + fair reward |
+Main output:
 
-RecurrentPPO learns some straight/asymmetric passages, but it remains weak on
-L/S turns, narrow exits, and false-feasible safety.  This is the fair-reward
-replacement for the older native-reward timeout result.
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_repeated_failure_memory.md
+```
 
-The 100% Habitat FSM rows are nominal mined-anchor validation, not a blanket
-robustness claim. They should be read together with the +60 deg yaw stress
-ablation.  The Habitat
-stress evaluator now supports yaw perturbation, lateral offset, start-distance
-shift, feature noise, and depth-sector dropout.  Goal perturbation,
-false-feasible Habitat anchors, dynamic obstacles, and unseen-room
-generalization remain planned dataset/simulator extensions until new stress CSVs
-are generated.
+For transfer/interference beyond repeated identical passages:
 
-### Paper Videos
+```bash
+python examples/narrow_passage_rl/eval_memory_transfer_interference.py \
+    --preset paper
+```
 
-`examples/narrow_passage_rl/record_habitat_video.py` records RGB/depth MP4s for
-`geometry_fsm`, `ppo_sb3`, `apf_gap`, and `ppo_policy`, with overlayed episode
-state and optional keyframes.
+Outputs:
 
-| Method | Episode | Artifact | Result |
-|---|---|---|---|
-| Geometry-FSM | `hm3d_narrow_000008` | `video_dir/narrow_passage_habitat/geometry_fsm_ep000_hm3d_narrow_000008.mp4` | 28 steps, success=1 |
-| SB3 PPO synthetic-to-Habitat | `hm3d_narrow_000008` | `video_dir/narrow_passage_habitat/ppo_sb3_ep000_hm3d_narrow_000008.mp4` | 500 steps, timeout |
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/memory_transfer_interference.csv
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_transfer_interference.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_transfer_interference.tex
+```
 
-Keyframes are under `results/narrow_passage_rl/keyframes/`.
+## DEGNAV-RL Mode-Selection Baseline
 
-### Diagnostic / Smoke Baselines
+DEGNAV-RL learns only `pi(m_t | b_t)` over `Commit`, `Explore`, `Recover`, and
+`Reject`.  It does not output direct velocities.  The mode-conditioned velocity
+controller is shared with DEGNAV-Rule / Geometry-FSM.
 
-These are smoke runs that verify training/evaluation paths; they are not final
-long-training scores and should be reported in an appendix or baseline-status
-section rather than the main comparison table.
+Smoke run:
 
-| Baseline | Train data / budget | Eval episodes | Success | Collision |
-|---|---:|---:|---:|---:|
-| FSM expert trajectories | 40 episodes / 5179 transitions | 40 | 0.750 | 0.100 |
-| BC-FSM | 5179 expert transitions / 5 epochs | 40 | 0.500 | 0.475 |
-| DAgger-FSM | 6346 transitions / 1 DAgger iter | 40 | 0.300 | 0.650 |
-| Replay Memory Policy | 1024 env steps | 40 | 0.000 | 0.025 |
+```bash
+python examples/narrow_passage_rl/train_belief_mode_ppo.py \
+    --total-steps 2048 \
+    --num-envs 1 \
+    --ctypes straight_only \
+    --ablation full \
+    --eval-episodes 20 \
+    --save-dir data/degnav_rl_belief_mode_smoke
+```
+
+Evaluation:
+
+```bash
+python examples/narrow_passage_rl/eval_belief_mode_ppo.py \
+    --model data/degnav_rl_belief_mode_smoke/belief_mode_ppo.zip \
+    --episodes 50 \
+    --ctypes full \
+    --ablation full \
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv
+```
+
+Supported belief-state ablations are `full`, `no_p_feas`, `no_delta_var`,
+`no_memory`, `no_alignment`, and `geometry_only`.
+
+## Reproduction Commands
+
+Run from the repository root:
+
+```bash
+# Procedural v2 benchmark
+python examples/narrow_passage_rl/eval_harder_benchmark.py --episodes 500
+
+# Habitat stress validation
+python examples/narrow_passage_rl/eval_habitat_stress_validation.py \
+    --preset paper \
+    --split val \
+    --num-episodes -1
+
+# Repeated failure memory
+python examples/narrow_passage_rl/eval_repeated_failure_memory.py \
+    --n-rounds 5 \
+    --n-passable 20 \
+    --n-ff 15 \
+    --max-steps 220
+
+# Memory transfer/interference
+python examples/narrow_passage_rl/eval_memory_transfer_interference.py \
+    --preset paper
+
+# DEGNAV-RL smoke training
+python examples/narrow_passage_rl/train_belief_mode_ppo.py \
+    --total-steps 2048 \
+    --num-envs 1 \
+    --ctypes straight_only \
+    --ablation full \
+    --eval-episodes 20 \
+    --save-dir data/degnav_rl_belief_mode_smoke
+
+# DEGNAV-RL evaluation
+python examples/narrow_passage_rl/eval_belief_mode_ppo.py \
+    --model data/degnav_rl_belief_mode_smoke/belief_mode_ppo.zip \
+    --episodes 50 \
+    --ctypes full \
+    --ablation full \
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv
+
+# D_min calibration
+python examples/narrow_passage_rl/eval_dmin_calibration.py
+
+# Width-margin phase diagram
+python examples/narrow_passage_rl/plot_margin_phase.py \
+    --inputs \
+      examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv \
+    --labels DEGNAV-Rule DEGNAV-RL \
+    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl
+
+# Regenerate paper tables from available CSV artifacts
+python examples/narrow_passage_rl/make_paper_tables.py
+```
+
+Habitat runs require:
+
+```text
+data/scene_datasets/hm3d/
+data/datasets/narrow_passage/{split}/{split}.json.gz
+```
+
+## Video And Figures
+
+Record Habitat videos with overlays:
+
+```bash
+python examples/narrow_passage_rl/record_habitat_video.py \
+    --method geometry_fsm \
+    --split val \
+    --episode-index 0 \
+    --output-dir video_dir/narrow_passage_habitat \
+    --save-keyframes
+```
 
 Core documents:
 
+- `examples/narrow_passage_rl/README.md`
 - `examples/narrow_passage_rl/docs/method.md`
 - `examples/narrow_passage_rl/docs/baseline_taxonomy.md`
 - `examples/narrow_passage_rl/docs/experiment_protocol.md`
 - `examples/narrow_passage_rl/docs/reproducibility.md`
-- `examples/narrow_passage_rl/README.md`
-
-The key idea is geometry-guided navigation with explicit passage features,
-risk-aware traversability estimation, a failure memory bank, high-level decision
-modes, and a mode-conditioned controller.

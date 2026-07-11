@@ -45,6 +45,7 @@ measurements:
     success_distance: 0.5
     heading_threshold: 0.52
     lateral_threshold: 0.4
+    require_stop: False
   narrow_passage_collision:
     type: NarrowPassageCollision
   narrow_passage_stuck:
@@ -56,8 +57,13 @@ measurements:
     center_weight: 0.15
     alignment_weight: 0.5
     clearance_weight: 0.1
+    body_margin_weight: 0.5
     success_reward: 100.0
     collision_penalty: 3.0
     stuck_penalty: 1.5
-    oscillation_weight: 0.0
+    oscillation_weight: 0.2
+    action_smoothness_weight: 0.05
+    unsafe_margin_penalty: 2.0
+    safe_body_margin: 0.12
+    safe_passage_width: 0.48
     slack_penalty: 0.003

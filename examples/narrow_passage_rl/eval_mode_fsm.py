@@ -10,6 +10,7 @@ from rl_eval_utils import (
     make_episode_trace,
     summarize_episode_stats,
     update_episode_trace,
+    write_summary_csv,
 )
 from risk_estimator import GeometryRiskEstimator, RiskConfig
 from train_sb3 import DIFFICULTY_CONFIGS
@@ -58,6 +59,12 @@ def main():
     parser.add_argument("--heading-high", type=float, default=0.75)
     parser.add_argument("--high-risk-threshold", type=float, default=0.75)
     parser.add_argument("--medium-risk-threshold", type=float, default=0.50)
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        default=None,
+        help="Optional one-row summary CSV path for paper tables.",
+    )
     args = parser.parse_args()
 
     from stable_baselines3 import PPO
@@ -182,6 +189,35 @@ def main():
     print(f"avg_align_steps: {np.mean([s['mode_align'] for s in stats]):.1f}")
     print(f"avg_recover_triggers: {np.mean([s['mode_recover'] for s in stats]):.3f}")
     print(f"avg_max_risk: {np.mean([s['max_risk'] for s in stats]):.3f}")
+    if args.csv is not None:
+        row = {
+            "policy": "failure_aware_mode_fsm",
+            "difficulty": args.difficulty,
+            "episodes": args.episodes,
+            **summary,
+            "reject_rate": round(float(np.mean([s["rejected"] for s in stats])), 4),
+            "avg_recovery_successes": round(
+                float(np.mean([s["recovery_successes"] for s in stats])), 4
+            ),
+            "avg_recovery_failures": round(
+                float(np.mean([s["recovery_failures"] for s in stats])), 4
+            ),
+            "avg_recovery_steps": round(
+                float(np.mean([s["recovery_steps"] for s in stats])), 2
+            ),
+            "avg_commit_steps": round(
+                float(np.mean([s["mode_commit"] for s in stats])), 2
+            ),
+            "avg_align_steps": round(
+                float(np.mean([s["mode_align"] for s in stats])), 2
+            ),
+            "avg_recover_triggers": round(
+                float(np.mean([s["mode_recover"] for s in stats])), 4
+            ),
+            "avg_max_risk": round(float(np.mean([s["max_risk"] for s in stats])), 4),
+        }
+        write_summary_csv(args.csv, [row])
+        print(f"[write] {args.csv}")
 
 
 if __name__ == "__main__":

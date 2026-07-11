@@ -18,11 +18,20 @@ Run:
 
 import argparse
 import csv
+import sys
 from pathlib import Path
 
 import numpy as np
 
 import habitat
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from narrow_passage.metrics.strict_metrics import (
+    StrictMetricConfig,
+    compute_strict_metrics,
+)
+from narrow_passage.models.belief_state import BeliefState
 
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 FEATURE_DIM = 19
@@ -80,6 +89,19 @@ def make_env(data_path: str, split: str):
     return habitat.Env(config=config)
 
 
+def _belief_metrics(features: np.ndarray, memory_risk: float = 0.0) -> dict:
+    belief = BeliefState.from_obs(features, memory_risk=memory_risk)
+    risk = float(np.clip(1.0 - belief.p_feas + belief.memory_risk, 0.0, 1.0))
+    return {
+        "d_hat": belief.d_hat,
+        "w_req_cons": belief.w_req_cons,
+        "delta_mean": belief.delta_mean,
+        "delta_var": belief.delta_var,
+        "p_feas": belief.p_feas,
+        "risk": risk,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--algo", choices=["auto", "ppo", "sac", "td3"], default="auto")
@@ -133,19 +155,24 @@ def main():
             steps = 0
             any_collision = False
             min_bm = float("inf")
-            near_collision = False
             done = False
-
-            while not done and steps < args.max_steps:
-                feats = obs_dict.get(
+            last_feats = np.array(
+                obs_dict.get(
                     "narrow_passage_features",
                     np.zeros(FEATURE_DIM, dtype=np.float32),
+                ),
+                dtype=np.float32,
+            )
+
+            while not done and steps < args.max_steps:
+                feats = np.array(
+                    obs_dict.get("narrow_passage_features", last_feats),
+                    dtype=np.float32,
                 )
+                last_feats = feats
                 bm = float(feats[9])
                 if bm < min_bm:
                     min_bm = bm
-                if bm < 0.05:
-                    near_collision = True
                 if float(feats[16]) > 0.5:
                     any_collision = True
 
@@ -176,6 +203,10 @@ def main():
                     done = True
 
             metrics = env.get_metrics()
+            final_feats = np.array(
+                obs_dict.get("narrow_passage_features", last_feats),
+                dtype=np.float32,
+            )
             success = float(metrics.get("narrow_passage_success", 0.0))
             final_collision = max(
                 float(any_collision),
@@ -183,16 +214,15 @@ def main():
             )
             final_stuck = float(metrics.get("narrow_passage_stuck", 0.0))
             min_clearance = float(min_bm) if np.isfinite(min_bm) else 0.0
-            clearance_safe = float(
-                min_clearance >= args.strict_clearance_threshold
+            strict_metrics = compute_strict_metrics(
+                success=success,
+                collision=final_collision,
+                stuck=final_stuck,
+                min_clearance=min_clearance,
+                cfg=StrictMetricConfig(
+                    strict_clearance_threshold=args.strict_clearance_threshold
+                ),
             )
-            strict_success = float(
-                success > 0.5
-                and final_collision < 0.5
-                and final_stuck < 0.5
-                and clearance_safe > 0.5
-            )
-            success_but_unsafe = float(success > 0.5 and strict_success < 0.5)
 
             stat = {
                 "episode_id": str(episode.episode_id),
@@ -201,18 +231,20 @@ def main():
                 "body_margin": round(body_margin, 4),
                 "steps": steps,
                 "success": success,
-                "strict_success": strict_success,
-                "clearance_safe": clearance_safe,
-                "success_but_unsafe": success_but_unsafe,
+                "strict_success": strict_metrics["strict_success"],
+                "clearance_safe": strict_metrics["clearance_safe"],
+                "success_but_unsafe": strict_metrics["success_but_unsafe"],
                 "collision": final_collision,
                 "stuck": final_stuck,
-                "near_collision": float(near_collision),
+                "near_collision": strict_metrics["near_collision"],
                 "min_clearance": min_clearance,
+                **_belief_metrics(final_feats),
+                "mode": "direct_velocity",
             }
             all_stats.append(stat)
             print(
                 f"  ep {ep_idx:3d}  {difficulty:6s}  bm={body_margin:+.3f}"
-                f"  success={success:.0f}  strict={strict_success:.0f}"
+                f"  success={success:.0f}  strict={strict_metrics['strict_success']:.0f}"
                 f"  steps={steps:3d}"
             )
 

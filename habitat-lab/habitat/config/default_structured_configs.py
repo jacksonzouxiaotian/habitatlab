@@ -1381,6 +1381,7 @@ class NarrowPassageSuccessMeasurementConfig(MeasurementConfig):
     success_distance: float = 0.35
     heading_threshold: float = 0.35
     lateral_threshold: float = 0.25
+    require_stop: bool = False
 
 
 @dataclass
@@ -1401,10 +1402,15 @@ class NarrowPassageRewardMeasurementConfig(MeasurementConfig):
     center_weight: float = 0.5
     alignment_weight: float = 0.3
     clearance_weight: float = 0.2
+    body_margin_weight: float = 0.5
     success_reward: float = 10.0
     collision_penalty: float = 10.0
     stuck_penalty: float = 5.0
     oscillation_weight: float = 0.1
+    action_smoothness_weight: float = 0.05
+    unsafe_margin_penalty: float = 2.0
+    safe_body_margin: float = 0.12
+    safe_passage_width: float = 0.48
     slack_penalty: float = 0.01
 
 

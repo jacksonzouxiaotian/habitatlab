@@ -29,6 +29,7 @@ import argparse
 import csv
 import math
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -39,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from procedural_env_v2 import CorridorType, HarderNarrowPassageEnv
 from failure_memory import FailureMemoryConfig, PassageFailureMemory
 from cross_episode_memory import CrossEpisodeMemory, MemoryConfig, FSMMode
+from narrow_passage.models.belief_state import BeliefState
 
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 
@@ -47,6 +49,34 @@ RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 
 def _act(vx, wz):
     return np.array([vx, wz], dtype=np.float32)
+
+
+def _mode_bucket(mode: str) -> str:
+    """Map implementation mode strings into paper-facing mode buckets."""
+
+    m = str(mode or "").upper()
+    if "REJECT" in m:
+        return "reject"
+    if "RECOVER" in m:
+        return "recover"
+    if "EXPLORE" in m or "ALIGN" in m or "FOLLOW" in m or "CORRIDOR" in m:
+        return "explore"
+    return "commit"
+
+
+def _belief_metrics(obs: np.ndarray, memory_risk: float = 0.0) -> dict:
+    """Return common feasibility-belief diagnostics for CSV visualizations."""
+
+    belief = BeliefState.from_obs(obs, memory_risk=memory_risk)
+    risk = float(np.clip(1.0 - belief.p_feas + belief.memory_risk, 0.0, 1.0))
+    return {
+        "d_hat": belief.d_hat,
+        "w_req_cons": belief.w_req_cons,
+        "delta_mean": belief.delta_mean,
+        "delta_var": belief.delta_var,
+        "p_feas": belief.p_feas,
+        "risk": risk,
+    }
 
 
 # ── Controllers ───────────────────────────────────────────────────────────────
@@ -350,6 +380,8 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
     min_bm = float("inf")
     tight_passage = False   # bm < 0.05 m (near-risk, not a physical collision)
     body_overlap_steps = 0  # steps where bm < 0 (Habitat sliding through wall)
+    mode_counts: Counter[str] = Counter()
+    last_mode = ""
 
     if cross_mem is not None:
         cross_mem.reset_local()
@@ -367,8 +399,9 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
 
         if method == "rule_baseline":
             action = rule_baseline_action(obs)
+            mode = "COMMIT"
         elif agent is not None:
-            action, _ = agent.step(obs)
+            action, mode = agent.step(obs)
         else:
             variant = {
                 "geometry_fsm": "full",
@@ -377,7 +410,10 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
                 "fsm_local_memory": "full",
                 "fsm_cross_memory": "full",
             }.get(method, "full")
-            action, _ = fsm_action(obs, variant, local_mem, cross_mem)
+            action, mode = fsm_action(obs, variant, local_mem, cross_mem)
+
+        last_mode = str(mode)
+        mode_counts[_mode_bucket(last_mode)] += 1
 
         obs, _, term, trunc, info = env.step(action)
         done = term or trunc
@@ -395,6 +431,7 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
     # The base success criterion only checks dist/heading/lateral — no collision guard.
     # body_overlap_steps > 0 means the robot was inside a wall (Habitat allow_sliding).
     collision_free_success = float(success > 0.5 and body_overlap_steps == 0)
+    belief_row = _belief_metrics(obs)
 
     return {
         "success": success,
@@ -409,6 +446,12 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         "passable": info.get("passable", True),
         "corridor_type": info.get("corridor_type", "unknown"),
         "passage_width": info.get("passage_width", float(obs[8])),
+        **belief_row,
+        "mode": last_mode,
+        "mode_commit_count": int(mode_counts.get("commit", 0)),
+        "mode_explore_count": int(mode_counts.get("explore", 0)),
+        "mode_recover_count": int(mode_counts.get("recover", 0)),
+        "mode_reject_count": int(mode_counts.get("reject", 0)),
     }
 
 

@@ -83,6 +83,32 @@ class ProceduralNarrowPassageEnv(gym.Env):
         self.start_x_range = tuple(config.get("start_x_range", (-0.35, 0.35)))
         self.false_feasible_prob = float(config.get("false_feasible_prob", 0.15))
         self.rng = np.random.default_rng(config.get("seed", None))
+        self.reward_weights = {
+            "progress": float(config.get("reward_progress_weight", 4.0)),
+            "heading_alignment": float(
+                config.get("reward_heading_alignment_weight", 0.6)
+            ),
+            "lateral_centering": float(
+                config.get("reward_lateral_centering_weight", 0.3)
+            ),
+            "clearance": float(config.get("reward_clearance_weight", 0.4)),
+            "body_margin": float(config.get("reward_body_margin_weight", 0.8)),
+            "collision": float(config.get("reward_collision_penalty", 25.0)),
+            "stuck": float(config.get("reward_stuck_penalty", 6.0)),
+            "oscillation": float(config.get("reward_oscillation_penalty", 0.35)),
+            "action_smoothness": float(
+                config.get("reward_action_smoothness_penalty", 0.15)
+            ),
+            "unsafe_margin": float(config.get("reward_unsafe_margin_penalty", 8.0)),
+            "success": float(config.get("reward_success", 20.0)),
+            "timeout": float(config.get("reward_timeout_penalty", 1.0)),
+            "slack": float(config.get("reward_slack_penalty", 0.01)),
+        }
+        self.safe_body_margin = float(config.get("safe_body_margin", 0.12))
+        self.safe_width = float(
+            config.get("safe_passage_width", 2.0 * self.robot_radius + 0.12)
+        )
+        self._last_reward_terms = {}
 
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(19,), dtype=np.float32
@@ -135,6 +161,7 @@ class ProceduralNarrowPassageEnv(gym.Env):
         self.stuck_steps = 0
         self.step_count = 0
         self.collision = False
+        self._last_reward_terms = {}
         return self._obs(), {}
 
     def step(self, action):
@@ -160,7 +187,7 @@ class ProceduralNarrowPassageEnv(gym.Env):
         success = self._is_success()
         timeout = self.step_count >= self.max_steps
         done = success or self.collision or timeout
-        reward = self._reward(prev_dist, obs, action, success, timeout)
+        reward = self._reward(prev_dist, obs, action, success, timeout, moved=moved)
         self.prev_action = action.astype(np.float32)
         self.prev_dist = self._distance_to_goal()
 
@@ -172,6 +199,7 @@ class ProceduralNarrowPassageEnv(gym.Env):
             "false_feasible": float(self.params.false_feasible),
             "min_clearance": min(obs[6], obs[7]),
         }
+        info.update(self._last_reward_terms)
         return obs, reward, done, False, info
 
     def _obs(self, action=None):
@@ -212,19 +240,70 @@ class ProceduralNarrowPassageEnv(gym.Env):
             dtype=np.float32,
         )
 
-    def _reward(self, prev_dist, obs, action, success, timeout):
+    def _reward(self, prev_dist, obs, action, success, timeout, moved=None):
         progress = prev_dist - self._distance_to_goal()
-        reward = 2.0 * progress
-        reward -= 0.5 * abs(obs[11])
-        reward -= 0.3 * abs(obs[10])
-        reward += 0.2 * min(obs[6], obs[7])
-        reward -= 5.0 * obs[15]
-        reward -= 20.0 * float(self.collision)
-        reward -= 0.1 * float(np.abs(action - self.prev_action).sum())
-        reward -= 0.01
-        reward += 10.0 * float(success)
-        reward -= 1.0 * float(timeout and not success)
-        return float(reward)
+        terms = self._dense_reward_terms(
+            progress=progress,
+            obs=obs,
+            action=action,
+            success=success,
+            timeout=timeout,
+            collision=self.collision,
+            moved=moved,
+        )
+        self._last_reward_terms = terms
+        return float(sum(terms.values()))
+
+    def _dense_reward_terms(
+        self,
+        progress,
+        obs,
+        action,
+        success,
+        timeout,
+        collision,
+        moved=None,
+    ):
+        left = float(obs[6])
+        right = float(obs[7])
+        passage_width = float(obs[8])
+        body_margin = float(obs[9])
+        heading_error = abs(float(obs[10]))
+        stuck_score = float(obs[15])
+        action_delta = float(np.abs(action - self.prev_action).sum())
+        oscillating = (
+            abs(float(action[1])) > 0.05
+            and abs(float(self.prev_action[1])) > 0.05
+            and np.sign(float(action[1])) != np.sign(float(self.prev_action[1]))
+        )
+        ineffective_motion = 0.0
+        if moved is not None and abs(float(action[0])) > 0.05 and float(moved) < 1e-3:
+            ineffective_motion = 1.0
+
+        clearance_balance = min(left, right) - 0.5 * abs(left - right)
+        safe_margin_deficit = max(0.0, self.safe_body_margin - body_margin)
+        safe_width_deficit = max(0.0, self.safe_width - passage_width)
+
+        w = self.reward_weights
+        return {
+            "reward/progress": w["progress"] * float(progress),
+            "reward/heading_alignment": w["heading_alignment"]
+            * math.cos(heading_error),
+            "reward/lateral_centering": -w["lateral_centering"]
+            * abs(float(obs[11])),
+            "reward/clearance": w["clearance"] * clearance_balance,
+            "reward/body_margin": w["body_margin"]
+            * min(body_margin, self.safe_body_margin),
+            "reward/collision": -w["collision"] * float(collision),
+            "reward/stuck": -w["stuck"] * max(stuck_score, ineffective_motion),
+            "reward/oscillation": -w["oscillation"] * float(oscillating),
+            "reward/action_smoothness": -w["action_smoothness"] * action_delta,
+            "reward/unsafe_margin": -w["unsafe_margin"]
+            * (safe_margin_deficit + safe_width_deficit),
+            "reward/success": w["success"] * float(success),
+            "reward/timeout": -w["timeout"] * float(timeout and not success),
+            "reward/slack": -w["slack"],
+        }
 
     def _distance_to_goal(self):
         goal = np.array([0.0, self.params.length + 0.5], dtype=np.float32)

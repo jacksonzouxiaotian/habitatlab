@@ -392,6 +392,9 @@ class HarderNarrowPassageEnv(gym.Env):
         self.max_wz = float(cfg.get("max_wz", 0.8))
         self.width_range = tuple(cfg.get("width_range", (0.45, 0.90)))
         self.yaw_noise = float(cfg.get("yaw_noise", 0.6))
+        self.start_pose_jitter = float(cfg.get("start_pose_jitter", 0.25))
+        self.depth_noise = float(cfg.get("depth_noise", 0.0))
+        self.obstacle_noise = float(cfg.get("obstacle_noise", 0.0))
         self.max_depth = float(cfg.get("max_depth", 5.0))
         self.rng = np.random.default_rng(cfg.get("seed", None))
 
@@ -401,9 +404,18 @@ class HarderNarrowPassageEnv(gym.Env):
             self._ctype_list = [CorridorType(n.lower()) for n in ctype_names]
         else:
             self._ctype_list = list(_DEFAULT_PROBS.keys())
-        self._ctype_probs = np.array(
-            [_DEFAULT_PROBS[ct] for ct in self._ctype_list], dtype=float
-        )
+        ctype_probs = cfg.get("corridor_type_probs", None)
+        if ctype_probs is None:
+            self._ctype_probs = np.array(
+                [_DEFAULT_PROBS[ct] for ct in self._ctype_list], dtype=float
+            )
+        else:
+            self._ctype_probs = np.array(
+                [float(ctype_probs.get(ct.value, 0.0)) for ct in self._ctype_list],
+                dtype=float,
+            )
+            if float(self._ctype_probs.sum()) <= 0.0:
+                self._ctype_probs = np.ones(len(self._ctype_list), dtype=float)
         self._ctype_probs /= self._ctype_probs.sum()
 
         self.observation_space = spaces.Box(
@@ -436,6 +448,7 @@ class HarderNarrowPassageEnv(gym.Env):
         self._params, self._episode_W = _build_corridor(
             ctype, self.rng, self.width_range, self.robot_radius
         )
+        self._apply_obstacle_noise()
         self._arcs, self._pts = _path_arcs(self._params.path)
 
         # Goal = last path point + small overshoot along final tangent
@@ -450,7 +463,9 @@ class HarderNarrowPassageEnv(gym.Env):
         start_pos = self._pts[0] - 0.9 * first_tang
         # Lateral jitter
         perp = np.array([-first_tang[1], first_tang[0]])
-        start_pos += perp * float(self.rng.uniform(-0.25, 0.25))
+        start_pos += perp * float(
+            self.rng.uniform(-self.start_pose_jitter, self.start_pose_jitter)
+        )
         start_yaw = math.atan2(first_tang[0], first_tang[1]) + float(
             self.rng.uniform(-self.yaw_noise, self.yaw_noise)
         )
@@ -615,7 +630,7 @@ class HarderNarrowPassageEnv(gym.Env):
         dist_to_goal = self._dist_to_goal()
         stuck_score = min(1.0, self.stuck_steps / 25.0)
 
-        return np.array([
+        obs = np.array([
             d_ln, d_cn, d_rn,
             d_lf, d_cf, d_rf,
             float(np.clip(cl, -1.0, 5.0)),
@@ -630,6 +645,10 @@ class HarderNarrowPassageEnv(gym.Env):
             float(self.collision),
             float(self.prev_action[0]), float(self.prev_action[1]),
         ], dtype=np.float32)
+        if self.depth_noise > 0.0:
+            noise = self.rng.normal(0.0, self.depth_noise, size=10).astype(np.float32)
+            obs[:10] = np.clip(obs[:10] + noise, -1.0, self.max_depth)
+        return obs
 
     # ── Reward ────────────────────────────────────────────────────────────────
 
@@ -645,6 +664,24 @@ class HarderNarrowPassageEnv(gym.Env):
         r += 10.0 * float(success)
         r -= 1.0 * float(timeout and not success)
         return float(r)
+
+    def _apply_obstacle_noise(self):
+        if self.obstacle_noise <= 0.0:
+            return
+        if self._params.blocker is not None:
+            s, n, radius = self._params.blocker
+            self._params.blocker = (
+                s,
+                n + float(self.rng.normal(0.0, self.obstacle_noise)),
+                max(0.02, radius + float(self.rng.normal(0.0, self.obstacle_noise))),
+            )
+        if self._params.protrusion is not None:
+            s, side, amount = self._params.protrusion
+            self._params.protrusion = (
+                s,
+                side,
+                max(0.01, amount + float(self.rng.normal(0.0, self.obstacle_noise))),
+            )
 
     # ── Geometry helpers ──────────────────────────────────────────────────────
 

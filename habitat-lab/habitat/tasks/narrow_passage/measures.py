@@ -41,10 +41,13 @@ class NarrowPassageSuccess(_NarrowPassageMeasure):
         centered = abs(f.get("lateral_offset", 0.0)) < float(
             getattr(self._config, "lateral_threshold", 0.25)
         )
+        require_stop = bool(getattr(self._config, "require_stop", False))
+        stop_ok = (not require_stop) or bool(getattr(task, "is_stop_called", False))
         self._metric = float(
             f.get("distance_to_local_goal", 1e9) <= threshold
             and aligned
             and centered
+            and stop_ok
         )
 
 

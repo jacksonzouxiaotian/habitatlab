@@ -65,7 +65,9 @@ class ProceduralRiskRecoveryEnv(ProceduralNarrowPassageEnv):
         recovered = self._is_recovered(obs)
         timeout = self.step_count >= self.max_steps
         done = recovered or self.collision or timeout
-        reward = self._risk_recovery_reward(prev_cost, obs, action, recovered, timeout)
+        reward = self._risk_recovery_reward(
+            prev_cost, obs, action, recovered, timeout, moved=moved
+        )
         self.prev_action = action.astype(np.float32)
         self.prev_dist = self._distance_to_goal()
 
@@ -78,6 +80,7 @@ class ProceduralRiskRecoveryEnv(ProceduralNarrowPassageEnv):
             "false_feasible": float(self.params.false_feasible),
             "min_clearance": min(obs[6], obs[7]),
         }
+        info.update(self._last_reward_terms)
         return obs, reward, done, False, info
 
     def _risk_cost(self):
@@ -97,15 +100,16 @@ class ProceduralRiskRecoveryEnv(ProceduralNarrowPassageEnv):
             and float(obs[15]) < 0.25
         )
 
-    def _risk_recovery_reward(self, prev_cost, obs, action, recovered, timeout):
-        min_clearance = min(float(obs[6]), float(obs[7]))
-        reward = 2.5 * (prev_cost - self._risk_cost())
-        reward += 0.6 * min_clearance
-        reward -= 0.2 * abs(float(action[0]))
-        reward -= 0.1 * abs(float(action[1]))
-        reward -= 20.0 * float(self.collision)
-        reward -= 2.0 * float(obs[15])
-        reward -= 0.01
-        reward += 10.0 * float(recovered)
-        reward -= 1.0 * float(timeout and not recovered)
-        return float(reward)
+    def _risk_recovery_reward(self, prev_cost, obs, action, recovered, timeout, moved=None):
+        progress = prev_cost - self._risk_cost()
+        terms = self._dense_reward_terms(
+            progress=progress,
+            obs=obs,
+            action=action,
+            success=recovered,
+            timeout=timeout,
+            collision=self.collision,
+            moved=moved,
+        )
+        self._last_reward_terms = terms
+        return float(sum(terms.values()))
