@@ -8,8 +8,9 @@ Naming convention:
 
 - `Geometry-FSM` is the implementation name used in scripts and CSV files.
 - `DEGNAV-Rule` is the paper-facing name for `Geometry-FSM`.
-- `DEGNAV-RL` is the learning variant that learns only the high-level mode
-  selector `pi(m_t | b_t)` over `Commit`, `Explore`, `Recover`, and `Reject`.
+- `DEGNAV-RL` is a diagnostic policy that tests whether PPO can learn only the
+  high-level mode selector `pi(m_t | b_t)` over `Commit`, `Explore`, `Recover`,
+  and `Reject`.
 - PPO/SAC/TD3 are learning-only direct-control baselines that map geometry
   observations directly to velocity actions.
 
@@ -50,6 +51,9 @@ is that explicit passage geometry, clearance risk, decision mode, and failure
 history are more stable and interpretable than learning-only or generic-history
 baselines in this regime.
 
+The main method is DEGNAV-Rule / Geometry-FSM.  DEGNAV-RL is retained as a
+diagnostic appendix experiment.
+
 ## Main Experiments
 
 ### 1. Procedural v2 Benchmark
@@ -77,8 +81,8 @@ Key result:
 
 Output tables:
 
-- `results/narrow_passage_rl/paper_table_main.md`
-- `results/narrow_passage_rl/paper_table_ablation.md`
+- `results/narrow_passage_rl/paper_table_procedural_v2_main.md`
+- `results/narrow_passage_rl/paper_table_harder_ablation.md`
 
 ### 2. Habitat HM3D Nominal Anchor Validation
 
@@ -94,7 +98,7 @@ What it tests:
 
 - Scene-based validation in HM3D using `NarrowPassageNav-v0`.
 - Mined anchors from held-out HM3D scenes.
-- Formal learning baselines and classical APF+Gap baseline.
+- Direct-control learning baselines and classical APF+Gap baseline.
 
 Important interpretation:
 
@@ -103,10 +107,10 @@ the current mining protocol.  The mined anchors are mostly well aligned, so this
 result should not be described as complete robustness.  Stress validation is
 required to expose module sensitivity.
 
-Main table:
+Diagnostic and provenance tables:
 
 - `results/narrow_passage_rl/paper_table_habitat.md`
-- `results/narrow_passage_rl/paper_table_formal_baselines.md`
+- `results/narrow_passage_rl/paper_table_formal_baselines.md` (mixed-split Habitat diagnostic comparison)
 
 ### 3. Habitat Stress Validation
 
@@ -141,14 +145,16 @@ Output:
 - `results/narrow_passage_rl/paper_table_habitat_stress.md`
 - `results/narrow_passage_rl/paper_table_habitat_stress.tex`
 
-### 4. Strict-Safety RL Diagnostic
+### 4. Clearance-Aware RL Diagnostic
 
 This is a diagnostic table, not the main method ranking.
 
 TD3 trained directly in Habitat reaches 100% nominal success but only 2.0%
-strict clearance-aware success.  This demonstrates that nominal goal-reaching
+clearance-aware strict success.  This demonstrates that nominal goal-reaching
 success can be exploited by RL and must be reported together with clearance
-safety.
+diagnostics.
+
+The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated physical safety measurements.
 
 Output:
 
@@ -243,17 +249,17 @@ Output:
 - `results/narrow_passage_rl/dmin_calib_episodes.csv`
 - `results/narrow_passage_rl/dmin_calib_convergence.csv`
 
-## Formal, Diagnostic, And Smoke Baselines
+## Diagnostic And Smoke Baselines
 
 Use these tables for paper organization:
 
 ```text
-results/narrow_passage_rl/paper_table_formal_baselines.md
+results/narrow_passage_rl/paper_table_formal_baselines.md  # mixed-split Habitat diagnostic comparison
 results/narrow_passage_rl/paper_table_diagnostic_baselines.md
 results/narrow_passage_rl/paper_table_smoke_baselines.md
 ```
 
-Formal main baselines:
+Mixed-split Habitat diagnostic comparison:
 
 - PPO v2 geometry sensor, 3 seeds, synthetic-to-Habitat direct-control transfer.
 - SAC v2 geometry sensor direct-control baseline.
@@ -261,9 +267,9 @@ Formal main baselines:
 - APF+Gap classical baseline.
 - DEGNAV-Rule / Geometry-FSM.
 
-Diagnostic baselines:
+Clearance-aware diagnostic evaluation:
 
-- TD3 Habitat-native nominal success vs strict clearance-aware success.
+- TD3 Habitat-native nominal success vs clearance-aware strict success.
 
 Smoke / appendix-only baselines:
 
@@ -280,12 +286,12 @@ and are excluded from formal baseline tables.
 
 RL is currently used in four clearly separated roles:
 
-1. Formal learning baselines: PPO/SAC/TD3 direct-control policies with the same
+1. Direct-control learning baselines: PPO/SAC/TD3 policies with the same
    19-D geometry input.
-2. Safety diagnostic: Habitat-native TD3 nominal success vs strict success.
+2. Clearance-aware diagnostic evaluation: Habitat-native TD3 nominal success vs clearance-aware strict success.
 3. Smoke/appendix paths: recurrent, imitation, and replay-memory policies.
-4. DEGNAV-RL: a high-level mode selector over the explicit belief
-   state, not a direct velocity policy.
+4. DEGNAV-RL: a diagnostic policy for high-level mode selection over the
+   explicit belief state, not a direct velocity policy.
 
 The important diagnostic result is:
 
@@ -294,16 +300,16 @@ The important diagnostic result is:
 | TD3 Habitat-native | 1.000 | 0.020 | 0.980 | 1.000 |
 
 This means the policy learned to satisfy the nominal Habitat success condition,
-but not to maintain safe clearance through the passage.  It should be reported
-as nominal-metric exploitation, not as a safe RL traversal policy.
+but not the depth-derived body-margin diagnostic.  It should be reported as
+nominal-metric exploitation, not as a calibrated clearance result.
 
 The AAAI-facing framing is:
 
 - learning-only transfer is weak near geometric feasibility boundaries;
-- nominal success can hide unsafe clearance behavior;
-- strict clearance-aware success, near-collision, and minimum clearance must be
+- nominal success can hide low body-margin behavior;
+- clearance-aware strict success, near-collision, and minimum clearance must be
   reported for RL baselines;
-- DEGNAV-RL should learn only the high-level mode selector
+- DEGNAV-RL is intended to test only the high-level mode selector
   `pi(m_t | b_t)`, while the geometry/risk decision variables remain explicit.
 
 DEGNAV-RL formulation:
@@ -316,12 +322,14 @@ u_t = mode_conditioned_controller(m_t, geometry, local_goal)
 ```
 
 Under this framing, PPO/SAC/TD3 remain direct-control baselines, while
-DEGNAV-RL is the learned mode-selection variant of DEGNAV-Rule.
+DEGNAV-RL is a diagnostic policy that tests whether the mode selector can be
+learned without replacing DEGNAV-Rule's explicit geometry/risk logic.
 
-## DEGNAV-RL: Belief-Guided Mode-Selection PPO
+## DEGNAV-RL: Diagnostic Belief-Guided Mode-Selection PPO
 
 DEGNAV-RL trains PPO on the compact feasibility-belief state `b_t` instead of
-the raw 19-D geometry observation.  The policy outputs a high-level mode:
+the raw 19-D geometry observation.  The policy is intended to output a
+high-level mode:
 
 ```text
 0 = COMMIT
@@ -333,12 +341,16 @@ the raw 19-D geometry observation.  The policy outputs a high-level mode:
 The wrapper then realizes that mode with the shared mode-conditioned controller.
 This is not the same as the PPO/SAC/TD3 direct-control baselines in
 `train_sb3_v2.py`, which output velocity actions directly.
+DEGNAV-RL is included as a diagnostic policy rather than a competitive final
+method. Under the current reward and action interface, the learned policy
+collapses to Commit and Explore and does not demonstrate meaningful Recover or
+Reject behavior.
 
 Current 3-seed result on procedural v2, using 1M PPO steps per seed:
 
 | Variant | Overall SR | Strict SR | Collision | Near collision | Reject | Mode usage |
 |---|---:|---:|---:|---:|---:|---|
-| DEGNAV-RL full belief | 26.7% | 26.7% | 62.3% | 70.9% | 0.0% | Commit 31%, Explore 69%, Recover/Reject 0% |
+| DEGNAV-RL full belief | 26.7% | 26.7% | 62.3% | 70.9% | 0.0% | Commit 31.0%, Explore 69.0%, Recover 0.0%, Reject 0.0% |
 | no p_feas | 25.9% | 25.9% | 61.9% | 72.5% | 0.0% | Commit 62%, Explore 38% |
 | no delta_var | 28.4% | 28.4% | 58.9% | 70.3% | 0.0% | Commit 29%, Explore 71% |
 | no memory | 28.4% | 28.4% | 58.9% | 70.3% | 0.0% | Commit 29%, Explore 71% |
@@ -349,13 +361,16 @@ Interpretation:
 
 - DEGNAV-RL is no longer `not run`, but it should remain a diagnostic learning
   variant rather than the main method.
-- It improves over the weakest learning-only direct-control transfer baselines,
-  yet it is far below DEGNAV-Rule / Geometry-FSM and still has high collision
-  and near-collision rates.
+- It is far below DEGNAV-Rule / Geometry-FSM and still has high collision and
+  near-collision rates.
 - The learned mode selector did not learn `Reject` or `Recover` under the
   current reward/controller interface.  This is useful evidence that simply
   learning `pi(m_t | b_t)` is not enough; the explicit rule-based feasibility,
   risk, and failure-memory checks remain important.
+- The negative result supports five design conclusions: sparse reward alone is
+  insufficient, mode semantics are not learned automatically, explicit failure
+  memory may still be necessary, Recover/Reject require dedicated reward or
+  supervision, and longer training alone may not solve mode collapse.
 - The belief-state ablation does not show a clean advantage for the full belief
   vector.  `geometry_only` performs best in this run, so the paper should not
   claim that the current DEGNAV-RL policy successfully exploits uncertainty or
@@ -563,8 +578,8 @@ python examples/narrow_passage_rl/render_trajectories.py \
 Important table outputs:
 
 ```text
-results/narrow_passage_rl/paper_table_main.md
-results/narrow_passage_rl/paper_table_ablation.md
+results/narrow_passage_rl/paper_table_procedural_v2_main.md
+results/narrow_passage_rl/paper_table_harder_ablation.md
 results/narrow_passage_rl/paper_table_habitat.md
 results/narrow_passage_rl/paper_table_habitat_stress.md
 results/narrow_passage_rl/paper_table_formal_baselines.md
@@ -572,7 +587,7 @@ results/narrow_passage_rl/paper_table_diagnostic_baselines.md
 results/narrow_passage_rl/paper_table_smoke_baselines.md
 results/narrow_passage_rl/paper_table_repeated_failure_memory.md
 results/narrow_passage_rl/paper_table_memory_transfer_interference.md
-results/narrow_passage_rl/paper_table_belief_mode_rl.md
+results/narrow_passage_rl/paper_table_degnav_rl_diagnostic.md
 results/narrow_passage_rl/paper_table_belief_mode_ablation.md
 ```
 
@@ -597,8 +612,9 @@ previous action, stuck score, and collision flag.  Habitat exposes this through
 
 The Geometry-FSM / DEGNAV-Rule outputs local velocity commands `(v_x, omega_z)`
 through interpretable modes: align, commit, explore, recover, reject, and
-follow-space for L/S-shaped turns.  DEGNAV-RL should learn mode selection only,
-not replace this interface with direct velocity regression.
+follow-space for L/S-shaped turns.  DEGNAV-RL is only a diagnostic test of
+mode-selection learning, and should not be described as replacing this interface
+with direct velocity regression or as the current final method.
 
 The real-robot interface should reproduce the same 19-D feature vector from
 depth, localization, and proprioception.  Hardware experiments should be

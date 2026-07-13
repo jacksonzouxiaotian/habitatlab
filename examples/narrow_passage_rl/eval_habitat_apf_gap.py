@@ -19,6 +19,8 @@ import numpy as np
 
 import habitat
 
+from evaluation.logging_schema import fieldnames_for_rows, finalize_episode_row
+
 RESULTS_DIR = Path("examples/narrow_passage_rl/results/narrow_passage_rl")
 OUT_CSV = RESULTS_DIR / "habitat_apf_gap_episodes.csv"
 VAL_JSON = Path("data/datasets/narrow_passage/val/val.json.gz")
@@ -175,14 +177,20 @@ def main():
 
             m = env.get_metrics()
             success = float(m.get("narrow_passage_success", 0.0))
-            rows.append({
+            row = finalize_episode_row({
                 "episode_id":  eid,
+                "scene_id": str(env.current_episode.scene_id).split("/")[-2],
+                "split": "val",
+                "seed": "deterministic",
+                "method": "APF+Gap",
                 "body_margin": bm,
                 "delta_d":     2.0 * bm,
                 "difficulty":  meta.get("difficulty", "unknown"),
                 "success":     success,
+                "collision": float(m.get("narrow_passage_collision", float("nan"))),
                 "steps":       steps,
-            })
+            }, belief_available=False, mode_interface_available=False, final_mode="apf")
+            rows.append(row)
             print(f"  ep {ep_idx:3d}  [{meta.get('difficulty','?'):6s}]"
                   f"  bm={bm:.3f}  ΔD={2*bm:.3f}"
                   f"  success={int(success)}  steps={steps}", flush=True)
@@ -191,7 +199,7 @@ def main():
     print(f"\nTotal: {n_succ}/{len(rows)} = {n_succ/len(rows):.3f}")
     args.out_csv.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out_csv, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        w = csv.DictWriter(f, fieldnames=fieldnames_for_rows(rows))
         w.writeheader(); w.writerows(rows)
     print(f"Saved: {args.out_csv}")
 

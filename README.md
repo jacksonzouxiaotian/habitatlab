@@ -15,8 +15,9 @@ Naming convention for the paper:
 
 - `Geometry-FSM` is the implementation name used in scripts and CSV files.
 - `DEGNAV-Rule` is the paper-facing name for `Geometry-FSM`.
-- `DEGNAV-RL` is the learning variant that learns only the high-level mode
-  selector `pi(m_t | b_t)` over an explicit feasibility-belief state.
+- `DEGNAV-RL` is a diagnostic policy that tests whether PPO can learn only the
+  high-level mode selector `pi(m_t | b_t)` over an explicit feasibility-belief
+  state.
 - PPO/SAC/TD3 are learning-only direct-control baselines that map geometry
   observations directly to velocity actions.
 
@@ -47,7 +48,7 @@ examples/narrow_passage_rl/
   fair_reward_wrapper.py                # Dense/fair reward wrapper for RL baselines
   narrow_passage/models/belief_state.py # Compact feasibility-belief state
   narrow_passage/envs/belief_mode_env.py# Discrete mode wrapper for DEGNAV-RL
-  narrow_passage/metrics/strict_metrics.py # Shared strict safety metrics
+  narrow_passage/metrics/strict_metrics.py # Shared clearance diagnostic metrics
   results/narrow_passage_rl/            # CSV, Markdown, LaTeX tables
 
 habitat-lab/habitat/tasks/narrow_passage/
@@ -78,12 +79,14 @@ The method uses:
 - Cross-episode failure memory to avoid repeated commitment to infeasible
   passages.
 
-DEGNAV-RL is the high-level mode-selector variant:
-`pi(m_t | b_t)`, where `m_t` is one of `Commit`, `Explore`, `Recover`, and
-`Reject`.  The low-level velocity realization remains the same
-mode-conditioned controller used by DEGNAV-Rule.  PPO/SAC/TD3 are separate
-direct-control baselines: they map the same geometry observations directly to
-velocity actions.
+The main paper method is DEGNAV-Rule / Geometry-FSM.
+
+DEGNAV-RL is included as a diagnostic policy rather than a competitive final
+method.  It tests the high-level selector `pi(m_t | b_t)`, where `m_t` is one of
+`Commit`, `Explore`, `Recover`, and `Reject`; the low-level velocity realization
+remains the same mode-conditioned controller used by DEGNAV-Rule.  PPO/SAC/TD3
+are separate direct-control baselines: they map the same geometry observations
+directly to velocity actions.
 
 ## Main Experiments
 
@@ -105,8 +108,8 @@ which identifies heading/lateral alignment as a critical local-control module.
 Primary files:
 
 - `examples/narrow_passage_rl/eval_harder_benchmark.py`
-- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_main.md`
-- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_ablation.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_procedural_v2_main.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_harder_ablation.md`
 
 ### 2. Habitat HM3D Nominal Anchor Validation
 
@@ -126,6 +129,22 @@ well aligned.
 Important interpretation: the 100.0% DEGNAV-Rule / Geometry-FSM result is
 nominal anchor validation under the current mining protocol, not a complete
 robustness proof.
+
+Habitat experiments should be interpreted in three separate categories:
+
+- Nominal same-split evaluation: unperturbed HM3D anchors evaluated on a single
+  split/protocol.
+- Perturbation or stress evaluation: yaw, lateral offset, dropout, noise, and
+  extreme-narrow stressors used to expose module sensitivity.
+- Clearance-aware diagnostic evaluation: depth-derived body-margin diagnostics
+  such as clearance-aware strict success, near-collision, and
+  success-but-unsafe.
+
+The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated physical safety measurements.
+
+`paper_table_formal_baselines.md` is a mixed-split Habitat diagnostic
+comparison because it contains both HM3D Val set A and mined Val set B rows. It
+must not be used for fair method ranking in the main paper.
 
 Primary files:
 
@@ -157,10 +176,10 @@ Primary files:
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/habitat_stress_validation.csv`
 
-### 4. Strict-Safety RL Diagnostic
+### 4. Clearance-Aware RL Diagnostic
 
 TD3 trained directly in Habitat can reach 100% nominal success, but only 2.0%
-strict clearance-aware success.  98.0% of episodes are success-but-unsafe and
+clearance-aware strict success.  98.0% of episodes are success-but-unsafe and
 near-collision rate is 100%.
 
 This diagnostic is included to show why nominal goal-reaching success is not a
@@ -233,11 +252,11 @@ Primary files:
 - `examples/narrow_passage_rl/dmin_calibrator.py`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calibration.png`
 
-## Formal, Diagnostic, And Smoke Baselines
+## Diagnostic And Smoke Baselines
 
 The learning baselines are intentionally split by evidential role.
 
-Formal main baselines:
+Mixed-split Habitat diagnostic comparison:
 
 - PPO v2 geometry sensor, 3 seeds, synthetic-to-Habitat direct-control transfer.
 - SAC v2 geometry sensor direct-control baseline.
@@ -245,9 +264,9 @@ Formal main baselines:
 - APF+Gap classical baseline.
 - DEGNAV-Rule / Geometry-FSM.
 
-Diagnostic baselines:
+Clearance-aware diagnostic evaluation:
 
-- TD3 Habitat-native nominal success vs strict clearance-aware success.
+- TD3 Habitat-native nominal success vs clearance-aware strict success.
 
 Smoke / appendix-only baselines:
 
@@ -265,7 +284,7 @@ Tables:
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_diagnostic_baselines.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_smoke_baselines.md`
-- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_belief_mode_rl.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_degnav_rl_diagnostic.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_belief_mode_ablation.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_transfer_interference.md`
 
@@ -288,15 +307,15 @@ The Habitat-native TD3 result is intentionally reported as a diagnostic:
 
 | Method | Nominal success | Strict success | Unsafe success | Interpretation |
 |---|---:|---:|---:|---|
-| TD3 Habitat-native | 100.0% | 2.0% | 98.0% | RL can exploit nominal goal-reaching without safe clearance |
+| TD3 Habitat-native | 100.0% | 2.0% | 98.0% | RL can exploit nominal goal-reaching while violating the body-margin diagnostic |
 
 The split between nominal and strict success occurs because nominal success only
 checks the local goal/alignment condition, while strict success also requires
-clearance-safe traversal.  Therefore RL's 100% nominal result should be used to
-motivate strict clearance-aware evaluation, not to claim that RL safely solved
-the task.
+clearance-aware strict success.  Therefore RL's 100% nominal result should be used to
+motivate clearance-aware diagnostic evaluation, not to claim that RL solved the
+task.
 
-DEGNAV-RL is framed as a risk-constrained mode-selection skill:
+DEGNAV-RL is framed as a diagnostic mode-selection policy:
 
 - build an explicit belief state
   `b_t = (p_feas, E[Delta], Var[Delta], heading_error, lateral_error,
@@ -305,8 +324,12 @@ DEGNAV-RL is framed as a risk-constrained mode-selection skill:
 - keep the mode-conditioned low-level controller and strict clearance-aware
   safety checks outside the learned policy.
 
-This keeps the RL contribution aligned with the paper: learning can choose the
-mode, while explicit geometry, risk, and failure memory remain the core method.
+This keeps the RL contribution aligned with the paper: the diagnostic policy can
+test mode selection, while explicit geometry, risk, and failure memory remain
+the core method.  DEGNAV-RL is included as a diagnostic policy rather than a
+competitive final method. Under the current reward and action interface, the
+learned policy collapses to Commit and Explore and does not demonstrate
+meaningful Recover or Reject behavior.
 
 DEGNAV-RL entry points:
 
@@ -315,7 +338,9 @@ DEGNAV-RL entry points:
 - `examples/narrow_passage_rl/narrow_passage/envs/belief_mode_env.py`
 - `examples/narrow_passage_rl/narrow_passage/models/belief_state.py`
 
-Current diagnostic comparison, with eval domains shown explicitly:
+Current diagnostic comparison, with eval domains shown explicitly.  This is not
+a single leaderboard: the DEGNAV-RL row is procedural v2, while the
+direct-control rows below are Habitat diagnostics/provenance.
 
 | Method | Decision type | Eval domain | Overall SR | Strict SR | Collision | Near collision | Reject |
 |---|---|---|---:|---:|---:|---:|---:|
@@ -324,13 +349,19 @@ Current diagnostic comparison, with eval domains shown explicitly:
 | DEGNAV-RL | Learned high-level mode selector | Procedural v2 | 26.7% | 26.7% | 62.3% | 70.9% | 0.0% |
 | DEGNAV-Rule / Geometry-FSM | Rule mode selector | Habitat nominal anchors | 100.0% nominal anchor validation | 2.0% on HM3D nominal anchors | 0.0% | 100.0% | 0.0% |
 
-Interpretation: DEGNAV-RL is a useful diagnostic learning variant, but it is
-not the final method.  It improves over the weakest direct-control transfer
-baselines in success rate, yet it still has high collision and near-collision
-rates and did not learn to use `Reject` or `Recover` in the current setup.  Its
-role in the paper should therefore be: learning the mode selector alone is not
-enough unless safety constraints and failure-memory/reject behavior are made
-explicit.
+DEGNAV-RL mode distribution over 1500 procedural v2 evaluation episodes:
+Commit: 31.0%, Explore: 69.0%, Recover: 0.0%, Reject: 0.0%.
+
+Interpretation: DEGNAV-RL is a diagnostic learning variant, not the final
+method.  It still has high collision and near-collision rates and did not learn
+to use `Reject` or `Recover` in the current setup.  Its role in the paper should
+therefore be: learning the mode selector alone is not enough unless safety
+constraints and failure-memory/reject behavior are made explicit.
+
+This negative result supports five design conclusions: sparse reward alone is
+insufficient, mode semantics are not learned automatically, explicit failure
+memory may still be necessary, Recover/Reject require dedicated reward or
+supervision, and longer training alone may not solve mode collapse.
 
 Belief-state ablations are also diagnostic rather than a positive contribution
 claim: `geometry_only` reaches 30.9% strict SR, while the full belief state
@@ -380,7 +411,7 @@ python examples/narrow_passage_rl/eval_memory_transfer_interference.py \
 # 5. D_min calibration
 python examples/narrow_passage_rl/eval_dmin_calibration.py
 
-# 6. DEGNAV-RL paper-scale mode-selection run
+# 6. DEGNAV-RL diagnostic mode-selection run
 for seed in 0 1 2; do
   python examples/narrow_passage_rl/train_belief_mode_ppo.py \
       --total-steps 1000000 \

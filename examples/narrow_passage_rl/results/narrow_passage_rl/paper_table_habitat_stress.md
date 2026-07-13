@@ -1,6 +1,8 @@
 # Table: Habitat Stress Validation
 
-Nominal HM3D anchors are mostly well aligned; this table applies controlled stressors to test module robustness.
+Module sensitivity under controlled Habitat perturbations. Clearance-aware metrics are reported as diagnostic indicators and are not interpreted as calibrated physical safety measurements.
+
+The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated physical safety measurements.
 
 | Stress | Method | Episodes | SR | Strict SR | Collision | Near collision | Avg min clearance | Avg steps | Timeout |
 |:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|

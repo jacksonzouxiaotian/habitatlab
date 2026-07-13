@@ -1,8 +1,12 @@
 # Table: Diagnostic Learning Baselines
 
 These rows are diagnostic evidence, not the main baseline table.  They show why
-the paper reports clearance-aware safety metrics in addition to nominal
+the paper reports clearance-aware diagnostic metrics in addition to nominal
 goal-reaching success.
+
+The Habitat clearance-related metrics are derived from depth observations and an
+approximate robot body-margin model. They are used as clearance-aware diagnostic
+indicators rather than calibrated physical safety measurements.
 
 Geometry-FSM is referred to as DEGNAV-Rule in the paper.  The TD3 row below is
 not DEGNAV-RL: it is a direct-control policy that maps geometry observations
@@ -14,9 +18,9 @@ directly to velocity actions.
 
 Interpretation:
 - TD3 Habitat-native can optimize the nominal distance/alignment success signal,
-  but strict clearance-aware success remains very low.
+  but clearance-aware strict success remains very low.
 - This diagnostic row motivates reporting `strict_success`,
   `clearance_safe`, `success_but_unsafe`, near-collision rate, and minimum
   clearance for learning baselines.
-- Do not present this row as evidence that TD3 safely solves narrow-passage
-  traversal; it is evidence that nominal success alone is insufficient.
+- Do not present this row as evidence that TD3 achieves calibrated physical
+  safety; it is evidence that nominal success alone is insufficient.

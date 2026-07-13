@@ -1,3 +1,7 @@
-case,success_rate,collision_free_success_rate,collision_rate,tight_passage_rate,body_overlap_rate,avg_min_clearance,sr_straight,sr_narrow_entry,sr_false_feasible
-v2_geometry_fsm,0.5667,0.5667,0.0,0.2667,0.0,1.344,0.8571,0.5556,0.0
-v2_fsm_no_recovery,0.5,0.5,0.0,0.2333,0.0,1.6626,0.7143,0.5556,0.0
+case,success_rate,collision_free_success_rate,collision_rate,tight_passage_rate,body_overlap_rate,avg_min_clearance,sr_straight,sr_l_shaped,sr_s_shaped,sr_narrow_exit,sr_narrow_entry,sr_asymmetric,sr_false_feasible
+v2_rule_baseline,0.254,0.254,0.0,0.3347,0.0,1.8822,0.605,0.0821,0.0645,0.2723,0.2484,0.3354,0.0
+v2_geometry_fsm,0.7027,0.7027,0.0,0.3433,0.0,0.4178,0.9279,0.7964,0.7005,0.9671,0.6144,0.5061,0.0
+v2_fsm_no_recovery,0.7027,0.7027,0.0,0.3433,0.0,0.4178,0.9279,0.7964,0.7005,0.9671,0.6144,0.5061,0.0
+v2_fsm_no_alignment,0.254,0.254,0.0,0.322,0.0,1.924,0.5925,0.1,0.0691,0.2817,0.2484,0.311,0.0
+v2_fsm_local_memory,0.7027,0.7027,0.0,0.3433,0.0,0.4178,0.9279,0.7964,0.7005,0.9671,0.6144,0.5061,0.0
+v2_fsm_cross_memory,0.7027,0.7027,0.0,0.3433,0.0,0.4178,0.9279,0.7964,0.7005,0.9671,0.6144,0.5061,0.0

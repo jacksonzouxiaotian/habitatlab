@@ -44,6 +44,7 @@ from failure_memory import FailureMemoryConfig, PassageFailureMemory
 from risk_estimator import RiskConfig  # noqa: F401  (kept for future use)
 from narrow_passage.metrics.strict_metrics import compute_strict_metrics
 from narrow_passage.models.belief_state import BeliefState
+from evaluation.logging_schema import fieldnames_for_rows, finalize_episode_row
 
 import habitat  # noqa: E402  (import after sys.path setup)
 
@@ -430,6 +431,9 @@ def main() -> None:
             stat = {
                 "episode_id": str(episode.episode_id),
                 "scene_id": str(episode.scene_id).split("/")[-2],
+                "split": args.split,
+                "seed": "deterministic",
+                "method": "DEGNAV-Rule + failure memory" if use_memory else "DEGNAV-Rule / Geometry-FSM",
                 "steps": steps,
                 "success": success,
                 "strict_success": strict_metrics["strict_success"],
@@ -442,13 +446,16 @@ def main() -> None:
                 "min_clearance": float(min_bm),
                 "recover_triggers": recover_triggers,
                 "memory_writes": memory_writes,
-                **belief_row,
-                "mode": last_mode,
-                "mode_commit_count": int(mode_counts.get("commit", 0)),
-                "mode_explore_count": int(mode_counts.get("explore", 0)),
-                "mode_recover_count": int(mode_counts.get("recover", 0)),
-                "mode_reject_count": int(mode_counts.get("reject", 0)),
             }
+            stat = finalize_episode_row(
+                stat,
+                belief=belief_row,
+                belief_samples=[belief_row],
+                belief_available=True,
+                mode_counts=mode_counts,
+                mode_interface_available=True,
+                final_mode=last_mode,
+            )
             all_stats.append(stat)
 
             print(
@@ -493,7 +500,7 @@ def main() -> None:
         import csv
         args.output_csv.parent.mkdir(parents=True, exist_ok=True)
         with args.output_csv.open("w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(all_stats[0].keys()))
+            writer = csv.DictWriter(f, fieldnames=fieldnames_for_rows(all_stats))
             writer.writeheader()
             writer.writerows(all_stats)
         print(f"[write] {args.output_csv}")

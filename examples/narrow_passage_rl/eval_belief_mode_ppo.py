@@ -24,8 +24,8 @@ from procedural_env_v2 import HarderNarrowPassageEnv
 from narrow_passage.envs.belief_mode_env import (
     VALID_BELIEF_ABLATIONS,
     BeliefModeEnv,
-    MODE_ORDER,
 )
+from evaluation.logging_schema import fieldnames_for_rows, finalize_episode_row
 from narrow_passage.metrics.strict_metrics import compute_strict_metrics
 
 
@@ -43,41 +43,6 @@ CTYPE_CONFIGS = {
     "hard": ["L_SHAPED", "S_SHAPED", "NARROW_EXIT", "NARROW_ENTRY", "ASYMMETRIC"],
     "false_feasible_only": ["FALSE_FEASIBLE"],
 }
-
-CSV_FIELDS = [
-    "episode",
-    "seed",
-    "ablation",
-    "corridor_type",
-    "success",
-    "strict_success",
-    "collision",
-    "near_collision",
-    "reject",
-    "correct_reject",
-    "false_reject",
-    "timeout",
-    "min_clearance",
-    "final_p_feas",
-    "final_delta_mean",
-    "final_delta_var",
-    "final_d_hat",
-    "final_w_req_cons",
-    "final_memory_risk",
-    "final_risk",
-    "d_hat",
-    "w_req_cons",
-    "delta_mean",
-    "delta_var",
-    "p_feas",
-    "mode",
-    "risk",
-    "mode_commit_count",
-    "mode_explore_count",
-    "mode_recover_count",
-    "mode_reject_count",
-]
-
 
 def seed_everything(seed: int) -> None:
     random.seed(seed)
@@ -123,15 +88,6 @@ def _float(info: dict[str, Any], key: str, default: float = 0.0) -> float:
         return float(info.get(key, default))
     except (TypeError, ValueError):
         return float(default)
-
-
-def _mode_counter_row(mode_counts: Counter[str]) -> dict[str, int]:
-    return {
-        "mode_commit_count": int(mode_counts.get("commit", 0)),
-        "mode_explore_count": int(mode_counts.get("explore", 0)),
-        "mode_recover_count": int(mode_counts.get("recover", 0)),
-        "mode_reject_count": int(mode_counts.get("reject", 0)),
-    }
 
 
 def evaluate_model(
@@ -202,9 +158,22 @@ def evaluate_model(
             min_clearance=min_clearance,
         )
 
+        final_mode = str(last_info.get("mode_name", "unavailable"))
+        belief_row = {
+            "d_hat": _float(last_info, "d_hat"),
+            "w_req_cons": _float(last_info, "w_req_cons"),
+            "delta_mean": _float(last_info, "delta_mean"),
+            "delta_var": _float(last_info, "delta_var"),
+            "p_feas": _float(last_info, "p_feas"),
+            "risk": _float(last_info, "risk"),
+        }
         row = {
+            "episode_id": f"procedural_v2_{ep_seed:08d}",
+            "scene_id": "procedural_v2",
+            "split": "procedural_v2",
             "episode": ep,
             "seed": ep_seed,
+            "method": "DEGNAV-RL",
             "ablation": ablation,
             "corridor_type": _corridor_type(env, last_info),
             "success": _float(last_info, "success"),
@@ -223,16 +192,18 @@ def evaluate_model(
             "final_w_req_cons": _float(last_info, "w_req_cons"),
             "final_memory_risk": _float(last_info, "memory_risk"),
             "final_risk": _float(last_info, "risk"),
-            # Common aliases used by cross-method margin/phase visualizations.
-            "d_hat": _float(last_info, "d_hat"),
-            "w_req_cons": _float(last_info, "w_req_cons"),
-            "delta_mean": _float(last_info, "delta_mean"),
-            "delta_var": _float(last_info, "delta_var"),
-            "p_feas": _float(last_info, "p_feas"),
-            "mode": str(last_info.get("mode_name", "")),
-            "risk": _float(last_info, "risk"),
-            **_mode_counter_row(mode_counts),
+            "body_margin": _float(last_info, "body_margin", min_clearance),
+            "mode": final_mode,
         }
+        row = finalize_episode_row(
+            row,
+            belief=belief_row,
+            belief_samples=[belief_row],
+            belief_available=True,
+            mode_counts=mode_counts,
+            mode_interface_available=True,
+            final_mode=final_mode,
+        )
         rows.append(row)
 
     return rows, summarize(rows, global_mode_counts)
@@ -255,10 +226,10 @@ def summarize(
         for row in rows:
             mode_counts.update(
                 {
-                    "commit": int(row["mode_commit_count"]),
-                    "explore": int(row["mode_explore_count"]),
-                    "recover": int(row["mode_recover_count"]),
-                    "reject": int(row["mode_reject_count"]),
+                    "commit": int(row["commit_count"]),
+                    "explore": int(row["explore_count"]),
+                    "recover": int(row["recover_count"]),
+                    "reject": int(row["reject_count"]),
                 }
             )
 
@@ -329,7 +300,7 @@ def write_csv(rows: list[dict[str, Any]], path: Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        writer = csv.DictWriter(f, fieldnames=fieldnames_for_rows(rows))
         writer.writeheader()
         writer.writerows(rows)
     print(f"[write] {path}")

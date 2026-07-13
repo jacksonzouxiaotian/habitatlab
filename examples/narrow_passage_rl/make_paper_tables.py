@@ -500,14 +500,22 @@ def belief_mode_markdown(rows, notes):
     note_lines = [
         "",
         "Notes:",
-        "- DEGNAV-RL learns only the high-level mode selector over the explicit belief state; the velocity realization remains the same mode-conditioned controller as DEGNAV-Rule.",
+        "- DEGNAV-RL learns only the high-level mode selector pi(m_t | b_t). In the current setup, it remains unsafe and does not reliably use Recover or Reject. We therefore report DEGNAV-RL as a diagnostic learning variant rather than as the main method.",
+        "- The main method remains DEGNAV-Rule / Geometry-FSM.",
         "- Learning-only PPO/SAC/TD3 baselines output direct velocity actions from geometry observations.",
         "- The DEGNAV-RL row is a procedural v2 mode-selection result; Habitat DEGNAV-RL evaluation is not included yet.",
+        "- Do not claim DEGNAV-RL improves over DEGNAV-Rule or solves the task.",
         "- The PPO direct-velocity row here is a single-run mined-val provenance row when loaded from `habitat_ppo_v2_mined_val.csv`; the formal main PPO result remains 2.1% +/- 2.6% in `paper_table_formal_baselines.md`.",
     ]
     for note in notes:
         note_lines.append(f"- {note}")
-    return "\n".join(["# Table: Belief-Mode RL Comparison", "", header, sep, *body, *note_lines])
+    intro = [
+        "# Table: DEGNAV-RL Diagnostic Belief-Mode Comparison",
+        "",
+        "DEGNAV-RL learns only the high-level mode selector pi(m_t | b_t). In the current setup, it remains unsafe and does not reliably use Recover or Reject. We therefore report DEGNAV-RL as a diagnostic learning variant rather than as the main method.",
+        "",
+    ]
+    return "\n".join([*intro, header, sep, *body, *note_lines])
 
 
 def belief_mode_latex(rows, notes):
@@ -546,10 +554,12 @@ def belief_mode_ablation_markdown(rows, notes):
         "",
         "Notes:",
         "- These ablations test the learned high-level mode selector input, not the low-level mode-conditioned controller.",
+        "- DEGNAV-RL learns only the high-level mode selector pi(m_t | b_t). In the current setup, it remains unsafe and does not reliably use Recover or Reject. We therefore report DEGNAV-RL as a diagnostic learning variant rather than as the main method.",
+        "- The full belief state is not better than `geometry_only` in this run, so this table should not be used to claim that belief-guided PPO solves the task.",
     ]
     for note in notes:
         note_lines.append(f"- {note}")
-    return "\n".join(["# Table: DEGNAV-RL Belief-State Ablation", "", header, sep, *body, *note_lines])
+    return "\n".join(["# Table: DEGNAV-RL Diagnostic Belief-State Ablation", "", header, sep, *body, *note_lines])
 
 
 def belief_mode_ablation_latex(rows, notes):
@@ -619,16 +629,30 @@ def main():
     habitat_ablation_rows = select_rows(read_rows(habitat_csv), HABITAT_ABLATION_CASES)
 
     if main_rows:
-        write_text(args.output_dir / "paper_table_main.md", markdown_table(main_rows, COLUMNS))
-        write_text(args.output_dir / "paper_table_main.tex", latex_table(main_rows, COLUMNS))
-        print("[write] paper_table_main.md")
-        print("[write] paper_table_main.tex")
+        legacy_dir = args.output_dir / "legacy"
+        write_text(
+            legacy_dir / "legacy_paper_table_main_old_procedural.md",
+            markdown_table(main_rows, COLUMNS),
+        )
+        write_text(
+            legacy_dir / "legacy_paper_table_main_old_procedural.tex",
+            latex_table(main_rows, COLUMNS),
+        )
+        print("[write] legacy/legacy_paper_table_main_old_procedural.md")
+        print("[write] legacy/legacy_paper_table_main_old_procedural.tex")
 
     if ablation_rows:
-        write_text(args.output_dir / "paper_table_ablation.md", markdown_table(ablation_rows, COLUMNS[:8]))
-        write_text(args.output_dir / "paper_table_ablation.tex", latex_table(ablation_rows, COLUMNS[:8]))
-        print("[write] paper_table_ablation.md")
-        print("[write] paper_table_ablation.tex")
+        legacy_dir = args.output_dir / "legacy"
+        write_text(
+            legacy_dir / "legacy_paper_table_ablation_old_cases.md",
+            markdown_table(ablation_rows, COLUMNS[:8]),
+        )
+        write_text(
+            legacy_dir / "legacy_paper_table_ablation_old_cases.tex",
+            latex_table(ablation_rows, COLUMNS[:8]),
+        )
+        print("[write] legacy/legacy_paper_table_ablation_old_cases.md")
+        print("[write] legacy/legacy_paper_table_ablation_old_cases.tex")
 
     if habitat_rows:
         write_text(args.output_dir / "paper_table_habitat.md", markdown_table(habitat_rows, HABITAT_COLUMNS))
@@ -652,10 +676,15 @@ def main():
         belief_mode_markdown(belief_rows, belief_notes),
     )
     write_text(
+        args.output_dir / "paper_table_degnav_rl_diagnostic.md",
+        belief_mode_markdown(belief_rows, belief_notes),
+    )
+    write_text(
         args.output_dir / "paper_table_belief_mode_rl.tex",
         belief_mode_latex(belief_rows, belief_notes),
     )
     print("[write] paper_table_belief_mode_rl.md")
+    print("[write] paper_table_degnav_rl_diagnostic.md")
     print("[write] paper_table_belief_mode_rl.tex")
 
     ablation_rows, ablation_notes = _belief_mode_ablation_table_rows(

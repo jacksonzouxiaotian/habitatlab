@@ -1,0 +1,860 @@
+version: 1
+updated: "2026-07-13"
+scope: "AAAI narrow-passage paper result registry"
+
+registry_rules:
+  - "status must be one of: canonical, diagnostic, smoke, legacy."
+  - "Mixed-split tables are diagnostic or legacy, never canonical."
+  - "Cross-domain comparison tables are diagnostic unless a same-split canonical table is generated."
+  - "paper_table_formal_baselines.md is a mixed-split Habitat diagnostic comparison because it contains both HM3D Val set A and mined Val set B."
+  - "Current DEGNAV-RL results are diagnostic until safe mode selection is reliable."
+  - "Smoke baselines are never allowed in the main paper."
+  - "The 100.0% DEGNAV-Rule / Geometry-FSM Habitat row means nominal anchor validation under the current mining protocol, not universal robustness."
+  - "If multiple entries reference the same path, every secondary entry must declare alias_of."
+  - "Entries with split_policy: mixed must set canonical: false and paper_safe: false unless they are only raw-data provenance with table_status: missing."
+
+results:
+  procedural_v2_main:
+    role: canonical_main
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_procedural_v2_main.md"
+    table_status: available
+    split: "synthetic v2 benchmark, held procedural seeds"
+    split_policy: same
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_summary.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_procedural_v2_main.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_harder_main.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_summary.csv"
+    domain: "Procedural v2 HarderNarrowPassageEnv"
+    eval_split: "synthetic v2 benchmark, held procedural seeds"
+    train_domain: "none for rule methods; procedural v2 for direct-control RL where included"
+    methods:
+      - "Geometry-FSM"
+      - "Rule baseline"
+      - "PPO v2 geometry sensor"
+    paper_method_names:
+      Geometry-FSM: "DEGNAV-Rule"
+      Rule baseline: "Rule baseline"
+      PPO v2 geometry sensor: "PPO direct-control baseline"
+    seeds: [42, 43, 44]
+    episodes: "500 per seed"
+    metrics:
+      - "success_rate"
+      - "collision_rate"
+      - "stuck_rate"
+      - "steps"
+      - "corridor_type_success"
+    metric_definitions:
+      success_rate: "Fraction of episodes that reach the procedural goal without terminating as failure."
+      collision_rate: "Fraction of episodes that report collision through the procedural environment."
+      stuck_rate: "Fraction of episodes that terminate due to low progress or stuck detection."
+      steps: "Episode length in environment steps."
+      corridor_type_success: "Success rate grouped by procedural corridor type."
+    notes:
+      - "Primary procedural v2 benchmark table for DEGNAV-Rule."
+      - "Use this table for synthetic narrow-passage behavior, not for Habitat HM3D claims."
+
+  procedural_v2_ablation:
+    role: canonical_ablation
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_harder_ablation.md"
+    table_status: available
+    split: "synthetic v2 benchmark, held procedural seeds"
+    split_policy: same
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/benchmark_ablation_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/benchmark_ablation_summary.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_harder_ablation.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_harder_ablation.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/benchmark_ablation_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/benchmark_ablation_summary.csv"
+    domain: "Procedural v2 HarderNarrowPassageEnv"
+    eval_split: "synthetic v2 benchmark, held procedural seeds"
+    train_domain: "none; rule-controller ablations"
+    methods:
+      - "Geometry-FSM full"
+      - "FSM w/o recovery"
+      - "FSM w/o heading alignment"
+      - "FSM w/o lateral alignment"
+    paper_method_names:
+      Geometry-FSM full: "DEGNAV-Rule"
+      FSM w/o recovery: "DEGNAV-Rule w/o recovery"
+      FSM w/o heading alignment: "DEGNAV-Rule w/o heading alignment"
+      FSM w/o lateral alignment: "DEGNAV-Rule w/o lateral alignment"
+    seeds: [42, 43, 44]
+    episodes: "500 per seed"
+    metrics:
+      - "success_rate"
+      - "collision_rate"
+      - "stuck_rate"
+      - "steps"
+      - "corridor_type_success"
+    metric_definitions:
+      success_rate: "Fraction of episodes that reach the procedural goal without terminating as failure."
+      collision_rate: "Fraction of episodes that report collision through the procedural environment."
+      stuck_rate: "Fraction of episodes that terminate due to low progress or stuck detection."
+      steps: "Episode length in environment steps."
+      corridor_type_success: "Success rate grouped by procedural corridor type."
+    notes:
+      - "Use this table to support module-level ablations in procedural v2."
+
+  habitat_formal_same_split:
+    role: canonical_nominal
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_same_split.md"
+    table_status: available
+    split: "hm3d_val_set_a"
+    split_policy: same_split
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_ppo_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_apf_gap_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_fsm_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_memory_v2_episodes.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_same_split.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_same_split.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_ppo_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_apf_gap_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_fsm_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_memory_v2_episodes.csv"
+    domain: "Habitat HM3D NarrowPassageNav-v0"
+    eval_split: "Val set A, 157 episodes, 20 held-out HM3D val scenes"
+    train_domain: "synthetic v2 for PPO; none for APF+Gap and rule controllers"
+    methods:
+      - "PPO v2 geometry sensor"
+      - "APF+Gap"
+      - "Geometry-FSM"
+      - "FSM + Failure Memory"
+    paper_method_names:
+      PPO v2 geometry sensor: "PPO direct-control baseline"
+      APF+Gap: "APF+Gap classical baseline"
+      Geometry-FSM: "DEGNAV-Rule"
+      FSM + Failure Memory: "DEGNAV-Rule + failure memory"
+    seeds:
+      PPO v2 geometry sensor: [0, 1, 2]
+      APF+Gap: "deterministic"
+      Geometry-FSM: "deterministic"
+      FSM + Failure Memory: "deterministic"
+    episodes: 157
+    metrics:
+      - "nominal_success_rate"
+      - "collision_rate"
+      - "difficulty_bin_success"
+    metric_definitions:
+      nominal_success_rate: "NarrowPassageNav-v0 goal-reaching success under unperturbed mined anchors."
+      collision_rate: "Habitat collision flag; with allow_sliding=False this may undercount boundary contact."
+      difficulty_bin_success: "Success rate grouped by narrow, normal, and wide body-margin bins."
+    notes:
+      - "This entry is the same-split Habitat nominal anchor-validation table."
+      - "All included rows use the same 157 HM3D Val set A episode IDs."
+      - "Success and steps are the fair all-method comparison metrics available in every source CSV."
+      - "Collision and near-collision are not logged for PPO/APF+Gap in these source CSVs, so those diagnostic columns are not used for all-method ranking."
+      - "The 100.0% DEGNAV-Rule / Geometry-FSM row is nominal anchor validation under the current mining protocol, not universal robustness."
+      - "Failure memory is not expected to improve one-shot passable-anchor success; cite repeated-failure memory experiments for the memory contribution."
+
+  habitat_stress_nominal:
+    role: perturbation_sensitivity
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.md"
+    table_status: available
+    split: "HM3D val mined anchors with yaw, lateral offset, dropout, noise, and extreme-narrow filters"
+    split_policy: stress_grid
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_stress_validation.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_stress_validation.csv"
+    domain: "Habitat HM3D NarrowPassageNav-v0 stress validation"
+    eval_split: "HM3D val mined anchors with yaw, lateral offset, dropout, noise, and extreme-narrow filters"
+    train_domain: "none for rule-controller variants; APF+Gap has no learning"
+    methods:
+      - "Full Geometry-FSM"
+      - "FSM w/o heading alignment"
+      - "FSM w/o recovery"
+      - "FSM w/o lateral alignment"
+      - "APF+Gap"
+    paper_method_names:
+      Full Geometry-FSM: "DEGNAV-Rule"
+      FSM w/o heading alignment: "DEGNAV-Rule w/o heading alignment"
+      FSM w/o recovery: "DEGNAV-Rule w/o recovery"
+      FSM w/o lateral alignment: "DEGNAV-Rule w/o lateral alignment"
+      APF+Gap: "APF+Gap classical baseline"
+    seeds: "deterministic evaluation over stress grid"
+    episodes: "see raw CSV; varies by stress factor and subset"
+    metrics:
+      - "success_rate"
+      - "strict_success_rate"
+      - "collision_rate"
+      - "near_collision_rate"
+      - "avg_min_clearance"
+      - "avg_steps"
+      - "timeout_rate"
+    metric_definitions:
+      success_rate: "Nominal Habitat task success."
+      strict_success_rate: "Success plus clearance-safe and no collision/stuck condition."
+      collision_rate: "Habitat collision flag."
+      near_collision_rate: "Fraction of episodes with min clearance below the near-collision threshold."
+      avg_min_clearance: "Mean minimum clearance observed over each episode."
+      avg_steps: "Mean episode length."
+      timeout_rate: "Fraction of episodes ending due to max-step timeout."
+    notes:
+      - "Primary Habitat robustness evidence beyond nominal anchors."
+      - "Use this table to discuss module sensitivity under Habitat perturbations."
+      - "Clearance-aware metrics are depth-derived body-margin diagnostics, not calibrated physical safety measurements."
+
+  habitat_clearance_diagnostic:
+    role: diagnostic
+    status: diagnostic
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_diagnostic_baselines.md"
+    table_status: available
+    split: "Mined Val set B, 151 episodes"
+    split_policy: diagnostic_same_split
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_td3_habitat_native_strict_eval.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_diagnostic_baselines.md"
+    table_tex: null
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_td3_habitat_native_strict_eval.csv"
+    domain: "Habitat HM3D NarrowPassageNav-v0"
+    eval_split: "Mined Val set B, 151 episodes"
+    train_domain: "Habitat HM3D mined Val set B"
+    methods:
+      - "TD3 Habitat-native"
+    paper_method_names:
+      TD3 Habitat-native: "TD3 direct-control diagnostic"
+    seeds: [0]
+    episodes: 151
+    metrics:
+      - "nominal_success_rate"
+      - "strict_success_rate"
+      - "clearance_safe_rate"
+      - "success_but_unsafe"
+      - "collision_rate"
+      - "near_collision_rate"
+      - "avg_min_clearance"
+    metric_definitions:
+      nominal_success_rate: "Habitat task success based on reaching the goal."
+      strict_success_rate: "Nominal success with clearance-aware strict success and no collision/stuck."
+      clearance_safe_rate: "Fraction of episodes whose minimum clearance satisfies the strict threshold."
+      success_but_unsafe: "Nominal success that fails strict clearance safety."
+      collision_rate: "Habitat collision flag."
+      near_collision_rate: "Fraction of episodes with min clearance below near-collision threshold."
+      avg_min_clearance: "Mean minimum clearance across episodes."
+    notes:
+      - "Diagnostic evidence that nominal success alone can be exploited by direct-control RL."
+      - "Habitat clearance metrics are depth-derived body-margin diagnostics, not calibrated physical safety measurements."
+      - "This row should not be presented as calibrated clearance performance."
+
+  rl_direct_control_baselines:
+    role: diagnostic
+    status: diagnostic
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md"
+    table_status: available
+    split: "Mixed: Val set A for PPO/APF; mined Val set B for SAC/TD3/DEGNAV-Rule row in table"
+    split_policy: mixed
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_ppo_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_ppo_v2_mined_val.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_sac_v2_mined_val.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_td3_v2_mined_val.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md"
+    table_tex: null
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_ppo_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_ppo_v2_mined_val.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_sac_v2_mined_val.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_td3_v2_mined_val.csv"
+    domain: "Mixed-split Habitat diagnostic comparison"
+    eval_split: "Mixed: Val set A for PPO/APF; mined Val set B for SAC/TD3/DEGNAV-Rule row in table"
+    train_domain: "Synthetic v2 HarderNarrowPassageEnv"
+    methods:
+      - "PPO v2 geometry sensor"
+      - "SAC v2 geometry sensor"
+      - "TD3 synthetic-to-Habitat"
+    paper_method_names:
+      PPO v2 geometry sensor: "PPO direct-control baseline"
+      SAC v2 geometry sensor: "SAC direct-control baseline"
+      TD3 synthetic-to-Habitat: "TD3 direct-control baseline"
+    seeds:
+      PPO v2 geometry sensor: [0, 1, 2]
+      SAC v2 geometry sensor: [0]
+      TD3 synthetic-to-Habitat: [0]
+    episodes:
+      PPO v2 geometry sensor: 157
+      SAC v2 geometry sensor: 151
+      TD3 synthetic-to-Habitat: 151
+    metrics:
+      - "nominal_success_rate"
+      - "collision_rate"
+      - "difficulty_bin_success"
+    metric_definitions:
+      nominal_success_rate: "Habitat goal-reaching success, not clearance-aware strict success."
+      collision_rate: "Habitat collision flag."
+      difficulty_bin_success: "Success rate grouped by narrow, normal, and wide body-margin bins."
+    notes:
+      - "This is a mixed-split Habitat diagnostic comparison, not a canonical same-split ranking."
+      - "The table contains both HM3D Val set A and mined Val set B rows."
+      - "Do not use this table for fair method ranking in the main paper."
+      - "Direct-control baselines map 19-D geometry observations directly to velocity actions."
+      - "Legacy PPO runs with observation mismatch are excluded from the direct-control baseline claim."
+
+  degnav_rl_diagnostic:
+    role: diagnostic
+    status: diagnostic
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_degnav_rl_diagnostic.md"
+    table_status: available
+    split: "synthetic v2 procedural evaluation"
+    split_policy: same
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed2_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_p_feas_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_p_feas_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_p_feas_seed2_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_delta_var_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_delta_var_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_delta_var_seed2_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_memory_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_memory_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_memory_seed2_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_alignment_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_alignment_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_alignment_seed2_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_geometry_only_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_geometry_only_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_geometry_only_seed2_eval.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_degnav_rl_diagnostic.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_belief_mode_rl.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed2_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_p_feas_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_p_feas_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_p_feas_seed2_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_delta_var_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_delta_var_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_delta_var_seed2_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_memory_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_memory_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_memory_seed2_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_alignment_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_alignment_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_alignment_seed2_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_geometry_only_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_geometry_only_seed1_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_geometry_only_seed2_eval.csv"
+    domain: "Procedural v2 BeliefModeEnv"
+    eval_split: "synthetic v2 procedural evaluation"
+    train_domain: "Procedural v2 BeliefModeEnv"
+    methods:
+      - "DEGNAV-RL full"
+      - "DEGNAV-RL no_p_feas"
+      - "DEGNAV-RL no_delta_var"
+      - "DEGNAV-RL no_memory"
+      - "DEGNAV-RL no_alignment"
+      - "DEGNAV-RL geometry_only"
+    paper_method_names:
+      DEGNAV-RL full: "DEGNAV-RL"
+      DEGNAV-RL no_p_feas: "DEGNAV-RL w/o p_feas"
+      DEGNAV-RL no_delta_var: "DEGNAV-RL w/o delta variance"
+      DEGNAV-RL no_memory: "DEGNAV-RL w/o memory risk"
+      DEGNAV-RL no_alignment: "DEGNAV-RL w/o alignment belief"
+      DEGNAV-RL geometry_only: "DEGNAV-RL geometry-only belief"
+    seeds: [0, 1, 2]
+    episodes: "500 per seed"
+    metrics:
+      - "success_rate"
+      - "strict_success_rate"
+      - "collision_rate"
+      - "near_collision_rate"
+      - "reject_rate"
+      - "correct_reject_rate"
+      - "false_reject_rate"
+      - "mode_distribution"
+    metric_definitions:
+      success_rate: "Procedural nominal goal-reaching success."
+      strict_success_rate: "Success satisfying shared clearance-aware diagnostic metrics."
+      collision_rate: "Procedural collision fraction."
+      near_collision_rate: "Fraction below near-collision clearance threshold."
+      reject_rate: "Fraction of episodes where learned mode selector chooses Reject."
+      correct_reject_rate: "Reject on physically infeasible or false-feasible passages."
+      false_reject_rate: "Reject on passable passages."
+      mode_distribution: "Counts or frequencies of Commit, Explore, Recover, and Reject modes."
+    notes:
+      - "DEGNAV-RL learns pi(m_t | b_t), not direct velocity."
+      - "DEGNAV-RL is included as a diagnostic policy rather than a competitive final method."
+      - "Under the current reward and action interface, the learned policy collapses to Commit and Explore and does not demonstrate meaningful Recover or Reject behavior."
+      - "Full-belief mode usage over 1500 evaluation episodes is Commit: 31.0%, Explore: 69.0%, Recover: 0.0%, Reject: 0.0%."
+      - "Current DEGNAV-RL does not reliably use Recover or Reject and should not be presented as the main method."
+      - "This result supports the analysis that sparse reward alone is insufficient, mode semantics are not learned automatically, explicit failure memory may still be necessary, Recover/Reject require dedicated reward or supervision, and longer training alone may not solve mode collapse."
+      - "Velocity realization is the same mode-conditioned controller used by DEGNAV-Rule."
+
+  repeated_failure_memory:
+    role: canonical_main
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_repeated_failure_memory.md"
+    table_status: available
+    split: "multi-round repeated false-feasible benchmark"
+    split_policy: same
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/repeated_failure_memory.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_repeated_failure_memory.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_repeated_failure_memory.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/repeated_failure_memory.csv"
+    domain: "Procedural repeated false-feasible corridors"
+    eval_split: "multi-round repeated false-feasible benchmark"
+    train_domain: "no gradient training; memory is updated online from failures"
+    methods:
+      - "no memory"
+      - "local intra-episode memory"
+      - "kNN failure memory"
+      - "vanilla episodic memory"
+      - "geometry-guided cross-episode failure memory"
+    paper_method_names:
+      no memory: "No memory"
+      local intra-episode memory: "Local memory"
+      kNN failure memory: "kNN failure memory"
+      vanilla episodic memory: "Vanilla episodic memory"
+      geometry-guided cross-episode failure memory: "Geometry-guided failure memory"
+    seeds: "see raw CSV"
+    episodes: "multi-round passable plus false-feasible corridors; see raw CSV"
+    metrics:
+      - "passable_success_rate"
+      - "passable_false_reject_rate"
+      - "false_feasible_reject_rate"
+      - "wasted_steps_on_false_feasible"
+      - "steps_saved_vs_no_memory"
+      - "memory_retrieval_precision"
+    metric_definitions:
+      passable_success_rate: "Success rate on physically passable corridors."
+      passable_false_reject_rate: "Fraction of passable corridors rejected by memory."
+      false_feasible_reject_rate: "Fraction of false-feasible corridors rejected."
+      wasted_steps_on_false_feasible: "Steps spent committing to false-feasible corridors before rejection or failure."
+      steps_saved_vs_no_memory: "Reduction in false-feasible wasted steps relative to no-memory baseline."
+      memory_retrieval_precision: "Precision of retrieved failure cases when available."
+    notes:
+      - "Primary evidence that failure memory reduces repeated infeasible commitment and wasted attempts."
+      - "Do not claim memory improves one-shot nominal Habitat passable-anchor success from this table."
+
+  memory_transfer_interference:
+    role: canonical_main
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_transfer_interference.md"
+    table_status: available
+    split: "paper preset: same-passage false-feasible, similar-new false-feasible, and similar-feasible groups"
+    split_policy: same
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/memory_transfer_interference.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_transfer_interference.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_transfer_interference.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/memory_transfer_interference.csv"
+    domain: "Procedural memory transfer and interference benchmark"
+    eval_split: "paper preset: same-passage false-feasible, similar-new false-feasible, and similar-feasible groups"
+    train_domain: "no gradient training; memory is updated online from failures"
+    methods:
+      - "no_memory"
+      - "local_intra_episode_memory"
+      - "vanilla_episodic_memory"
+      - "knn_failure_memory"
+      - "geometry_guided_cross_episode_failure_memory"
+    paper_method_names:
+      no_memory: "No memory"
+      local_intra_episode_memory: "Local memory"
+      vanilla_episodic_memory: "Vanilla episodic memory"
+      knn_failure_memory: "kNN failure memory"
+      geometry_guided_cross_episode_failure_memory: "Geometry-guided failure memory"
+    seeds: 5
+    episodes: "paper preset; see raw CSV"
+    metrics:
+      - "passable_success_rate"
+      - "passable_false_reject_rate"
+      - "false_feasible_reject_rate_round_1"
+      - "false_feasible_reject_rate_final"
+      - "wasted_false_feasible_attempts_round_1"
+      - "wasted_false_feasible_attempts_final"
+      - "transfer_reject_rate_on_similar_new_false_feasible"
+      - "interference_false_reject_rate_on_similar_feasible"
+    metric_definitions:
+      passable_success_rate: "Success rate on physically feasible passages."
+      passable_false_reject_rate: "False rejection on feasible passages."
+      false_feasible_reject_rate_round_1: "Reject rate on false-feasible passages before full memory accumulation."
+      false_feasible_reject_rate_final: "Reject rate on false-feasible passages at the final round."
+      wasted_false_feasible_attempts_round_1: "False-feasible commitment attempts in round 1."
+      wasted_false_feasible_attempts_final: "False-feasible commitment attempts in the final round."
+      transfer_reject_rate_on_similar_new_false_feasible: "Reject rate on geometrically similar but previously unseen false-feasible passages."
+      interference_false_reject_rate_on_similar_feasible: "False rejection rate induced by memory on similar feasible passages."
+    notes:
+      - "Use this table for memory generalization and interference claims."
+      - "Geometry-guided memory is the only listed memory method intended to avoid false rejection on similar feasible passages."
+
+  dmin_calibration:
+    role: canonical_calibration
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: false
+    path: null
+    table_status: missing
+    split: "synthetic calibration episodes"
+    split_policy: same
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calib_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calib_convergence.csv"
+    table_md: null
+    table_tex: null
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calib_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calib_convergence.csv"
+    domain: "Procedural D_min / clearance calibration"
+    eval_split: "synthetic calibration episodes"
+    train_domain: "none"
+    methods:
+      - "DEGNAV-Rule calibration"
+    paper_method_names:
+      DEGNAV-Rule calibration: "D_min calibration"
+    seeds: "see raw CSV"
+    episodes: "see raw CSV"
+    metrics:
+      - "d_min"
+      - "clearance_error"
+      - "convergence"
+    metric_definitions:
+      d_min: "Estimated minimum clearance or required width margin."
+      clearance_error: "Calibration error between predicted and observed clearance."
+      convergence: "Iteration-level convergence statistics in dmin_calib_convergence.csv."
+    notes:
+      - "Use with dmin_calibration.png for calibration evidence."
+      - "No standalone Markdown or LaTeX table exists yet."
+
+  margin_phase:
+    role: canonical_figure
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/figures/margin_phase_all_methods.pdf"
+    table_status: figure
+    split: "procedural v2 logged episodes binned by estimated margin"
+    split_policy: input_csv_dependent
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/margin_phase_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv"
+    table_md: null
+    table_tex: null
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/margin_phase_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv"
+    domain: "Width-margin phase analysis"
+    eval_split: "procedural v2 logged episodes binned by estimated margin"
+    train_domain: "none for DEGNAV-Rule; procedural v2 for DEGNAV-RL diagnostic overlay"
+    methods:
+      - "DEGNAV-Rule"
+      - "DEGNAV-RL"
+    paper_method_names:
+      DEGNAV-Rule: "DEGNAV-Rule"
+      DEGNAV-RL: "DEGNAV-RL"
+    seeds: "depends on input CSVs"
+    episodes: "depends on input CSVs"
+    metrics:
+      - "delta_mean_bin"
+      - "success_rate"
+      - "strict_success_rate"
+      - "collision_rate"
+      - "near_collision_rate"
+      - "reject_rate"
+      - "mode_frequency"
+    metric_definitions:
+      delta_mean_bin: "Bin of estimated margin d_hat - w_req_cons."
+      success_rate: "Mean success within each margin bin."
+      strict_success_rate: "Mean strict success within each margin bin when available."
+      collision_rate: "Mean collision within each margin bin."
+      near_collision_rate: "Mean near-collision within each margin bin when available."
+      reject_rate: "Mean reject rate within each margin bin."
+      mode_frequency: "Commit, Explore, Recover, and Reject frequencies when mode logs exist."
+    notes:
+      - "Figure outputs are figures/margin_phase_all_methods.pdf and figures/margin_phase_all_methods.png."
+      - "Do not fabricate missing method rows; the plot script uses only logged CSV columns."
+
+  legacy_old_procedural_table:
+    role: legacy
+    status: legacy
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: true
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/legacy/legacy_paper_table_main_old_procedural.md"
+    table_status: available
+    split: "legacy synthetic runs"
+    split_policy: legacy_mixed
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/results_rl_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/sb3_on_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/ppo_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/ppo_seed0_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/ppo_seed1_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/ppo_seed2_episodes.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/legacy/legacy_paper_table_main_old_procedural.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/legacy/legacy_paper_table_main_old_procedural.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/results_rl_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/sb3_on_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/ppo_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/ppo_seed0_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/ppo_seed1_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/ppo_seed2_episodes.csv"
+    domain: "Older procedural benchmark versions"
+    eval_split: "legacy synthetic runs"
+    train_domain: "legacy synthetic runs"
+    methods:
+      - "rule_baseline"
+      - "passage_ppo"
+      - "geometry_fsm"
+      - "older PPO/SB3 variants"
+    paper_method_names:
+      rule_baseline: "Legacy rule baseline"
+      passage_ppo: "Legacy PPO"
+      geometry_fsm: "Legacy Geometry-FSM"
+      older PPO/SB3 variants: "Legacy learning baselines"
+    seeds: "mixed legacy seeds"
+    episodes: "see raw CSV"
+    metrics:
+      - "success_rate"
+      - "collision_rate"
+      - "steps"
+    metric_definitions:
+      success_rate: "Legacy success definition; may differ from current strict metrics."
+      collision_rate: "Legacy collision definition."
+      steps: "Legacy episode length."
+    notes:
+      - "Kept for provenance only."
+      - "Do not cite as current formal result."
+
+  legacy_old_ablation_table:
+    role: legacy
+    status: legacy
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: true
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/legacy/legacy_paper_table_ablation_old_cases.md"
+    table_status: available
+    split: "legacy synthetic runs"
+    split_policy: legacy_mixed
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/results_rl_summary.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/legacy/legacy_paper_table_ablation_old_cases.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/legacy/legacy_paper_table_ablation_old_cases.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/results_rl_summary.csv"
+    domain: "Older procedural ablation/case table"
+    eval_split: "legacy synthetic runs"
+    train_domain: "legacy synthetic runs"
+    methods:
+      - "passage_ppo"
+      - "ablation_no_failure"
+      - "ablation_no_clearance"
+      - "no_curriculum"
+    paper_method_names:
+      passage_ppo: "Legacy PPO"
+      ablation_no_failure: "Legacy ablation without failure component"
+      ablation_no_clearance: "Legacy ablation without clearance component"
+      no_curriculum: "Legacy no-curriculum run"
+    seeds: "mixed legacy seeds"
+    episodes: "see raw CSV"
+    metrics:
+      - "success_rate"
+      - "collision_rate"
+      - "near_collision_rate"
+      - "avg_min_clearance"
+    metric_definitions:
+      success_rate: "Legacy success definition; may differ from current procedural v2 and strict metrics."
+      collision_rate: "Legacy collision definition."
+      near_collision_rate: "Legacy near-collision definition."
+      avg_min_clearance: "Legacy average minimum clearance."
+    notes:
+      - "Kept for provenance only."
+      - "Do not cite as current ablation result; use procedural_v2_ablation instead."
+
+  legacy_mixed_split_formal_baselines:
+    role: legacy_alias
+    alias_of: rl_direct_control_baselines
+    status: legacy
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: true
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md"
+    table_status: alias
+    split: "Mixed Val set A and mined Val set B"
+    split_policy: mixed
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_ppo_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_ppo_v2_mined_val.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_sac_v2_mined_val.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_td3_v2_mined_val.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_apf_gap_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_fsm_mined_val.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md"
+    table_tex: null
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_ppo_v2_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_ppo_v2_mined_val.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_sac_v2_mined_val.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_td3_v2_mined_val.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_apf_gap_episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_fsm_mined_val.csv"
+    domain: "Mixed-split Habitat diagnostic comparison"
+    eval_split: "Mixed Val set A and mined Val set B"
+    train_domain: "mixed: synthetic v2, none, and Habitat-native diagnostics"
+    methods:
+      - "PPO v2 geometry sensor"
+      - "SAC v2 geometry sensor"
+      - "TD3 synthetic-to-Habitat"
+      - "APF+Gap"
+      - "DEGNAV-Rule / Geometry-FSM"
+    paper_method_names:
+      PPO v2 geometry sensor: "PPO direct-control baseline"
+      SAC v2 geometry sensor: "SAC direct-control baseline"
+      TD3 synthetic-to-Habitat: "TD3 direct-control baseline"
+      APF+Gap: "APF+Gap classical baseline"
+      DEGNAV-Rule / Geometry-FSM: "DEGNAV-Rule"
+    seeds: "mixed by method"
+    episodes: "mixed: 157 for Val set A rows, 151 for mined Val set B rows"
+    metrics:
+      - "nominal_success_rate"
+      - "collision_rate"
+    metric_definitions:
+      nominal_success_rate: "Habitat nominal goal-reaching success, mixed across different eval sets."
+      collision_rate: "Habitat collision flag."
+    notes:
+      - "Alias of rl_direct_control_baselines; kept for backward compatibility with older manifest readers."
+      - "This table mixes eval splits and must not be used as a canonical ranking."
+      - "It is explicitly labeled as a mixed-split Habitat diagnostic comparison."
+      - "Use same-split raw CSVs or generate a same-split table before citing formal Habitat comparisons."
+
+  smoke_baselines:
+    role: smoke_test
+    status: smoke
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_smoke_baselines.md"
+    table_status: available
+    split: "small smoke runs"
+    split_policy: smoke
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_smoke_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_smoke_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/bc_v2_smoke_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/bc_v2_smoke_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/dagger_v2_smoke_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/dagger_v2_smoke_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/replay_memory_policy_v2_smoke_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/replay_memory_policy_v2_smoke_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke_episodes.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_smoke_baselines.md"
+    table_tex: null
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_smoke_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_ppo_v2_smoke_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/bc_v2_smoke_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/bc_v2_smoke_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/dagger_v2_smoke_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/dagger_v2_smoke_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/replay_memory_policy_v2_smoke_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/replay_memory_policy_v2_smoke_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/expert_fsm_v2_smoke_episodes.csv"
+    domain: "Procedural v2 smoke tests"
+    eval_split: "small smoke runs"
+    train_domain: "procedural v2 smoke training"
+    methods:
+      - "RecurrentPPO smoke"
+      - "BC-FSM smoke"
+      - "DAgger-FSM smoke"
+      - "Replay Memory Policy smoke"
+    paper_method_names:
+      RecurrentPPO smoke: "RecurrentPPO smoke"
+      BC-FSM smoke: "BC-FSM smoke"
+      DAgger-FSM smoke: "DAgger-FSM smoke"
+      Replay Memory Policy smoke: "Replay Memory Policy smoke"
+    seeds: "smoke-run seeds only"
+    episodes: "small smoke evaluation; see raw CSV"
+    metrics:
+      - "success_rate"
+      - "collision_rate"
+      - "stuck_rate"
+      - "steps"
+    metric_definitions:
+      success_rate: "Smoke-run success rate, not powered for paper claims."
+      collision_rate: "Smoke-run collision rate."
+      stuck_rate: "Smoke-run stuck rate."
+      steps: "Smoke-run episode length."
+    notes:
+      - "Smoke baselines verify code paths only."
+      - "Never cite as main-paper evidence."

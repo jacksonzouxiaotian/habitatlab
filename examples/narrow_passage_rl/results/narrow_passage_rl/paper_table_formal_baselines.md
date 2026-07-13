@@ -1,12 +1,14 @@
-# Table: Formal Main Baselines
+# Table: Mixed-Split Habitat Diagnostic Comparison
 
-These are the baselines suitable for the main paper comparison.  Geometry-FSM
-is referred to as DEGNAV-Rule in the paper.  Legacy PPO runs with the v1
-`obs[10]` yaw/heading mismatch are excluded from this table and should not be
-used as main baselines.
+This table is a mixed-split Habitat diagnostic comparison, not a canonical main
+paper ranking.  It contains rows evaluated on both HM3D Val set A and mined Val
+set B, so it cannot be used for a fair method ordering in the main paper.
+Geometry-FSM is referred to as DEGNAV-Rule in the paper.  Legacy PPO runs with
+the v1 `obs[10]` yaw/heading mismatch are excluded from the current diagnostic
+comparison.
 
 Success metric: nominal `NarrowPassageNav-v0` success unless otherwise stated.
-Strict clearance-aware success is reported separately in
+Clearance-aware strict success is reported separately in
 `paper_table_diagnostic_baselines.md`.
 
 | Method | Category | Train domain | Eval domain | Train budget | Seeds | Eval episodes | Success metric | SR | Collision | Notes |
@@ -18,11 +20,13 @@ Strict clearance-aware success is reported separately in
 | DEGNAV-Rule / Geometry-FSM | Proposed rule controller | None | Habitat HM3D mined Val set B | No learning | deterministic | 151 | Nominal anchor validation under the current mining protocol | 100.0% | 0.0% | Mined anchors are mostly well aligned; see stress validation for perturbations |
 
 Interpretation:
-- The formal learning rows use the corrected v2 geometry sensor format and are
-  direct-control baselines, not DEGNAV-RL.
+- The learning rows use the corrected v2 geometry sensor format and are
+  direct-control diagnostic baselines, not DEGNAV-RL.
+- This table mixes HM3D Val set A and mined Val set B.  Do not cite it as a
+  same-split main paper ranking.
 - The low PPO/SAC/TD3 transfer scores support the claim that learning-only
   policies are fragile near geometric feasibility boundaries.
 - DEGNAV-Rule / Geometry-FSM's 100.0% row is nominal anchor validation under
   the current mining protocol, not a standalone robustness claim; use
-  `paper_table_habitat_stress.md` for stress-tested robustness and module
-  sensitivity under perturbation.
+  `paper_table_habitat_stress.md` for module sensitivity under Habitat
+  perturbations.

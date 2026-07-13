@@ -1,0 +1,3 @@
+case,success_rate,collision_free_success_rate,collision_rate,tight_passage_rate,body_overlap_rate,avg_min_clearance,sr_straight,sr_narrow_entry,sr_false_feasible
+v2_geometry_fsm,0.5667,0.5667,0.0,0.2667,0.0,1.344,0.8571,0.5556,0.0
+v2_fsm_no_recovery,0.5,0.5,0.0,0.2333,0.0,1.6626,0.7143,0.5556,0.0

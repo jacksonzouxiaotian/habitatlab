@@ -41,6 +41,7 @@ from procedural_env_v2 import CorridorType, HarderNarrowPassageEnv
 from failure_memory import FailureMemoryConfig, PassageFailureMemory
 from cross_episode_memory import CrossEpisodeMemory, MemoryConfig, FSMMode
 from narrow_passage.models.belief_state import BeliefState
+from evaluation.logging_schema import fieldnames_for_rows, finalize_episode_row
 
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 
@@ -446,12 +447,12 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         "passable": info.get("passable", True),
         "corridor_type": info.get("corridor_type", "unknown"),
         "passage_width": info.get("passage_width", float(obs[8])),
-        **belief_row,
-        "mode": last_mode,
-        "mode_commit_count": int(mode_counts.get("commit", 0)),
-        "mode_explore_count": int(mode_counts.get("explore", 0)),
-        "mode_recover_count": int(mode_counts.get("recover", 0)),
-        "mode_reject_count": int(mode_counts.get("reject", 0)),
+        "strict_success": collision_free_success,
+        "near_collision": float(tight_passage),
+        "min_clearance": min_bm,
+        "_belief_row": belief_row,
+        "_mode_counts": dict(mode_counts),
+        "_last_mode": last_mode,
     }
 
 
@@ -492,8 +493,25 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
         stat = run_episode(env, method, local_mem, cross_mem,
                            max_steps=env.max_steps, entry_obs_ref=entry_obs_ref,
                            agent=agent, entry_jitter_sigma=entry_jitter_sigma)
+        belief_row = stat.pop("_belief_row", {})
+        mode_counts = stat.pop("_mode_counts", {})
+        last_mode = stat.pop("_last_mode", "unavailable")
         stat["episode_idx"] = ep_idx
+        stat["episode_id"] = f"{method}_{seed}_{ep_idx:06d}"
+        stat["scene_id"] = "procedural_v2"
+        stat["split"] = "procedural_v2"
+        stat["seed"] = seed
         stat["method"] = method
+        has_interface = method != "rule_baseline"
+        stat = finalize_episode_row(
+            stat,
+            belief=belief_row if has_interface else None,
+            belief_samples=[belief_row] if has_interface else [],
+            belief_available=has_interface,
+            mode_counts=mode_counts if has_interface else None,
+            mode_interface_available=has_interface,
+            final_mode=last_mode if has_interface else "rule_baseline",
+        )
         all_stats.append(stat)
 
         # Update cross-episode memory
@@ -555,7 +573,7 @@ def write_csv(all_stats, path):
     if not all_stats:
         return
     with path.open("w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(all_stats[0].keys()))
+        w = csv.DictWriter(f, fieldnames=fieldnames_for_rows(all_stats))
         w.writeheader()
         w.writerows(all_stats)
     print(f"[write] {path}")

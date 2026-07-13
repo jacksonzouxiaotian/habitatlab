@@ -1,0 +1,13 @@
+% Auto-generated from habitat_formal_same_split provenance.
+\begin{tabular}{lrrrrrl}
+\toprule
+Method & Success $\uparrow$ & Collision $\downarrow$ & Near-coll. $\downarrow$ & Steps $\downarrow$ & Episodes & Seeds \\
+\midrule
+PPO direct-control baseline & 10.2\% & -- & -- & 498.0 & 157 & 3 per manifest; no seed column \\
+APF+Gap classical baseline & 93.6\% & -- & -- & 111.5 & 157 & deterministic \\
+DEGNAV-Rule / Geometry-FSM & 100.0\% & 0.0\% & 100.0\% & 54.0 & 157 & deterministic \\
+DEGNAV-Rule + failure memory & 100.0\% & 0.0\% & 100.0\% & 54.0 & 157 & deterministic \\
+\bottomrule
+\end{tabular}
+
+% Collision/near-collision are diagnostic only because PPO/APF+Gap source CSVs do not log them.

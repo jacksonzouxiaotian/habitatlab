@@ -10,15 +10,25 @@ import argparse
 import csv
 import hashlib
 import math
+import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).parent))
+
 import habitat
 
+from evaluation.logging_schema import (
+    fieldnames_for_rows,
+    finalize_episode_row,
+    mode_bucket,
+)
 from eval_habitat_apf_gap import apf_gap_act
+from narrow_passage.models.belief_state import BeliefState
 
 
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
@@ -159,6 +169,19 @@ def _features_from_obs(env, obs: Dict, stress: StressCase, rng: np.random.Genera
     return features
 
 
+def _belief_metrics(features: np.ndarray) -> Dict[str, float]:
+    belief = BeliefState.from_obs(features, memory_risk=0.0)
+    risk = float(np.clip(1.0 - belief.p_feas + belief.memory_risk, 0.0, 1.0))
+    return {
+        "d_hat": belief.d_hat,
+        "w_req_cons": belief.w_req_cons,
+        "delta_mean": belief.delta_mean,
+        "delta_var": belief.delta_var,
+        "p_feas": belief.p_feas,
+        "risk": risk,
+    }
+
+
 def _depth_from_obs(obs: Dict, stress: StressCase, rng: np.random.Generator) -> np.ndarray:
     depth = np.asarray(obs.get("depth"), dtype=np.float32).copy()
     if stress.feature_noise > 0.0:
@@ -280,8 +303,13 @@ def run_episode(env, obs: Dict, method: str, stress: StressCase, args, rng: np.r
     min_clearance = float("inf")
     recover_triggers = 0
     done = False
+    mode_counts: Counter[str] = Counter()
+    belief_samples: List[Dict[str, float]] = []
+    last_mode = "apf" if method == "apf_gap" else "unavailable"
 
     while not done and steps < args.max_steps:
+        if method != "apf_gap":
+            belief_samples.append(_belief_metrics(features))
         bm = float(features[9])
         min_clearance = min(min_clearance, bm)
         near_collision = near_collision or bm < args.near_collision_threshold
@@ -292,6 +320,8 @@ def run_episode(env, obs: Dict, method: str, stress: StressCase, args, rng: np.r
             mode = "APF"
         else:
             action, mode = _fsm_action(env, features, method)
+            last_mode = str(mode)
+            mode_counts[mode_bucket(last_mode)] += 1
             if mode == "RECOVER":
                 recover_triggers += 1
 
@@ -311,6 +341,8 @@ def run_episode(env, obs: Dict, method: str, stress: StressCase, args, rng: np.r
     metrics = env.get_metrics()
     if not np.isfinite(min_clearance):
         min_clearance = float(features[9])
+    if method != "apf_gap":
+        belief_samples.append(_belief_metrics(features))
     success = float(metrics.get("narrow_passage_success", 0.0))
     collision = max(float(any_collision), float(metrics.get("narrow_passage_collision", 0.0)))
     stuck = float(metrics.get("narrow_passage_stuck", 0.0))
@@ -327,6 +359,9 @@ def run_episode(env, obs: Dict, method: str, stress: StressCase, args, rng: np.r
         "min_clearance": float(min_clearance),
         "timeout": timeout,
         "recover_triggers": recover_triggers,
+        "_mode_counts": dict(mode_counts),
+        "_belief_samples": belief_samples,
+        "_last_mode": last_mode,
     }
 
 
@@ -352,11 +387,16 @@ def evaluate_method(method: str, stress: StressCase, args) -> List[Dict]:
             _apply_lateral_perturb(env, stress.lateral_m)
 
             stat = run_episode(env, obs, method, stress, args, rng)
+            mode_counts = stat.pop("_mode_counts", {})
+            belief_samples = stat.pop("_belief_samples", [])
+            last_mode = stat.pop("_last_mode", "apf" if method == "apf_gap" else "unavailable")
             scene_parts = str(episode.scene_id).split("/")
             scene_id = scene_parts[-2] if len(scene_parts) > 1 else scene_parts[0]
             stat.update(
                 {
                     "method": method,
+                    "split": args.split,
+                    "seed": args.seed,
                     "stress": stress.name,
                     "yaw_deg": stress.yaw_deg,
                     "lateral_m": stress.lateral_m,
@@ -368,6 +408,14 @@ def evaluate_method(method: str, stress: StressCase, args) -> List[Dict]:
                     "difficulty": str(info.get("difficulty", "?")),
                     "body_margin": body_margin,
                 }
+            )
+            stat = finalize_episode_row(
+                stat,
+                belief_samples=belief_samples,
+                belief_available=method != "apf_gap",
+                mode_counts=mode_counts if method != "apf_gap" else None,
+                mode_interface_available=method != "apf_gap",
+                final_mode=last_mode if method != "apf_gap" else "apf",
             )
             rows.append(stat)
             evaluated += 1
@@ -408,7 +456,7 @@ def summarize(rows: List[Dict]) -> List[Dict]:
 def write_csv(rows: List[Dict], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer = csv.DictWriter(f, fieldnames=fieldnames_for_rows(rows))
         writer.writeheader()
         writer.writerows(rows)
     print(f"[write] {path}")
@@ -422,7 +470,9 @@ def write_markdown(summary: List[Dict], path: Path) -> None:
     lines = [
         "# Table: Habitat Stress Validation",
         "",
-        "Nominal HM3D anchors are mostly well aligned; this table applies controlled stressors to test module robustness.",
+        "Module sensitivity under controlled Habitat perturbations. Clearance-aware metrics are reported as diagnostic indicators and are not interpreted as calibrated physical safety measurements.",
+        "",
+        "The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated physical safety measurements.",
         "",
         "| Stress | Method | Episodes | SR | Strict SR | Collision | Near collision | Avg min clearance | Avg steps | Timeout |",
         "|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|",

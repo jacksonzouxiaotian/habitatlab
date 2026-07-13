@@ -31,7 +31,7 @@ from narrow_passage.metrics.strict_metrics import (
     StrictMetricConfig,
     compute_strict_metrics,
 )
-from narrow_passage.models.belief_state import BeliefState
+from evaluation.logging_schema import fieldnames_for_rows, finalize_episode_row
 
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 FEATURE_DIM = 19
@@ -87,19 +87,6 @@ def make_env(data_path: str, split: str):
         ],
     )
     return habitat.Env(config=config)
-
-
-def _belief_metrics(features: np.ndarray, memory_risk: float = 0.0) -> dict:
-    belief = BeliefState.from_obs(features, memory_risk=memory_risk)
-    risk = float(np.clip(1.0 - belief.p_feas + belief.memory_risk, 0.0, 1.0))
-    return {
-        "d_hat": belief.d_hat,
-        "w_req_cons": belief.w_req_cons,
-        "delta_mean": belief.delta_mean,
-        "delta_var": belief.delta_var,
-        "p_feas": belief.p_feas,
-        "risk": risk,
-    }
 
 
 def main():
@@ -227,6 +214,9 @@ def main():
             stat = {
                 "episode_id": str(episode.episode_id),
                 "scene_id": str(episode.scene_id).split("/")[-2],
+                "split": args.split,
+                "seed": "checkpoint",
+                "method": f"SB3-{algo.upper()} direct velocity",
                 "difficulty": difficulty,
                 "body_margin": round(body_margin, 4),
                 "steps": steps,
@@ -238,9 +228,13 @@ def main():
                 "stuck": final_stuck,
                 "near_collision": strict_metrics["near_collision"],
                 "min_clearance": min_clearance,
-                **_belief_metrics(final_feats),
-                "mode": "direct_velocity",
             }
+            stat = finalize_episode_row(
+                stat,
+                belief_available=False,
+                mode_interface_available=False,
+                final_mode="direct_velocity",
+            )
             all_stats.append(stat)
             print(
                 f"  ep {ep_idx:3d}  {difficulty:6s}  bm={body_margin:+.3f}"
@@ -283,7 +277,7 @@ def main():
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(all_stats[0].keys()))
+        writer = csv.DictWriter(f, fieldnames=fieldnames_for_rows(all_stats))
         writer.writeheader()
         writer.writerows(all_stats)
     print(f"[write] {out_path}")

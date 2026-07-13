@@ -1,0 +1,25 @@
+% Table: Harder Synthetic Benchmark v2 -- Main Comparison
+% 500 episodes x 3 seeds (42-44), no entry jitter
+\begin{table}[t]
+\centering
+\caption{Success rate (\%) on the harder synthetic benchmark (v2), 500 episodes $\times$ 3 seeds.
+Numbers in parentheses are std across seeds.
+\emph{false\_feasible} corridors are physically impassable; SR=0\% with 0\% collision indicates
+correct rejection by body-margin gating.}
+\label{tab:harder_main}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+Method & Overall & Straight & L-shaped & S-shaped & Narrow exit & Narrow entry & Asymmetric & False-feas. \\
+\midrule
+Rule baseline
+  & 25.4\,(1.0) & 60.5 & 8.2 & 6.5 & 27.2 & 24.8 & 33.5 & 0.0 \\
+\textbf{Geometry-FSM (ours)}
+  & \textbf{70.3\,(1.1)} & \textbf{92.8} & \textbf{79.6} & \textbf{70.0} & \textbf{96.7} & \textbf{61.4} & \textbf{50.6} & \textbf{0.0} \\
+FSM + local memory
+  & 70.3\,(1.1) & 92.8 & 79.6 & 70.0 & 96.7 & 61.4 & 50.6 & 0.0 \\
+FSM + cross memory
+  & 70.3\,(1.1) & 92.8 & 79.6 & 70.0 & 96.7 & 61.4 & 50.6 & 0.0 \\
+\bottomrule
+\end{tabular}}
+\end{table}
