@@ -209,6 +209,20 @@ Output:
 - `results/narrow_passage_rl/paper_table_memory_transfer_interference.md`
 - `results/narrow_passage_rl/paper_table_memory_transfer_interference.tex`
 
+Paper-preset result:
+
+| Method | Passable SR | Final FF reject | Transfer reject new FF | Interference false reject |
+|---|---:|---:|---:|---:|
+| no_memory | 90.0 +/- 2.2 | 0.0 +/- 0.0 | 0.0 +/- 0.0 | 0.0 +/- 0.0 |
+| vanilla episodic memory | 0.0 +/- 0.0 | 100.0 +/- 0.0 | 100.0 +/- 0.0 | 100.0 +/- 0.0 |
+| kNN failure memory | 0.0 +/- 0.0 | 100.0 +/- 0.0 | 100.0 +/- 0.0 | 100.0 +/- 0.0 |
+| geometry-guided cross-episode failure memory | 90.0 +/- 2.2 | 100.0 +/- 0.0 | 93.0 +/- 8.6 | 0.0 +/- 0.0 |
+
+Interpretation: generic episodic/kNN memory can suppress repeated infeasible
+commitments, but in this protocol it also over-generalizes and rejects all
+similar feasible passages.  Geometry-guided failure memory preserves passable
+success while transferring rejection to similar new false-feasible passages.
+
 ### 7. D_min Calibration
 
 Script:
@@ -320,6 +334,33 @@ The wrapper then realizes that mode with the shared mode-conditioned controller.
 This is not the same as the PPO/SAC/TD3 direct-control baselines in
 `train_sb3_v2.py`, which output velocity actions directly.
 
+Current 3-seed result on procedural v2, using 1M PPO steps per seed:
+
+| Variant | Overall SR | Strict SR | Collision | Near collision | Reject | Mode usage |
+|---|---:|---:|---:|---:|---:|---|
+| DEGNAV-RL full belief | 26.7% | 26.7% | 62.3% | 70.9% | 0.0% | Commit 31%, Explore 69%, Recover/Reject 0% |
+| no p_feas | 25.9% | 25.9% | 61.9% | 72.5% | 0.0% | Commit 62%, Explore 38% |
+| no delta_var | 28.4% | 28.4% | 58.9% | 70.3% | 0.0% | Commit 29%, Explore 71% |
+| no memory | 28.4% | 28.4% | 58.9% | 70.3% | 0.0% | Commit 29%, Explore 71% |
+| no alignment | 25.8% | 25.8% | 61.5% | 72.2% | 0.0% | Commit 37%, Explore 63% |
+| geometry only | 30.9% | 30.9% | 56.0% | 68.1% | 0.0% | Explore 100% |
+
+Interpretation:
+
+- DEGNAV-RL is no longer `not run`, but it should remain a diagnostic learning
+  variant rather than the main method.
+- It improves over the weakest learning-only direct-control transfer baselines,
+  yet it is far below DEGNAV-Rule / Geometry-FSM and still has high collision
+  and near-collision rates.
+- The learned mode selector did not learn `Reject` or `Recover` under the
+  current reward/controller interface.  This is useful evidence that simply
+  learning `pi(m_t | b_t)` is not enough; the explicit rule-based feasibility,
+  risk, and failure-memory checks remain important.
+- The belief-state ablation does not show a clean advantage for the full belief
+  vector.  `geometry_only` performs best in this run, so the paper should not
+  claim that the current DEGNAV-RL policy successfully exploits uncertainty or
+  memory risk.
+
 Smoke training:
 
 ```bash
@@ -335,25 +376,31 @@ python examples/narrow_passage_rl/train_belief_mode_ppo.py \
 Paper-scale training:
 
 ```bash
-python examples/narrow_passage_rl/train_belief_mode_ppo.py \
-    --total-steps 1000000 \
-    --num-envs 8 \
-    --ctypes full \
-    --ablation full \
-    --eval-episodes 500 \
-    --save-dir data/degnav_rl_belief_mode_ppo
+for seed in 0 1 2; do
+  python examples/narrow_passage_rl/train_belief_mode_ppo.py \
+      --total-steps 1000000 \
+      --num-envs 8 \
+      --seed ${seed} \
+      --ctypes full \
+      --ablation full \
+      --eval-episodes 500 \
+      --device cuda \
+      --save-dir data/degnav_rl_belief_mode_full_seed${seed}
+done
 ```
 
 Evaluation:
 
 ```bash
-python examples/narrow_passage_rl/eval_belief_mode_ppo.py \
-    --model data/degnav_rl_belief_mode_ppo/belief_mode_ppo.zip \
-    --episodes 500 \
-    --ctypes full \
-    --ablation full \
-    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv \
-    --output-md examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_belief_mode_ppo.md
+for seed in 0 1 2; do
+  python examples/narrow_passage_rl/eval_belief_mode_ppo.py \
+      --model data/degnav_rl_belief_mode_full_seed${seed}/belief_mode_ppo.zip \
+      --episodes 500 \
+      --seed $((1000 + seed)) \
+      --ctypes full \
+      --ablation full \
+      --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed${seed}_eval.csv
+done
 ```
 
 Belief-state ablations use the same scripts:
@@ -384,9 +431,17 @@ To regenerate the DEGNAV-RL ablation table from one or more eval CSVs:
 
 ```bash
 python examples/narrow_passage_rl/make_paper_tables.py \
+    --belief-mode-inputs \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed1_eval.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed2_eval.csv \
     --belief-mode-ablation-inputs \
-      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv \
-      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_p_feas_eval.csv
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed*_eval.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_p_feas_seed*_eval.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_delta_var_seed*_eval.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_memory_seed*_eval.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_no_alignment_seed*_eval.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_geometry_only_seed*_eval.csv
 ```
 
 Training outputs include `belief_mode_ppo.zip`,
@@ -444,7 +499,7 @@ python examples/narrow_passage_rl/make_paper_tables.py
 python examples/narrow_passage_rl/plot_margin_phase.py \
     --inputs \
       examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv \
-      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv \
     --labels DEGNAV-Rule DEGNAV-RL \
     --output-dir examples/narrow_passage_rl/results/narrow_passage_rl \
     --bin-width 0.02 \
@@ -528,7 +583,8 @@ results/narrow_passage_rl/harder_benchmark_episodes.csv
 results/narrow_passage_rl/habitat_stress_validation.csv
 results/narrow_passage_rl/repeated_failure_memory.csv
 results/narrow_passage_rl/memory_transfer_interference.csv
-results/narrow_passage_rl/belief_mode_ppo_eval.csv
+results/narrow_passage_rl/belief_mode_full_seed*_eval.csv
+results/narrow_passage_rl/belief_mode_<ablation>_seed*_eval.csv
 results/narrow_passage_rl/habitat_td3_habitat_native_strict_eval.csv
 ```
 

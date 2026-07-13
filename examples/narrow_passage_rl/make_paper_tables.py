@@ -201,6 +201,14 @@ def write_text(path, text):
     path.write_text(text + "\n")
 
 
+def _display_path(path):
+    path = Path(path)
+    try:
+        return path.resolve().relative_to(Path.cwd().resolve())
+    except ValueError:
+        return path
+
+
 def _mean(rows, key):
     vals = []
     for row in rows:
@@ -316,11 +324,31 @@ def _belief_mode_paths(output_dir, explicit_path=None):
     return unique
 
 
+def _belief_mode_main_paths(output_dir, explicit_path=None, explicit_paths=None):
+    candidates = []
+    for path in explicit_paths or []:
+        candidates.append(Path(path))
+    if explicit_path is not None:
+        candidates.append(Path(explicit_path))
+    candidates.extend(sorted(output_dir.glob("belief_mode_full_seed*_eval.csv")))
+    candidates.extend(_belief_mode_paths(output_dir))
+
+    seen = set()
+    unique = []
+    for path in candidates:
+        key = str(path)
+        if key not in seen:
+            unique.append(path)
+            seen.add(key)
+    return unique
+
+
 def _belief_mode_ablation_paths(output_dir, explicit_paths=None):
     candidates = []
     for path in explicit_paths or []:
         candidates.append(Path(path))
     patterns = [
+        "belief_mode_*_seed*_eval.csv",
         "*belief*mode*ppo*.csv",
         "*degnav*belief*ppo*.csv",
         "eval_belief_mode_ppo*.csv",
@@ -344,7 +372,7 @@ def _first_existing(paths):
     return None
 
 
-def _belief_mode_table_rows(output_dir, belief_mode_input=None):
+def _belief_mode_table_rows(output_dir, belief_mode_input=None, belief_mode_inputs=None):
     rows = []
     notes = []
 
@@ -367,17 +395,28 @@ def _belief_mode_table_rows(output_dir, belief_mode_input=None):
         }
         rows.append(row)
 
-    belief_path = _first_existing(_belief_mode_paths(output_dir, belief_mode_input))
-    if belief_path is None:
+    belief_paths = [
+        path
+        for path in _belief_mode_main_paths(
+            output_dir, belief_mode_input, belief_mode_inputs
+        )
+        if path.exists()
+    ]
+    if not belief_paths:
         notes.append(
             "DEGNAV-RL: no evaluation CSV found. Expected one of "
-            "`eval_belief_mode_ppo.csv`, `degnav_rl_belief_mode_ppo_eval.csv`, "
-            "`belief_mode_ppo_eval.csv`, or `belief_mode_ppo_quick_eval.csv`."
+            "`belief_mode_full_seed*_eval.csv`, `eval_belief_mode_ppo.csv`, "
+            "`degnav_rl_belief_mode_ppo_eval.csv`, `belief_mode_ppo_eval.csv`, "
+            "or `belief_mode_ppo_quick_eval.csv`."
         )
         metrics = {}
     else:
-        metrics = _summary_from_episode_csv(belief_path)
-        notes.append(f"DEGNAV-RL row loaded from `{belief_path}`.")
+        belief_rows = []
+        for path in belief_paths:
+            belief_rows.extend(read_rows(path))
+        metrics = _summary_from_episode_rows(belief_rows)
+        joined = ", ".join(f"`{_display_path(p)}`" for p in belief_paths)
+        notes.append(f"DEGNAV-RL row loaded from {joined}.")
 
     rows.append(
         {
@@ -438,7 +477,7 @@ def _belief_mode_ablation_table_rows(output_dir, explicit_paths=None):
 
     notes = []
     if loaded_paths:
-        joined = ", ".join(f"`{p}`" for p in loaded_paths)
+        joined = ", ".join(f"`{_display_path(p)}`" for p in loaded_paths)
         notes.append(f"Loaded DEGNAV-RL ablation CSVs from {joined}.")
     else:
         notes.append("No DEGNAV-RL ablation CSVs found; rows are marked as not run.")
@@ -463,6 +502,7 @@ def belief_mode_markdown(rows, notes):
         "Notes:",
         "- DEGNAV-RL learns only the high-level mode selector over the explicit belief state; the velocity realization remains the same mode-conditioned controller as DEGNAV-Rule.",
         "- Learning-only PPO/SAC/TD3 baselines output direct velocity actions from geometry observations.",
+        "- The DEGNAV-RL row is a procedural v2 mode-selection result; Habitat DEGNAV-RL evaluation is not included yet.",
         "- The PPO direct-velocity row here is a single-run mined-val provenance row when loaded from `habitat_ppo_v2_mined_val.csv`; the formal main PPO result remains 2.1% +/- 2.6% in `paper_table_formal_baselines.md`.",
     ]
     for note in notes:
@@ -552,7 +592,14 @@ def main():
         "--belief-mode-input",
         type=Path,
         default=None,
-        help="Optional DEGNAV-RL eval CSV. If omitted, common result names are searched.",
+        help="Optional single DEGNAV-RL eval CSV. Prefer --belief-mode-inputs for multi-seed tables.",
+    )
+    parser.add_argument(
+        "--belief-mode-inputs",
+        nargs="*",
+        type=Path,
+        default=None,
+        help="Optional DEGNAV-RL eval CSVs for the main belief-mode row.",
     )
     parser.add_argument(
         "--belief-mode-ablation-inputs",
@@ -598,7 +645,7 @@ def main():
         print("[write] paper_table_habitat_ablation.tex")
 
     belief_rows, belief_notes = _belief_mode_table_rows(
-        args.output_dir, args.belief_mode_input
+        args.output_dir, args.belief_mode_input, args.belief_mode_inputs
     )
     write_text(
         args.output_dir / "paper_table_belief_mode_rl.md",

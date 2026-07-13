@@ -201,6 +201,14 @@ separate transfer/interference script tests whether geometry-anchored memory
 also rejects similar-but-new false-feasible passages without over-rejecting
 similar feasible passages.
 
+Current paper-preset result: geometry-guided cross-episode failure memory keeps
+passable success at 90.0% +/- 2.2%, reaches 100.0% final rejection on repeated
+false-feasible passages, rejects 93.0% +/- 8.6% of similar new false-feasible
+passages, and has 0.0% interference false rejection on similar feasible
+passages.  Vanilla episodic memory and kNN failure memory reject false-feasible
+passages aggressively, but also falsely reject 100.0% of similar feasible
+passages in this protocol.
+
 Primary files:
 
 - `examples/narrow_passage_rl/eval_memory_transfer_interference.py`
@@ -257,6 +265,9 @@ Tables:
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_diagnostic_baselines.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_smoke_baselines.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_belief_mode_rl.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_belief_mode_ablation.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_transfer_interference.md`
 
 ## Current RL Interpretation
 
@@ -304,6 +315,29 @@ DEGNAV-RL entry points:
 - `examples/narrow_passage_rl/narrow_passage/envs/belief_mode_env.py`
 - `examples/narrow_passage_rl/narrow_passage/models/belief_state.py`
 
+Current diagnostic comparison, with eval domains shown explicitly:
+
+| Method | Decision type | Eval domain | Overall SR | Strict SR | Collision | Near collision | Reject |
+|---|---|---|---:|---:|---:|---:|---:|
+| PPO direct velocity, mined-val provenance | Direct velocity | Habitat HM3D mined-val | 6.0% | 0.0% | 0.0% | 100.0% | 0.0% |
+| TD3 synthetic-to-Habitat | Direct velocity | Habitat HM3D mined-val | 2.0% | 0.0% | 0.0% | 100.0% | - |
+| DEGNAV-RL | Learned high-level mode selector | Procedural v2 | 26.7% | 26.7% | 62.3% | 70.9% | 0.0% |
+| DEGNAV-Rule / Geometry-FSM | Rule mode selector | Habitat nominal anchors | 100.0% nominal anchor validation | 2.0% on HM3D nominal anchors | 0.0% | 100.0% | 0.0% |
+
+Interpretation: DEGNAV-RL is a useful diagnostic learning variant, but it is
+not the final method.  It improves over the weakest direct-control transfer
+baselines in success rate, yet it still has high collision and near-collision
+rates and did not learn to use `Reject` or `Recover` in the current setup.  Its
+role in the paper should therefore be: learning the mode selector alone is not
+enough unless safety constraints and failure-memory/reject behavior are made
+explicit.
+
+Belief-state ablations are also diagnostic rather than a positive contribution
+claim: `geometry_only` reaches 30.9% strict SR, while the full belief state
+reaches 26.7%.  This suggests the current DEGNAV-RL reward/controller interface
+is not yet exploiting `p_feas`, uncertainty, or memory risk; those signals remain
+most reliable in the interpretable DEGNAV-Rule path.
+
 ## What Not To Overclaim
 
 - HM3D nominal 100.0% is not a complete robustness proof.  It is nominal anchor
@@ -346,27 +380,32 @@ python examples/narrow_passage_rl/eval_memory_transfer_interference.py \
 # 5. D_min calibration
 python examples/narrow_passage_rl/eval_dmin_calibration.py
 
-# 6. DEGNAV-RL smoke training and evaluation
-python examples/narrow_passage_rl/train_belief_mode_ppo.py \
-    --total-steps 2048 \
-    --num-envs 1 \
-    --ctypes straight_only \
-    --ablation full \
-    --eval-episodes 20 \
-    --save-dir data/degnav_rl_belief_mode_smoke
+# 6. DEGNAV-RL paper-scale mode-selection run
+for seed in 0 1 2; do
+  python examples/narrow_passage_rl/train_belief_mode_ppo.py \
+      --total-steps 1000000 \
+      --num-envs 8 \
+      --seed ${seed} \
+      --ctypes full \
+      --ablation full \
+      --eval-episodes 500 \
+      --device cuda \
+      --save-dir data/degnav_rl_belief_mode_full_seed${seed}
 
-python examples/narrow_passage_rl/eval_belief_mode_ppo.py \
-    --model data/degnav_rl_belief_mode_smoke/belief_mode_ppo.zip \
-    --episodes 50 \
-    --ctypes full \
-    --ablation full \
-    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv
+  python examples/narrow_passage_rl/eval_belief_mode_ppo.py \
+      --model data/degnav_rl_belief_mode_full_seed${seed}/belief_mode_ppo.zip \
+      --episodes 500 \
+      --seed $((1000 + seed)) \
+      --ctypes full \
+      --ablation full \
+      --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed${seed}_eval.csv
+done
 
 # 7. Width-margin phase diagram
 python examples/narrow_passage_rl/plot_margin_phase.py \
     --inputs \
       examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv \
-      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv \
     --labels DEGNAV-Rule DEGNAV-RL \
     --output-dir examples/narrow_passage_rl/results/narrow_passage_rl
 

@@ -169,13 +169,40 @@ Outputs:
 examples/narrow_passage_rl/results/narrow_passage_rl/memory_transfer_interference.csv
 examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_transfer_interference.md
 examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_memory_transfer_interference.tex
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_belief_mode_rl.md
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_belief_mode_ablation.md
 ```
+
+Paper-preset interpretation: geometry-guided cross-episode failure memory keeps
+passable success at 90.0% +/- 2.2%, reaches 100.0% final false-feasible
+rejection, transfers rejection to 93.0% +/- 8.6% of similar new false-feasible
+passages, and has 0.0% false rejection on similar feasible passages.  Vanilla
+episodic memory and kNN failure memory also reject false-feasible passages, but
+they over-generalize and falsely reject 100.0% of similar feasible passages.
 
 ## DEGNAV-RL Mode-Selection Baseline
 
 DEGNAV-RL learns only `pi(m_t | b_t)` over `Commit`, `Explore`, `Recover`, and
 `Reject`.  It does not output direct velocities.  The mode-conditioned velocity
 controller is shared with DEGNAV-Rule / Geometry-FSM.
+
+Current 3-seed procedural v2 result, using 1M PPO steps per seed:
+
+| Variant | Strict SR | Collision | Near collision | Reject |
+|---|---:|---:|---:|---:|
+| DEGNAV-RL full belief | 26.7% | 62.3% | 70.9% | 0.0% |
+| no p_feas | 25.9% | 61.9% | 72.5% | 0.0% |
+| no delta_var | 28.4% | 58.9% | 70.3% | 0.0% |
+| no memory | 28.4% | 58.9% | 70.3% | 0.0% |
+| no alignment | 25.8% | 61.5% | 72.2% | 0.0% |
+| geometry only | 30.9% | 56.0% | 68.1% | 0.0% |
+
+Interpretation: DEGNAV-RL is a diagnostic learned mode selector.  It is more
+structured than direct velocity learning, but in the current setup it still has
+high collision/near-collision rates and does not learn to use `Recover` or
+`Reject`.  It should not be presented as stronger than DEGNAV-Rule; instead it
+supports the paper's argument that explicit feasibility, risk, and failure
+memory remain necessary near geometric limits.
 
 Smoke run:
 
@@ -197,7 +224,7 @@ python examples/narrow_passage_rl/eval_belief_mode_ppo.py \
     --episodes 50 \
     --ctypes full \
     --ablation full \
-    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_smoke_eval.csv
 ```
 
 Supported belief-state ablations are `full`, `no_p_feas`, `no_delta_var`,
@@ -228,22 +255,26 @@ python examples/narrow_passage_rl/eval_repeated_failure_memory.py \
 python examples/narrow_passage_rl/eval_memory_transfer_interference.py \
     --preset paper
 
-# DEGNAV-RL smoke training
-python examples/narrow_passage_rl/train_belief_mode_ppo.py \
-    --total-steps 2048 \
-    --num-envs 1 \
-    --ctypes straight_only \
-    --ablation full \
-    --eval-episodes 20 \
-    --save-dir data/degnav_rl_belief_mode_smoke
+# DEGNAV-RL paper-scale mode-selection run
+for seed in 0 1 2; do
+  python examples/narrow_passage_rl/train_belief_mode_ppo.py \
+      --total-steps 1000000 \
+      --num-envs 8 \
+      --seed ${seed} \
+      --ctypes full \
+      --ablation full \
+      --eval-episodes 500 \
+      --device cuda \
+      --save-dir data/degnav_rl_belief_mode_full_seed${seed}
 
-# DEGNAV-RL evaluation
-python examples/narrow_passage_rl/eval_belief_mode_ppo.py \
-    --model data/degnav_rl_belief_mode_smoke/belief_mode_ppo.zip \
-    --episodes 50 \
-    --ctypes full \
-    --ablation full \
-    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv
+  python examples/narrow_passage_rl/eval_belief_mode_ppo.py \
+      --model data/degnav_rl_belief_mode_full_seed${seed}/belief_mode_ppo.zip \
+      --episodes 500 \
+      --seed $((1000 + seed)) \
+      --ctypes full \
+      --ablation full \
+      --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed${seed}_eval.csv
+done
 
 # D_min calibration
 python examples/narrow_passage_rl/eval_dmin_calibration.py
@@ -252,7 +283,7 @@ python examples/narrow_passage_rl/eval_dmin_calibration.py
 python examples/narrow_passage_rl/plot_margin_phase.py \
     --inputs \
       examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv \
-      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_ppo_eval.csv \
+      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv \
     --labels DEGNAV-Rule DEGNAV-RL \
     --output-dir examples/narrow_passage_rl/results/narrow_passage_rl
 
