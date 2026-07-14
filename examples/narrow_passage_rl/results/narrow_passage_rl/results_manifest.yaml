@@ -644,38 +644,32 @@ results:
     canonical: true
     legacy: false
     diagnostic: false
-    path: "examples/narrow_passage_rl/results/narrow_passage_rl/figures/margin_phase_all_methods.pdf"
-    table_status: figure
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/figures/margin_phase_rule_vs_degnav_rule.pdf"
+    table_status: generated
     split: "procedural v2 logged episodes binned by estimated margin"
     split_policy: input_csv_dependent
     source_csvs:
       - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv"
       - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes_summary.csv"
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/margin_phase_summary.csv"
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv"
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv"
-    table_md: null
-    table_tex: null
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/margin_phase_rule_vs_degnav_rule.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_margin_phase_summary.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_margin_phase_summary.tex"
     raw_csv:
       - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv"
       - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes_summary.csv"
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/margin_phase_summary.csv"
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv"
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/margin_phase_rule_vs_degnav_rule.csv"
     domain: "Width-margin phase analysis"
     eval_split: "procedural v2 logged episodes binned by estimated margin"
-    train_domain: "none for rule methods; procedural v2 for DEGNAV-RL diagnostic overlay when included"
+    train_domain: "none for rule methods"
     methods:
       - "Reactive rule baseline"
       - "DEGNAV-Rule"
-      - "DEGNAV-RL"
     paper_method_names:
       rule_baseline: "Reactive rule baseline"
       geometry_fsm: "DEGNAV-Rule / Geometry-FSM"
       DEGNAV-Rule: "DEGNAV-Rule"
-      DEGNAV-RL: "DEGNAV-RL"
-    seeds: "main rule-vs-DEGNAV raw: [0, 1, 2]; other overlays depend on input CSVs"
-    episodes: "main rule-vs-DEGNAV raw: 1500 per method; other overlays depend on input CSVs"
+    seeds: "[0, 1, 2]"
+    episodes: "1500 per method in raw; plotted table covers episodes inside delta_mean range [-0.30, 0.30] m"
     metrics:
       - "delta_mean_bin"
       - "success_rate"
@@ -693,7 +687,7 @@ results:
       reject_rate: "Mean reject rate within each margin bin."
       mode_frequency: "Commit, Explore, Recover, and Reject frequencies when mode logs exist."
     notes:
-      - "Figure outputs are figures/margin_phase_all_methods.pdf and figures/margin_phase_all_methods.png."
+      - "Figure outputs are figures/margin_phase_rule_vs_degnav_rule.pdf/png and figures/margin_phase_near_boundary_zoom.pdf."
       - "raw/margin_phase_rule_vs_degnav_episodes.csv is the main-method raw file for Reactive rule baseline vs DEGNAV-Rule / Geometry-FSM."
       - "For rule_baseline, d_hat/w_req_cons/delta_mean are logged as diagnostic environment-derived margins for common x-axis binning; belief_available remains false."
       - "Do not fabricate missing method rows; the plot script uses only logged CSV columns."
