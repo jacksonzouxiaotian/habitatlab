@@ -146,6 +146,27 @@ BELIEF_MODE_METHODS = [
     },
 ]
 
+FALSE_FEASIBLE_OUTCOME_COLUMNS = [
+    ("method", "Method"),
+    ("episodes", "Episodes"),
+    ("success", "Traversal success"),
+    ("correct_reject", "Correct reject"),
+    ("false_reject", "False reject"),
+    ("collision", "Collision"),
+    ("near_collision", "Near collision"),
+    ("timeout_stuck", "Timeout/stuck"),
+    ("wasted_attempt", "Wasted attempts"),
+]
+
+FALSE_FEASIBLE_METHOD_LABELS = {
+    "rule_baseline": "Reactive rule baseline",
+    "geometry_fsm": "DEGNAV-Rule / Geometry-FSM",
+    "fsm_no_recovery": "DEGNAV-Rule w/o recovery",
+    "fsm_no_alignment": "DEGNAV-Rule w/o alignment",
+    "fsm_local_memory": "DEGNAV-Rule + local memory",
+    "fsm_cross_memory": "DEGNAV-Rule + cross-episode memory",
+}
+
 
 def read_rows(path):
     path = Path(path)
@@ -233,6 +254,19 @@ def _fmt_metric(value):
 def _fmt_latex(value):
     text = _fmt_metric(value)
     return text.replace("%", r"\%")
+
+
+def _fmt_percent_for_table(value):
+    if value is None:
+        return "not run"
+    try:
+        return f"{100.0 * float(value):.1f}%"
+    except (TypeError, ValueError):
+        return "not run"
+
+
+def _fmt_percent_latex_for_table(value):
+    return _fmt_percent_for_table(value).replace("%", r"\%")
 
 
 def _strict_values(rows):
@@ -500,19 +534,22 @@ def belief_mode_markdown(rows, notes):
     note_lines = [
         "",
         "Notes:",
-        "- DEGNAV-RL learns only the high-level mode selector pi(m_t | b_t). In the current setup, it remains unsafe and does not reliably use Recover or Reject. We therefore report DEGNAV-RL as a diagnostic learning variant rather than as the main method.",
+        "- DEGNAV-RL is included as a diagnostic policy rather than a competitive final method. Under the current reward and action interface, the learned policy collapses to Commit and Explore and does not demonstrate meaningful Recover or Reject behavior.",
         "- The main method remains DEGNAV-Rule / Geometry-FSM.",
         "- Learning-only PPO/SAC/TD3 baselines output direct velocity actions from geometry observations.",
         "- The DEGNAV-RL row is a procedural v2 mode-selection result; Habitat DEGNAV-RL evaluation is not included yet.",
+        "- DEGNAV-RL full-belief mode usage is Commit: 31.0%, Explore: 69.0%, Recover: 0.0%, Reject: 0.0%; it should not be presented as learned recovery or learned rejection.",
         "- Do not claim DEGNAV-RL improves over DEGNAV-Rule or solves the task.",
-        "- The PPO direct-velocity row here is a single-run mined-val provenance row when loaded from `habitat_ppo_v2_mined_val.csv`; the formal main PPO result remains 2.1% +/- 2.6% in `paper_table_formal_baselines.md`.",
+        "- The PPO direct-velocity row here is a single-run mined-val provenance row when loaded from `habitat_ppo_v2_mined_val.csv`; the 3-seed PPO Val set A result is listed in `paper_table_formal_baselines.md`, which is a mixed-split Habitat diagnostic comparison rather than a fair main ranking.",
     ]
     for note in notes:
         note_lines.append(f"- {note}")
     intro = [
         "# Table: DEGNAV-RL Diagnostic Belief-Mode Comparison",
         "",
-        "DEGNAV-RL learns only the high-level mode selector pi(m_t | b_t). In the current setup, it remains unsafe and does not reliably use Recover or Reject. We therefore report DEGNAV-RL as a diagnostic learning variant rather than as the main method.",
+        "DEGNAV-RL is included as a diagnostic policy rather than a competitive final method. Under the current reward and action interface, the learned policy collapses to Commit and Explore and does not demonstrate meaningful Recover or Reject behavior.",
+        "",
+        "This table is a diagnostic provenance comparison, not a main-paper leaderboard: the DEGNAV-RL row is procedural v2, while the direct-control rows are Habitat diagnostics or mixed-provenance baselines.",
         "",
     ]
     return "\n".join([*intro, header, sep, *body, *note_lines])
@@ -554,12 +591,22 @@ def belief_mode_ablation_markdown(rows, notes):
         "",
         "Notes:",
         "- These ablations test the learned high-level mode selector input, not the low-level mode-conditioned controller.",
-        "- DEGNAV-RL learns only the high-level mode selector pi(m_t | b_t). In the current setup, it remains unsafe and does not reliably use Recover or Reject. We therefore report DEGNAV-RL as a diagnostic learning variant rather than as the main method.",
+        "- DEGNAV-RL is included as a diagnostic policy rather than a competitive final method. Under the current reward and action interface, the learned policy collapses to Commit and Explore and does not demonstrate meaningful Recover or Reject behavior.",
         "- The full belief state is not better than `geometry_only` in this run, so this table should not be used to claim that belief-guided PPO solves the task.",
+        "- Full-belief mode usage over 1500 evaluation episodes is Commit: 31.0%, Explore: 69.0%, Recover: 0.0%, Reject: 0.0%.",
     ]
     for note in notes:
         note_lines.append(f"- {note}")
-    return "\n".join(["# Table: DEGNAV-RL Diagnostic Belief-State Ablation", "", header, sep, *body, *note_lines])
+    return "\n".join([
+        "# Table: DEGNAV-RL Diagnostic Belief-State Ablation",
+        "",
+        "DEGNAV-RL is included as a diagnostic policy rather than a competitive final method. Under the current reward and action interface, the learned policy collapses to Commit and Explore and does not demonstrate meaningful Recover or Reject behavior.",
+        "",
+        header,
+        sep,
+        *body,
+        *note_lines,
+    ])
 
 
 def belief_mode_ablation_latex(rows, notes):
@@ -578,6 +625,107 @@ def belief_mode_ablation_latex(rows, notes):
             else:
                 cells.append(_fmt_latex(row.get(key)))
         lines.append(" & ".join(cells) + r" \\")
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return "\n".join(lines)
+
+
+def _false_feasible_outcome_rows(path):
+    rows = read_rows(path)
+    if not rows:
+        return [], []
+    filtered = [
+        row for row in rows
+        if str(row.get("corridor_type", "")).lower() == "false_feasible"
+        or str(row.get("is_false_feasible", "")).lower() in {"1", "1.0", "true"}
+    ]
+    if not filtered:
+        return [], [f"No false-feasible rows found in `{_display_path(path)}`."]
+
+    methods = []
+    for row in filtered:
+        method = row.get("method", "")
+        if method and method not in methods:
+            methods.append(method)
+
+    table_rows = []
+    for method in methods:
+        subset = [row for row in filtered if row.get("method", "") == method]
+        timeout_stuck_values = []
+        for row in subset:
+            timeout = float(row.get("timeout", 0.0) or 0.0)
+            stuck = float(row.get("stuck", 0.0) or 0.0)
+            timeout_stuck_values.append(float(timeout > 0.5 or stuck > 0.5))
+        table_rows.append(
+            {
+                "method": FALSE_FEASIBLE_METHOD_LABELS.get(method, method),
+                "episodes": len(subset),
+                "success": _mean(subset, "success"),
+                "correct_reject": _mean(subset, "correct_reject"),
+                "false_reject": _mean(subset, "false_reject"),
+                "collision": _mean(subset, "collision"),
+                "near_collision": _mean(subset, "near_collision"),
+                "timeout_stuck": (
+                    sum(timeout_stuck_values) / len(timeout_stuck_values)
+                    if timeout_stuck_values else None
+                ),
+                "wasted_attempt": _mean(subset, "wasted_attempt"),
+            }
+        )
+    return table_rows, [f"Loaded raw outcome rows from `{_display_path(path)}`."]
+
+
+def false_feasible_outcome_markdown(rows, notes):
+    header = "| " + " | ".join(label for _, label in FALSE_FEASIBLE_OUTCOME_COLUMNS) + " |"
+    sep = "| " + " | ".join(":---" if i == 0 else "---:" for i, _ in enumerate(FALSE_FEASIBLE_OUTCOME_COLUMNS)) + " |"
+    body = []
+    for row in rows:
+        cells = []
+        for key, _label in FALSE_FEASIBLE_OUTCOME_COLUMNS:
+            if key == "method":
+                cells.append(str(row[key]))
+            elif key == "episodes":
+                cells.append(str(row[key]))
+            else:
+                cells.append(_fmt_percent_for_table(row.get(key)))
+        body.append("| " + " | ".join(cells) + " |")
+
+    note_lines = [
+        "",
+        "Notes:",
+        "- 0% traversal success is not equivalent to correct rejection; this table decomposes abstention and execution failure.",
+        "- `correct_reject = reject and passable_label == false`.",
+        "- `false_reject = reject and passable_label == true`.",
+        "- `wasted_attempt = attempted execution on a false-feasible passage without correct rejection`.",
+        "- `success == false` is never converted into correct rejection.",
+    ]
+    for note in notes:
+        note_lines.append(f"- {note}")
+    return "\n".join([
+        "# Table: False-Feasible Outcome Decomposition",
+        "",
+        *([header, sep, *body] if body else ["No false-feasible outcome data found."]),
+        *note_lines,
+    ])
+
+
+def false_feasible_outcome_latex(rows):
+    lines = [
+        r"\begin{tabular}{lrrrrrrrr}",
+        r"\toprule",
+        r"Method & Episodes & Traversal success & Correct reject & False reject & Collision & Near collision & Timeout/stuck & Wasted attempts \\",
+        r"\midrule",
+    ]
+    for row in rows:
+        method = str(row["method"]).replace("_", r"\_")
+        lines.append(
+            f"{method} & {row['episodes']} & {_fmt_percent_latex_for_table(row.get('success'))} "
+            f"& {_fmt_percent_latex_for_table(row.get('correct_reject'))} "
+            f"& {_fmt_percent_latex_for_table(row.get('false_reject'))} "
+            f"& {_fmt_percent_latex_for_table(row.get('collision'))} "
+            f"& {_fmt_percent_latex_for_table(row.get('near_collision'))} "
+            f"& {_fmt_percent_latex_for_table(row.get('timeout_stuck'))} "
+            f"& {_fmt_percent_latex_for_table(row.get('wasted_attempt'))} \\\\"
+        )
     lines.extend([r"\bottomrule", r"\end{tabular}"])
     return "\n".join(lines)
 
@@ -617,6 +765,12 @@ def main():
         type=Path,
         default=None,
         help="Optional DEGNAV-RL ablation eval CSVs. If omitted, common result names are searched.",
+    )
+    parser.add_argument(
+        "--false-feasible-outcomes",
+        type=Path,
+        default=None,
+        help="Optional raw false-feasible outcome decomposition CSV.",
     )
     args = parser.parse_args()
 
@@ -700,6 +854,23 @@ def main():
     )
     print("[write] paper_table_belief_mode_ablation.md")
     print("[write] paper_table_belief_mode_ablation.tex")
+
+    ff_path = args.false_feasible_outcomes or (
+        args.output_dir / "raw" / "false_feasible_outcomes.csv"
+    )
+    ff_rows, ff_notes = _false_feasible_outcome_rows(ff_path)
+    if ff_rows:
+        table_dir = args.output_dir / "tables"
+        write_text(
+            table_dir / "paper_table_false_feasible_outcomes.md",
+            false_feasible_outcome_markdown(ff_rows, ff_notes),
+        )
+        write_text(
+            table_dir / "paper_table_false_feasible_outcomes.tex",
+            false_feasible_outcome_latex(ff_rows),
+        )
+        print("[write] tables/paper_table_false_feasible_outcomes.md")
+        print("[write] tables/paper_table_false_feasible_outcomes.tex")
 
 
 if __name__ == "__main__":

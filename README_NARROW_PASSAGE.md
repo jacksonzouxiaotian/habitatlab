@@ -68,6 +68,18 @@ The current procedural v2 main table is:
 examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_procedural_v2_main.md
 ```
 
+False-feasible outcome decomposition is tracked separately:
+
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/raw/false_feasible_outcomes.csv
+examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md
+```
+
+The decomposition shows that false-feasible traversal success is 0.0% for both
+Reactive rule baseline and DEGNAV-Rule / Geometry-FSM, but correct reject is
+also 0.0%.  Therefore 0% traversal success must not be interpreted as correct
+rejection; it is decomposed into collision, timeout/stuck, and wasted attempts.
+
 Deprecated legacy tables such as `paper_table_main.md` and
 `paper_table_ablation.md` are stubs only.  Their old contents are preserved under
 `examples/narrow_passage_rl/results/narrow_passage_rl/legacy/` and must not be

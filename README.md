@@ -105,11 +105,25 @@ Main result:
 Removing alignment under entry jitter drops the FSM from 64.1% to 19.1% overall,
 which identifies heading/lateral alignment as a critical local-control module.
 
+False-feasible outcome decomposition:
+
+| Method | Episodes | Traversal success | Correct reject | Collision | Timeout/stuck | Wasted attempts |
+|---|---:|---:|---:|---:|---:|---:|
+| Reactive rule baseline | 1500 | 0.0% | 0.0% | 100.0% | 0.0% | 100.0% |
+| DEGNAV-Rule / Geometry-FSM | 1500 | 0.0% | 0.0% | 2.8% | 97.2% | 100.0% |
+
+This is an important negative/provenance result: 0% traversal success is not
+equivalent to correct rejection.  The current benchmark-labeled false-feasible
+rows show execution failure or wasted attempts, not learned or rule-based
+abstention.
+
 Primary files:
 
 - `examples/narrow_passage_rl/eval_harder_benchmark.py`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_procedural_v2_main.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_harder_ablation.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/raw/false_feasible_outcomes.csv`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md`
 
 ### 2. Habitat HM3D Nominal Anchor Validation
 

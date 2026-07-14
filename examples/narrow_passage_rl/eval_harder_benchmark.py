@@ -31,7 +31,7 @@ import math
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -44,6 +44,40 @@ from narrow_passage.models.belief_state import BeliefState
 from evaluation.logging_schema import fieldnames_for_rows, finalize_episode_row
 
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
+
+FALSE_FEASIBLE_REQUIRED_COLUMNS = [
+    "episode_id",
+    "seed",
+    "method",
+    "corridor_type",
+    "is_false_feasible",
+    "passable_label",
+    "success",
+    "reject",
+    "correct_reject",
+    "false_reject",
+    "collision",
+    "near_collision",
+    "timeout",
+    "stuck",
+    "wasted_attempt",
+    "min_clearance",
+    "body_margin_min",
+    "final_mode",
+    "mode_commit_count",
+    "mode_explore_count",
+    "mode_recover_count",
+    "mode_reject_count",
+]
+
+METHOD_LABELS = {
+    "rule_baseline": "Reactive rule baseline",
+    "geometry_fsm": "DEGNAV-Rule / Geometry-FSM",
+    "fsm_no_recovery": "DEGNAV-Rule w/o recovery",
+    "fsm_no_alignment": "DEGNAV-Rule w/o alignment",
+    "fsm_local_memory": "DEGNAV-Rule + local memory",
+    "fsm_cross_memory": "DEGNAV-Rule + cross-episode memory",
+}
 
 
 # ── Action helpers ────────────────────────────────────────────────────────────
@@ -387,6 +421,7 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
     if cross_mem is not None:
         cross_mem.reset_local()
 
+    info: dict[str, Any] = {}
     while not done and steps < max_steps:
         bm = float(obs[9])
         if bm < min_bm:
@@ -417,6 +452,15 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         mode_counts[_mode_bucket(last_mode)] += 1
 
         obs, _, term, trunc, info = env.step(action)
+        post_bm = float(obs[9])
+        if post_bm < min_bm:
+            min_bm = post_bm
+        if post_bm < 0.05:
+            tight_passage = True
+        if post_bm < 0.0:
+            body_overlap_steps += 1
+        if float(obs[16]) > 0.5 or float(info.get("collision", 0.0)) > 0.5:
+            any_collision = True
         done = term or trunc
 
         if local_mem is not None and any_collision:
@@ -428,6 +472,17 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         min_bm = float(obs[9])
 
     success = float(info.get("success", 0.0))
+    passable_label = bool(info.get("passable", True))
+    is_false_feasible = (
+        str(info.get("corridor_type", "")).lower() == "false_feasible"
+        or not passable_label
+    )
+    timeout = bool(steps >= max_steps and success <= 0.5 and not any_collision)
+    stuck = bool(info.get("stuck", 0.0))
+    reject = bool(mode_counts.get("reject", 0) > 0)
+    correct_reject = bool(reject and not passable_label)
+    false_reject = bool(reject and passable_label)
+    wasted_attempt = bool(is_false_feasible and not correct_reject)
     # Collision-free success: reached goal AND never penetrated a wall (bm >= 0 throughout).
     # The base success criterion only checks dist/heading/lateral — no collision guard.
     # body_overlap_steps > 0 means the robot was inside a wall (Habitat allow_sliding).
@@ -444,12 +499,21 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         "body_overlap_rate": body_overlap_steps / max(steps, 1),
         "min_body_margin": min_bm,
         "steps": steps,
-        "passable": info.get("passable", True),
+        "passable": passable_label,
+        "passable_label": float(passable_label),
+        "is_false_feasible": float(is_false_feasible),
         "corridor_type": info.get("corridor_type", "unknown"),
         "passage_width": info.get("passage_width", float(obs[8])),
         "strict_success": collision_free_success,
         "near_collision": float(tight_passage),
         "min_clearance": min_bm,
+        "body_margin_min": min_bm,
+        "reject": float(reject),
+        "correct_reject": float(correct_reject),
+        "false_reject": float(false_reject),
+        "timeout": float(timeout),
+        "stuck": float(stuck),
+        "wasted_attempt": float(wasted_attempt),
         "_belief_row": belief_row,
         "_mode_counts": dict(mode_counts),
         "_last_mode": last_mode,
@@ -510,8 +574,14 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
             belief_available=has_interface,
             mode_counts=mode_counts if has_interface else None,
             mode_interface_available=has_interface,
-            final_mode=last_mode if has_interface else "rule_baseline",
+            final_mode=last_mode,
         )
+        # Explicit aliases for false-feasible outcome decomposition.  These use
+        # the controller's actual episode modes, not inferred failure outcomes.
+        stat["mode_commit_count"] = int(mode_counts.get("commit", 0))
+        stat["mode_explore_count"] = int(mode_counts.get("explore", 0))
+        stat["mode_recover_count"] = int(mode_counts.get("recover", 0))
+        stat["mode_reject_count"] = int(mode_counts.get("reject", 0))
         all_stats.append(stat)
 
         # Update cross-episode memory
@@ -573,7 +643,7 @@ def write_csv(all_stats, path):
     if not all_stats:
         return
     with path.open("w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames_for_rows(all_stats))
+        w = csv.DictWriter(f, fieldnames=fieldnames_for_rows(all_stats), lineterminator="\n")
         w.writeheader()
         w.writerows(all_stats)
     print(f"[write] {path}")
@@ -607,10 +677,132 @@ def write_summary_rows(all_stats, methods, ctypes, path):
         rows.append(row)
     if rows:
         with path.open("w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()), lineterminator="\n")
             w.writeheader()
             w.writerows(rows)
         print(f"[write] {path}")
+
+
+def _rate(rows: List[dict], key: str) -> float:
+    if not rows:
+        return float("nan")
+    vals = []
+    for row in rows:
+        try:
+            vals.append(float(row.get(key, 0.0)))
+        except (TypeError, ValueError):
+            vals.append(0.0)
+    return float(np.mean(vals)) if vals else float("nan")
+
+
+def _format_rate(value: float) -> str:
+    if not np.isfinite(value):
+        return "not run"
+    return f"{100.0 * value:.1f}%"
+
+
+def _format_latex_rate(value: float) -> str:
+    return _format_rate(value).replace("%", r"\%")
+
+
+def _false_feasible_table_rows(all_stats: List[dict], methods: List[str]) -> List[dict]:
+    rows = []
+    for method in methods:
+        subset = [
+            row for row in all_stats
+            if row.get("method") == method
+            and str(row.get("corridor_type", "")).lower() == "false_feasible"
+        ]
+        if not subset:
+            continue
+        timeout_stuck = float(np.mean([
+            float(row.get("timeout", 0.0)) > 0.5 or float(row.get("stuck", 0.0)) > 0.5
+            for row in subset
+        ]))
+        rows.append({
+            "method": METHOD_LABELS.get(method, method),
+            "episodes": len(subset),
+            "success": _rate(subset, "success"),
+            "correct_reject": _rate(subset, "correct_reject"),
+            "false_reject": _rate(subset, "false_reject"),
+            "collision": _rate(subset, "collision"),
+            "near_collision": _rate(subset, "near_collision"),
+            "timeout_stuck": timeout_stuck,
+            "wasted_attempt": _rate(subset, "wasted_attempt"),
+        })
+    return rows
+
+
+def _false_feasible_markdown(rows: List[dict]) -> str:
+    lines = [
+        "# Table: False-Feasible Outcome Decomposition",
+        "",
+        "0% traversal success is not equivalent to correct rejection; this table decomposes abstention and execution failure.",
+        "",
+        "| Method | Episodes | Traversal success | Correct reject | False reject | Collision | Near collision | Timeout/stuck | Wasted attempts |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        lines.append(
+            "| {method} | {episodes} | {success} | {correct_reject} | {false_reject} | "
+            "{collision} | {near_collision} | {timeout_stuck} | {wasted_attempt} |".format(
+                method=row["method"],
+                episodes=row["episodes"],
+                success=_format_rate(row["success"]),
+                correct_reject=_format_rate(row["correct_reject"]),
+                false_reject=_format_rate(row["false_reject"]),
+                collision=_format_rate(row["collision"]),
+                near_collision=_format_rate(row["near_collision"]),
+                timeout_stuck=_format_rate(row["timeout_stuck"]),
+                wasted_attempt=_format_rate(row["wasted_attempt"]),
+            )
+        )
+    lines.extend([
+        "",
+        "Definitions:",
+        "- `correct_reject = reject and passable_label == false`.",
+        "- `false_reject = reject and passable_label == true`.",
+        "- `wasted_attempt = attempted execution on a false-feasible passage without correct rejection`.",
+        "- `success == false` is never converted into correct rejection.",
+    ])
+    return "\n".join(lines)
+
+
+def _false_feasible_latex(rows: List[dict]) -> str:
+    lines = [
+        r"\begin{tabular}{lrrrrrrrr}",
+        r"\toprule",
+        r"Method & Episodes & Traversal success & Correct reject & False reject & Collision & Near collision & Timeout/stuck & Wasted attempts \\",
+        r"\midrule",
+    ]
+    for row in rows:
+        method = str(row["method"]).replace("_", r"\_")
+        lines.append(
+            f"{method} & {row['episodes']} & {_format_latex_rate(row['success'])} "
+            f"& {_format_latex_rate(row['correct_reject'])} "
+            f"& {_format_latex_rate(row['false_reject'])} "
+            f"& {_format_latex_rate(row['collision'])} "
+            f"& {_format_latex_rate(row['near_collision'])} "
+            f"& {_format_latex_rate(row['timeout_stuck'])} "
+            f"& {_format_latex_rate(row['wasted_attempt'])} \\\\"
+        )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return "\n".join(lines)
+
+
+def write_false_feasible_outcome_tables(all_stats: List[dict], methods: List[str]):
+    rows = _false_feasible_table_rows(all_stats, methods)
+    if not rows:
+        print("[warn] no false_feasible rows available for outcome table")
+        return
+    out_dir = RESULTS / "tables"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    md_path = out_dir / "paper_table_false_feasible_outcomes.md"
+    tex_path = out_dir / "paper_table_false_feasible_outcomes.tex"
+    md_path.write_text(_false_feasible_markdown(rows) + "\n")
+    tex_path.write_text(_false_feasible_latex(rows) + "\n")
+    print(f"[write] {md_path}")
+    print(f"[write] {tex_path}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -620,13 +812,16 @@ def main():
     ap.add_argument("--methods", nargs="+",
                     default=["rule_baseline", "geometry_fsm", "fsm_no_recovery",
                              "fsm_no_alignment", "fsm_local_memory", "fsm_cross_memory"])
-    ap.add_argument("--corridor-types", nargs="+",
+    ap.add_argument("--corridor-types", "--ctypes", nargs="+", dest="corridor_types",
                     default=["straight", "l_shaped", "s_shaped",
                              "narrow_exit", "narrow_entry", "asymmetric", "false_feasible"])
     ap.add_argument("--episodes", type=int, default=500)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--seeds", type=int, default=1,
-                    help="number of independent seeds (reports mean ± std when > 1)")
+    ap.add_argument("--seeds", nargs="+", type=int, default=None,
+                    help="explicit seed list, e.g. --seeds 0 1 2. For backward "
+                         "compatibility, a single value >1 is treated as a seed count.")
+    ap.add_argument("--num-seeds", type=int, default=None,
+                    help="number of independent seeds starting at --seed")
     ap.add_argument("--entry-jitter", type=float, default=0.0,
                     help="std dev (m) of lateral start-position noise — use 0.20–0.30 "
                          "to force RECOVER activations for ablation robustness testing")
@@ -634,17 +829,27 @@ def main():
                     type=Path, default=RESULTS / "harder_benchmark_episodes.csv")
     ap.add_argument("--output-summary",
                     type=Path, default=RESULTS / "harder_benchmark_summary.csv")
+    ap.add_argument("--log-outcome-decomposition", action="store_true",
+                    help="write false-feasible reject/collision/timeout/wasted-attempt tables")
     args = ap.parse_args()
 
     ctypes = args.corridor_types
-    n_seeds = args.seeds
+    if args.seeds is None:
+        count = args.num_seeds or 1
+        seed_values = [args.seed + i for i in range(count)]
+    elif len(args.seeds) == 1 and args.num_seeds is None and args.seeds[0] > 1:
+        # Previous versions used --seeds as a count.  Keep that command working:
+        #   --seed 42 --seeds 3  ->  [42, 43, 44]
+        seed_values = [args.seed + i for i in range(args.seeds[0])]
+    else:
+        seed_values = list(args.seeds)
+    n_seeds = len(seed_values)
     jitter = args.entry_jitter
 
     # Collect per-seed stats for all methods
     per_seed_stats: Dict[str, List[List[dict]]] = {m: [] for m in args.methods}
 
-    for seed_idx in range(n_seeds):
-        run_seed = args.seed + seed_idx
+    for seed_idx, run_seed in enumerate(seed_values):
         print(f"\n{'='*60}")
         print(f"Seed {run_seed}  ({seed_idx+1}/{n_seeds})"
               + (f"  entry_jitter={jitter:.2f}m" if jitter > 0 else ""))
@@ -686,6 +891,14 @@ def main():
     print_summary(all_stats, args.methods, ctypes, multi_seed_std)
     write_csv(all_stats, args.output_csv)
     write_summary_rows(all_stats, args.methods, ctypes, args.output_summary)
+    if args.log_outcome_decomposition:
+        missing = [
+            col for col in FALSE_FEASIBLE_REQUIRED_COLUMNS
+            if all(col not in row for row in all_stats)
+        ]
+        if missing:
+            raise RuntimeError(f"false-feasible outcome columns missing: {missing}")
+        write_false_feasible_outcome_tables(all_stats, args.methods)
 
 
 if __name__ == "__main__":

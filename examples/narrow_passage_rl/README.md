@@ -83,6 +83,19 @@ Output tables:
 
 - `results/narrow_passage_rl/paper_table_procedural_v2_main.md`
 - `results/narrow_passage_rl/paper_table_harder_ablation.md`
+- `results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md`
+
+False-feasible outcome decomposition:
+
+| Method | Episodes | Traversal success | Correct reject | Collision | Timeout/stuck | Wasted attempts |
+|---|---:|---:|---:|---:|---:|---:|
+| Reactive rule baseline | 1500 | 0.0% | 0.0% | 100.0% | 0.0% | 100.0% |
+| DEGNAV-Rule / Geometry-FSM | 1500 | 0.0% | 0.0% | 2.8% | 97.2% | 100.0% |
+
+This table prevents a common misreading: 0% traversal success is not equivalent
+to correct rejection.  The raw CSV logs `reject`, `correct_reject`,
+`false_reject`, `collision`, `timeout`, `stuck`, and `wasted_attempt` per
+episode.
 
 ### 2. Habitat HM3D Nominal Anchor Validation
 
@@ -589,12 +602,14 @@ results/narrow_passage_rl/paper_table_repeated_failure_memory.md
 results/narrow_passage_rl/paper_table_memory_transfer_interference.md
 results/narrow_passage_rl/paper_table_degnav_rl_diagnostic.md
 results/narrow_passage_rl/paper_table_belief_mode_ablation.md
+results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md
 ```
 
 Important raw CSV outputs:
 
 ```text
 results/narrow_passage_rl/harder_benchmark_episodes.csv
+results/narrow_passage_rl/raw/false_feasible_outcomes.csv
 results/narrow_passage_rl/habitat_stress_validation.csv
 results/narrow_passage_rl/repeated_failure_memory.csv
 results/narrow_passage_rl/memory_transfer_interference.csv

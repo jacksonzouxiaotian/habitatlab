@@ -1,5 +1,5 @@
 version: 1
-updated: "2026-07-13"
+updated: "2026-07-14"
 scope: "AAAI narrow-passage paper result registry"
 
 registry_rules:
@@ -10,6 +10,7 @@ registry_rules:
   - "Current DEGNAV-RL results are diagnostic until safe mode selection is reliable."
   - "Smoke baselines are never allowed in the main paper."
   - "The 100.0% DEGNAV-Rule / Geometry-FSM Habitat row means nominal anchor validation under the current mining protocol, not universal robustness."
+  - "False-feasible traversal success must not be interpreted as correct rejection without outcome decomposition."
   - "If multiple entries reference the same path, every secondary entry must declare alias_of."
   - "Entries with split_policy: mixed must set canonical: false and paper_safe: false unless they are only raw-data provenance with table_status: missing."
 
@@ -112,6 +113,58 @@ results:
       corridor_type_success: "Success rate grouped by procedural corridor type."
     notes:
       - "Use this table to support module-level ablations in procedural v2."
+
+  false_feasible_outcome_decomposition:
+    role: canonical_diagnostic
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md"
+    table_status: available
+    split: "synthetic v2 false_feasible only"
+    split_policy: same
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/false_feasible_outcomes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/false_feasible_outcomes_summary.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/false_feasible_outcomes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/false_feasible_outcomes_summary.csv"
+    domain: "Procedural v2 HarderNarrowPassageEnv"
+    eval_split: "false_feasible corridor type only"
+    train_domain: "none; rule-controller evaluation"
+    methods:
+      - "rule_baseline"
+      - "geometry_fsm"
+    paper_method_names:
+      rule_baseline: "Reactive rule baseline"
+      geometry_fsm: "DEGNAV-Rule / Geometry-FSM"
+    seeds: [0, 1, 2]
+    episodes: "500 per seed per method; 1500 per method"
+    metrics:
+      - "traversal_success"
+      - "correct_reject"
+      - "false_reject"
+      - "collision"
+      - "near_collision"
+      - "timeout_or_stuck"
+      - "wasted_attempt"
+    metric_definitions:
+      traversal_success: "Goal-reaching success on benchmark-labeled false-feasible passages."
+      correct_reject: "reject and passable_label == false; never inferred from success == false."
+      false_reject: "reject and passable_label == true."
+      collision: "Procedural collision flag accumulated over the episode."
+      near_collision: "Episode reaches body margin below the near-collision threshold."
+      timeout_or_stuck: "Episode timed out or ended with stuck flag."
+      wasted_attempt: "Attempted execution on a false-feasible passage without correct rejection."
+    notes:
+      - "0% traversal success is not equivalent to correct rejection; this table decomposes abstention and execution failure."
+      - "The current Reactive rule baseline and DEGNAV-Rule / Geometry-FSM both have 0.0% correct reject on this labeled false-feasible slice."
+      - "Use this table to avoid overclaiming Reject-mode evidence from the aggregate false-feasible success column."
 
   habitat_formal_same_split:
     role: canonical_nominal
