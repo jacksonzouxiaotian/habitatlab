@@ -35,6 +35,14 @@ RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 DEFAULT_CSV = RESULTS / "habitat_stress_validation.csv"
 DEFAULT_MD = RESULTS / "paper_table_habitat_stress.md"
 DEFAULT_TEX = RESULTS / "paper_table_habitat_stress.tex"
+DEFAULT_RAW_ALL = RESULTS / "raw" / "habitat_stress_all.csv"
+TABLE_DIR = RESULTS / "tables"
+STRESS_NOMINAL_MD = TABLE_DIR / "paper_table_habitat_stress_nominal.md"
+STRESS_NOMINAL_TEX = TABLE_DIR / "paper_table_habitat_stress_nominal.tex"
+CLEARANCE_DIAG_MD = TABLE_DIR / "paper_table_habitat_clearance_diagnostic.md"
+CLEARANCE_DIAG_TEX = TABLE_DIR / "paper_table_habitat_clearance_diagnostic.tex"
+KEY_SLICES_MD = TABLE_DIR / "paper_table_habitat_stress_key_slices.md"
+KEY_SLICES_TEX = TABLE_DIR / "paper_table_habitat_stress_key_slices.tex"
 
 FEATURE_DIM = 19
 _LIN_MIN, _LIN_MAX = -0.15, 0.35
@@ -448,6 +456,10 @@ def summarize(rows: List[Dict]) -> List[Dict]:
                 "avg_min_clearance": np.mean([v["min_clearance"] for v in vals]),
                 "avg_steps": np.mean([v["steps"] for v in vals]),
                 "timeout_rate": np.mean([v["timeout"] for v in vals]),
+                "success_but_unsafe_rate": np.mean([
+                    float(float(v["success"]) > 0.5 and float(v["strict_success"]) < 0.5)
+                    for v in vals
+                ]),
             }
         )
     return summary
@@ -462,8 +474,18 @@ def write_csv(rows: List[Dict], path: Path) -> None:
     print(f"[write] {path}")
 
 
+def copy_raw_stress(rows: List[Dict], path: Path = DEFAULT_RAW_ALL) -> None:
+    """Write a provenance-preserving copy for table-generation scripts."""
+
+    write_csv(rows, path)
+
+
 def _fmt_pct(x: float) -> str:
     return f"{100.0 * float(x):.1f}%"
+
+
+def _fmt_num(x: float, digits: int = 1) -> str:
+    return f"{float(x):.{digits}f}"
 
 
 def write_markdown(summary: List[Dict], path: Path) -> None:
@@ -526,6 +548,217 @@ def write_latex(summary: List[Dict], path: Path) -> None:
     print(f"[write] {path}")
 
 
+def _table_rows(summary: List[Dict], stresses: set[str] | None = None,
+                methods: set[str] | None = None) -> List[Dict]:
+    rows = []
+    for row in summary:
+        if stresses is not None and row["stress"] not in stresses:
+            continue
+        if methods is not None and row["method"] not in methods:
+            continue
+        rows.append(row)
+    return rows
+
+
+def write_stress_nominal_table(summary: List[Dict], md_path: Path, tex_path: Path) -> None:
+    """Write stress table with only nominal task metrics, no clearance diagnostics."""
+
+    rows = _table_rows(summary)
+    md_lines = [
+        "# Table: Habitat Stress Validation - Nominal Metrics",
+        "",
+        "Nominal task metrics under controlled Habitat perturbations. Clearance-aware diagnostics are split into `paper_table_habitat_clearance_diagnostic.md`.",
+        "",
+        "| Stress | Method | Episodes | Success rate | Collision | Timeout | Avg steps |",
+        "|:---|:---|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        md_lines.append(
+            "| {stress} | {method} | {episodes} | {sr} | {collision} | {timeout} | {steps} |".format(
+                stress=row["stress"],
+                method=row["method"],
+                episodes=row["episodes"],
+                sr=_fmt_pct(row["success_rate"]),
+                collision=_fmt_pct(row["collision_rate"]),
+                timeout=_fmt_pct(row["timeout_rate"]),
+                steps=_fmt_num(row["avg_steps"], 1),
+            )
+        )
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text("\n".join(md_lines) + "\n")
+    print(f"[write] {md_path}")
+
+    tex_lines = [
+        r"\begin{tabular}{llrrrrr}",
+        r"\toprule",
+        r"Stress & Method & N & Success & Collision & Timeout & Avg steps \\",
+        r"\midrule",
+    ]
+    for row in rows:
+        tex_lines.append(
+            "{} & {} & {} & {} & {} & {} & {:.1f} \\\\".format(
+                _tex_escape(row["stress"]),
+                _tex_escape(row["method"]),
+                row["episodes"],
+                _fmt_pct(row["success_rate"]).replace("%", r"\%"),
+                _fmt_pct(row["collision_rate"]).replace("%", r"\%"),
+                _fmt_pct(row["timeout_rate"]).replace("%", r"\%"),
+                row["avg_steps"],
+            )
+        )
+    tex_lines.extend([r"\bottomrule", r"\end{tabular}", ""])
+    tex_path.write_text("\n".join(tex_lines))
+    print(f"[write] {tex_path}")
+
+
+def write_clearance_diagnostic_table(summary: List[Dict], md_path: Path, tex_path: Path) -> None:
+    rows = _table_rows(summary)
+    note = (
+        "The strict clearance metric is a depth-derived body-margin proxy. "
+        "Negative values and high near-collision rates may reflect scanned-scene, "
+        "navmesh, or depth-proxy artifacts. We report it as a diagnostic metric, "
+        "not as a direct physical contact measurement."
+    )
+    md_lines = [
+        "# Table: Habitat Clearance Diagnostic Metrics",
+        "",
+        note,
+        "",
+        "| Stress | Method | Strict success | Near collision | Avg min clearance | Success-but-unsafe |",
+        "|:---|:---|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        md_lines.append(
+            "| {stress} | {method} | {strict} | {near} | {clearance:.3f} | {sbu} |".format(
+                stress=row["stress"],
+                method=row["method"],
+                strict=_fmt_pct(row["strict_success_rate"]),
+                near=_fmt_pct(row["near_collision_rate"]),
+                clearance=row["avg_min_clearance"],
+                sbu=_fmt_pct(row.get("success_but_unsafe_rate", 0.0)),
+            )
+        )
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text("\n".join(md_lines) + "\n")
+    print(f"[write] {md_path}")
+
+    tex_lines = [
+        r"\begin{tabular}{llrrrr}",
+        r"\toprule",
+        r"Stress & Method & Strict success & Near collision & Min clearance & Success-but-unsafe \\",
+        r"\midrule",
+    ]
+    for row in rows:
+        tex_lines.append(
+            "{} & {} & {} & {} & {:.3f} & {} \\\\".format(
+                _tex_escape(row["stress"]),
+                _tex_escape(row["method"]),
+                _fmt_pct(row["strict_success_rate"]).replace("%", r"\%"),
+                _fmt_pct(row["near_collision_rate"]).replace("%", r"\%"),
+                row["avg_min_clearance"],
+                _fmt_pct(row.get("success_but_unsafe_rate", 0.0)).replace("%", r"\%"),
+            )
+        )
+    tex_lines.extend([r"\bottomrule", r"\end{tabular}", ""])
+    tex_path.write_text("\n".join(tex_lines))
+    print(f"[write] {tex_path}")
+
+
+def _key_slice_filter(row: Dict) -> bool:
+    stress = row["stress"]
+    method = row["method"]
+    if stress == "nominal":
+        return method in {"apf_gap", "fsm_full"}
+    if stress in {"yaw60", "extreme_yaw60", "lat020"}:
+        return method in {"apf_gap", "fsm_full", "fsm_no_heading_alignment"}
+    return False
+
+
+KEY_SLICE_ORDER = {
+    "nominal": 0,
+    "yaw60": 1,
+    "extreme_yaw60": 2,
+    "lat020": 3,
+}
+
+KEY_SLICE_METHOD_ORDER = {
+    "apf_gap": 0,
+    "fsm_full": 1,
+    "fsm_no_heading_alignment": 2,
+}
+
+
+def write_key_slices_table(summary: List[Dict], md_path: Path, tex_path: Path) -> None:
+    rows = sorted(
+        [row for row in summary if _key_slice_filter(row)],
+        key=lambda row: (
+            KEY_SLICE_ORDER.get(row["stress"], 99),
+            KEY_SLICE_METHOD_ORDER.get(row["method"], 99),
+        ),
+    )
+    note = (
+        "Key stress slices for manuscript discussion. Clearance columns are diagnostic "
+        "body-margin proxies, not calibrated physical contact measurements."
+    )
+    md_lines = [
+        "# Table: Habitat Stress Key Slices",
+        "",
+        note,
+        "",
+        "| Stress | Method | Episodes | Success rate | Collision | Timeout | Avg steps | Strict success (diagnostic) | Near collision (diagnostic) | Avg min clearance (diagnostic) |",
+        "|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        md_lines.append(
+            "| {stress} | {method} | {episodes} | {sr} | {collision} | {timeout} | {steps} | {strict} | {near} | {clearance:.3f} |".format(
+                stress=row["stress"],
+                method=row["method"],
+                episodes=row["episodes"],
+                sr=_fmt_pct(row["success_rate"]),
+                collision=_fmt_pct(row["collision_rate"]),
+                timeout=_fmt_pct(row["timeout_rate"]),
+                steps=_fmt_num(row["avg_steps"], 1),
+                strict=_fmt_pct(row["strict_success_rate"]),
+                near=_fmt_pct(row["near_collision_rate"]),
+                clearance=row["avg_min_clearance"],
+            )
+        )
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text("\n".join(md_lines) + "\n")
+    print(f"[write] {md_path}")
+
+    tex_lines = [
+        r"\begin{tabular}{llrrrrrrrr}",
+        r"\toprule",
+        r"Stress & Method & N & Success & Collision & Timeout & Steps & Strict diag. & Near diag. & Min clearance diag. \\",
+        r"\midrule",
+    ]
+    for row in rows:
+        tex_lines.append(
+            "{} & {} & {} & {} & {} & {} & {:.1f} & {} & {} & {:.3f} \\\\".format(
+                _tex_escape(row["stress"]),
+                _tex_escape(row["method"]),
+                row["episodes"],
+                _fmt_pct(row["success_rate"]).replace("%", r"\%"),
+                _fmt_pct(row["collision_rate"]).replace("%", r"\%"),
+                _fmt_pct(row["timeout_rate"]).replace("%", r"\%"),
+                row["avg_steps"],
+                _fmt_pct(row["strict_success_rate"]).replace("%", r"\%"),
+                _fmt_pct(row["near_collision_rate"]).replace("%", r"\%"),
+                row["avg_min_clearance"],
+            )
+        )
+    tex_lines.extend([r"\bottomrule", r"\end{tabular}", ""])
+    tex_path.write_text("\n".join(tex_lines))
+    print(f"[write] {tex_path}")
+
+
+def write_split_stress_tables(summary: List[Dict]) -> None:
+    write_stress_nominal_table(summary, STRESS_NOMINAL_MD, STRESS_NOMINAL_TEX)
+    write_clearance_diagnostic_table(summary, CLEARANCE_DIAG_MD, CLEARANCE_DIAG_TEX)
+    write_key_slices_table(summary, KEY_SLICES_MD, KEY_SLICES_TEX)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--methods", nargs="+", default=[
@@ -586,9 +819,11 @@ def main():
     if not all_rows:
         raise RuntimeError("No episodes were evaluated. Check dataset path or extreme-narrow filter.")
     write_csv(all_rows, args.output_csv)
+    copy_raw_stress(all_rows)
     summary = summarize(all_rows)
     write_markdown(summary, args.summary_md)
     write_latex(summary, args.summary_tex)
+    write_split_stress_tables(summary)
 
 
 if __name__ == "__main__":

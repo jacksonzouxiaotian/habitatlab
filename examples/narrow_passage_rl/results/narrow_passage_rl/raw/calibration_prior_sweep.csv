@@ -1,0 +1,6 @@
+prior_width,true_width,interpretation,seeds,episodes,final_posterior_mean,final_posterior_mean_std,final_posterior_q95,final_posterior_q95_std,mean_p_feas,empirical_feasible_rate,predicted_feasible_rate,attempt_success_rate,reject_rate,collision_rate,unsafe_attempt_rate,brier,ece
+0.26,0.36,under-conservative,3,900,0.3453,0.0017,0.3580,0.0014,0.6582,0.5967,0.6600,0.5967,0.2811,0.1222,0.1222,0.04357,0.06152
+0.31,0.36,under-conservative,3,900,0.3429,0.0070,0.3551,0.0071,0.6482,0.5867,0.6489,0.5867,0.3056,0.1078,0.1078,0.04491,0.06152
+0.36,0.36,oracle,3,900,0.3399,0.0026,0.3526,0.0025,0.6431,0.5900,0.6433,0.5900,0.3000,0.1100,0.1100,0.03794,0.05313
+0.46,0.36,over-conservative,3,900,0.3379,0.0023,0.3519,0.0022,0.6413,0.6022,0.6333,0.5933,0.3178,0.0889,0.0889,0.03858,0.03916
+0.56,0.36,over-conservative,3,900,0.3434,0.0029,0.3562,0.0013,0.6046,0.5778,0.6089,0.5711,0.3278,0.1011,0.1011,0.03760,0.03775

@@ -1,63 +1,13 @@
-# Table: Habitat Stress Validation
+# Deprecated Mixed Habitat Stress Table
 
-Module sensitivity under controlled Habitat perturbations. Clearance-aware metrics are reported as diagnostic indicators and are not interpreted as calibrated physical safety measurements.
+This path previously mixed nominal success-rate metrics with clearance-aware
+diagnostic metrics. Do not cite this file as the main Habitat stress table.
 
-The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated physical safety measurements.
+Use the split tables instead:
 
-| Stress | Method | Episodes | SR | Strict SR | Collision | Near collision | Avg min clearance | Avg steps | Timeout |
-|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|
-| drop010 | apf_gap | 151 | 98.7% | 1.3% | 0.0% | 100.0% | -0.112 | 95.1 | 0.0% |
-| drop010 | fsm_full | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| drop010 | fsm_no_heading_alignment | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| drop010 | fsm_no_lateral_alignment | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| drop010 | fsm_no_recovery | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| drop030 | apf_gap | 151 | 98.7% | 1.3% | 0.0% | 100.0% | -0.112 | 98.4 | 0.0% |
-| drop030 | fsm_full | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| drop030 | fsm_no_heading_alignment | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| drop030 | fsm_no_lateral_alignment | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| drop030 | fsm_no_recovery | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| extreme | apf_gap | 24 | 91.7% | 0.0% | 0.0% | 100.0% | -0.132 | 96.9 | 0.0% |
-| extreme | fsm_full | 24 | 100.0% | 0.0% | 0.0% | 100.0% | -0.129 | 47.1 | 0.0% |
-| extreme | fsm_no_heading_alignment | 24 | 100.0% | 0.0% | 0.0% | 100.0% | -0.129 | 47.1 | 0.0% |
-| extreme | fsm_no_lateral_alignment | 24 | 100.0% | 0.0% | 0.0% | 100.0% | -0.129 | 47.1 | 0.0% |
-| extreme | fsm_no_recovery | 24 | 100.0% | 0.0% | 0.0% | 100.0% | -0.129 | 47.1 | 0.0% |
-| extreme_yaw60 | apf_gap | 24 | 79.2% | 0.0% | 0.0% | 100.0% | -0.139 | 91.9 | 0.0% |
-| extreme_yaw60 | fsm_full | 24 | 100.0% | 0.0% | 0.0% | 100.0% | -0.134 | 50.3 | 0.0% |
-| extreme_yaw60 | fsm_no_heading_alignment | 24 | 79.2% | 0.0% | 0.0% | 100.0% | -0.144 | 138.3 | 12.5% |
-| extreme_yaw60 | fsm_no_lateral_alignment | 24 | 100.0% | 0.0% | 0.0% | 100.0% | -0.135 | 50.3 | 0.0% |
-| extreme_yaw60 | fsm_no_recovery | 24 | 100.0% | 0.0% | 0.0% | 100.0% | -0.134 | 50.3 | 0.0% |
-| lat010 | apf_gap | 151 | 97.4% | 1.3% | 0.0% | 100.0% | -0.113 | 96.0 | 0.0% |
-| lat010 | fsm_full | 151 | 100.0% | 1.3% | 0.0% | 100.0% | -0.108 | 48.2 | 0.0% |
-| lat010 | fsm_no_heading_alignment | 151 | 100.0% | 1.3% | 0.0% | 100.0% | -0.112 | 50.0 | 0.0% |
-| lat010 | fsm_no_lateral_alignment | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.108 | 48.2 | 0.0% |
-| lat010 | fsm_no_recovery | 151 | 100.0% | 1.3% | 0.0% | 100.0% | -0.108 | 48.2 | 0.0% |
-| lat020 | apf_gap | 151 | 92.7% | 1.3% | 0.0% | 100.0% | -0.113 | 93.2 | 0.0% |
-| lat020 | fsm_full | 151 | 98.0% | 1.3% | 0.0% | 100.0% | -0.108 | 47.9 | 0.0% |
-| lat020 | fsm_no_heading_alignment | 151 | 95.4% | 0.7% | 0.0% | 100.0% | -0.118 | 75.2 | 0.7% |
-| lat020 | fsm_no_lateral_alignment | 151 | 98.0% | 2.0% | 0.0% | 100.0% | -0.107 | 47.7 | 0.0% |
-| lat020 | fsm_no_recovery | 151 | 98.0% | 1.3% | 0.0% | 100.0% | -0.108 | 47.9 | 0.0% |
-| noise002 | apf_gap | 151 | 97.4% | 0.0% | 0.0% | 100.0% | -0.141 | 94.0 | 0.0% |
-| noise002 | fsm_full | 151 | 100.0% | 0.0% | 0.0% | 100.0% | -0.132 | 48.1 | 0.0% |
-| noise002 | fsm_no_heading_alignment | 151 | 100.0% | 0.0% | 0.0% | 100.0% | -0.131 | 48.2 | 0.0% |
-| noise002 | fsm_no_lateral_alignment | 151 | 100.0% | 0.0% | 0.0% | 100.0% | -0.132 | 48.1 | 0.0% |
-| noise002 | fsm_no_recovery | 151 | 100.0% | 0.0% | 0.0% | 100.0% | -0.134 | 48.1 | 0.0% |
-| noise005 | apf_gap | 151 | 99.3% | 0.0% | 0.0% | 100.0% | -0.210 | 92.4 | 0.0% |
-| noise005 | fsm_full | 151 | 100.0% | 0.0% | 0.0% | 100.0% | -0.190 | 48.1 | 0.0% |
-| noise005 | fsm_no_heading_alignment | 151 | 100.0% | 0.0% | 0.0% | 100.0% | -0.189 | 48.3 | 0.0% |
-| noise005 | fsm_no_lateral_alignment | 151 | 100.0% | 0.0% | 0.0% | 100.0% | -0.191 | 48.1 | 0.0% |
-| noise005 | fsm_no_recovery | 151 | 100.0% | 0.0% | 0.0% | 100.0% | -0.187 | 48.2 | 0.0% |
-| nominal | apf_gap | 151 | 96.7% | 1.3% | 0.0% | 100.0% | -0.112 | 94.8 | 0.0% |
-| nominal | fsm_full | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| nominal | fsm_no_heading_alignment | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| nominal | fsm_no_lateral_alignment | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| nominal | fsm_no_recovery | 151 | 100.0% | 2.0% | 0.0% | 100.0% | -0.107 | 48.1 | 0.0% |
-| yaw30 | apf_gap | 151 | 94.7% | 1.3% | 0.0% | 100.0% | -0.116 | 94.0 | 0.0% |
-| yaw30 | fsm_full | 151 | 100.0% | 1.3% | 0.0% | 100.0% | -0.111 | 49.0 | 0.0% |
-| yaw30 | fsm_no_heading_alignment | 151 | 98.7% | 0.7% | 0.0% | 100.0% | -0.119 | 70.9 | 0.0% |
-| yaw30 | fsm_no_lateral_alignment | 151 | 100.0% | 1.3% | 0.0% | 100.0% | -0.111 | 49.0 | 0.0% |
-| yaw30 | fsm_no_recovery | 151 | 100.0% | 1.3% | 0.0% | 100.0% | -0.111 | 49.0 | 0.0% |
-| yaw60 | apf_gap | 151 | 95.4% | 0.7% | 0.0% | 100.0% | -0.122 | 95.4 | 0.0% |
-| yaw60 | fsm_full | 151 | 100.0% | 0.7% | 0.0% | 100.0% | -0.117 | 51.5 | 0.0% |
-| yaw60 | fsm_no_heading_alignment | 151 | 76.8% | 0.0% | 0.0% | 100.0% | -0.132 | 160.1 | 16.6% |
-| yaw60 | fsm_no_lateral_alignment | 151 | 100.0% | 0.7% | 0.0% | 100.0% | -0.117 | 51.5 | 0.0% |
-| yaw60 | fsm_no_recovery | 151 | 100.0% | 0.7% | 0.0% | 100.0% | -0.117 | 51.5 | 0.0% |
+- `tables/paper_table_habitat_stress_nominal.md`
+- `tables/paper_table_habitat_clearance_diagnostic.md`
+- `tables/paper_table_habitat_stress_key_slices.md`
+
+The clearance-aware strict success metric is a depth-derived body-margin
+diagnostic, not a calibrated physical contact measurement.

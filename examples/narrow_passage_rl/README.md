@@ -155,8 +155,10 @@ Compared methods:
 Output:
 
 - `results/narrow_passage_rl/habitat_stress_validation.csv`
-- `results/narrow_passage_rl/paper_table_habitat_stress.md`
-- `results/narrow_passage_rl/paper_table_habitat_stress.tex`
+- `results/narrow_passage_rl/raw/habitat_stress_all.csv`
+- `results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.md`
+- `results/narrow_passage_rl/tables/paper_table_habitat_clearance_diagnostic.md`
+- `results/narrow_passage_rl/tables/paper_table_habitat_stress_key_slices.md`
 
 ### 4. Clearance-Aware RL Diagnostic
 
@@ -594,7 +596,9 @@ Important table outputs:
 results/narrow_passage_rl/paper_table_procedural_v2_main.md
 results/narrow_passage_rl/paper_table_harder_ablation.md
 results/narrow_passage_rl/paper_table_habitat.md
-results/narrow_passage_rl/paper_table_habitat_stress.md
+results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.md
+results/narrow_passage_rl/tables/paper_table_habitat_clearance_diagnostic.md
+results/narrow_passage_rl/tables/paper_table_habitat_stress_key_slices.md
 results/narrow_passage_rl/paper_table_formal_baselines.md
 results/narrow_passage_rl/paper_table_diagnostic_baselines.md
 results/narrow_passage_rl/paper_table_smoke_baselines.md

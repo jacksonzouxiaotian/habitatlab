@@ -28,5 +28,7 @@ Interpretation:
   policies are fragile near geometric feasibility boundaries.
 - DEGNAV-Rule / Geometry-FSM's 100.0% row is nominal anchor validation under
   the current mining protocol, not a standalone robustness claim; use
-  `paper_table_habitat_stress.md` for module sensitivity under Habitat
-  perturbations.
+  `tables/paper_table_habitat_stress_nominal.md` and
+  `tables/paper_table_habitat_stress_key_slices.md` for module sensitivity
+  under Habitat perturbations. Clearance-aware strict metrics are reported in
+  `tables/paper_table_habitat_clearance_diagnostic.md` as diagnostics.

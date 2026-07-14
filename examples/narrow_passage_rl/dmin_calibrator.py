@@ -71,10 +71,7 @@ class DMinCalibrator:
     @property
     def d_hat_conservative(self) -> float:
         """Upper-percentile estimate for conservative commit/reject decisions."""
-        cumsum = np.cumsum(self.probs)
-        pct = 1.0 - self.cfg.conservative_pct   # e.g. 75th percentile
-        idx = int(np.searchsorted(cumsum, pct))
-        return float(self.d_vals[min(idx, len(self.d_vals) - 1)])
+        return self.quantile(1.0 - self.cfg.conservative_pct)
 
     @property
     def std(self) -> float:
@@ -96,6 +93,20 @@ class DMinCalibrator:
             return True   # confident the passage is wide enough
         # Passage appears too narrow — explore with some probability
         return bool(rng.random() < self.cfg.explore_prob)
+
+    def quantile(self, pct: float) -> float:
+        """Return the posterior quantile for ``pct`` in [0, 1]."""
+
+        pct = float(np.clip(pct, 0.0, 1.0))
+        cumsum = np.cumsum(self.probs)
+        idx = int(np.searchsorted(cumsum, pct))
+        return float(self.d_vals[min(idx, len(self.d_vals) - 1)])
+
+    def prob_feasible(self, passage_width: float) -> float:
+        """Return ``P(D_min <= passage_width)`` under the posterior."""
+
+        width = float(passage_width)
+        return float(self.probs[self.d_vals <= width].sum())
 
     def update(self, passage_width: float, success: bool, attempted: bool = True):
         """Update posterior from one traversal outcome.

@@ -40,10 +40,35 @@ sys.path.insert(0, str(Path(__file__).parent))
 from procedural_env_v2 import CorridorType, HarderNarrowPassageEnv
 from failure_memory import FailureMemoryConfig, PassageFailureMemory
 from cross_episode_memory import CrossEpisodeMemory, MemoryConfig, FSMMode
-from narrow_passage.models.belief_state import BeliefState
+from narrow_passage.models.belief_state import BeliefState, BeliefStateConfig
 from evaluation.logging_schema import fieldnames_for_rows, finalize_episode_row
 
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
+
+CORE_VARIANTS = [
+    "full",
+    "no_alignment",
+    "no_recovery",
+    "deterministic_margin",
+    "no_yaw_prior",
+]
+
+LEGACY_METHOD_TO_VARIANT = {
+    "geometry_fsm": "full",
+    "fsm_no_recovery": "no_recovery",
+    "fsm_no_alignment": "no_alignment",
+    "fsm_local_memory": "full",
+    "fsm_cross_memory": "full",
+    "full": "full",
+    "no_alignment": "no_alignment",
+    "no_recovery": "no_recovery",
+    "deterministic_margin": "deterministic_margin",
+    "no_yaw_prior": "no_yaw_prior",
+}
+
+PROB_FEAS_THRESHOLD = 0.70
+RISK_THRESHOLD = 0.35
+TAU_MARGIN = 0.05
 
 FALSE_FEASIBLE_REQUIRED_COLUMNS = [
     "episode_id",
@@ -104,6 +129,31 @@ MARGIN_PHASE_REQUIRED_COLUMNS = [
     "mode_reject_count",
 ]
 
+CORE_ABLATION_REQUIRED_COLUMNS = [
+    "variant",
+    "method",
+    "episode_id",
+    "seed",
+    "corridor_type",
+    "success",
+    "collision",
+    "near_collision",
+    "reject",
+    "correct_reject",
+    "false_reject",
+    "timeout",
+    "stuck",
+    "d_hat",
+    "w_req_cons",
+    "delta_mean",
+    "delta_var",
+    "p_feas",
+    "mode_commit_count",
+    "mode_explore_count",
+    "mode_recover_count",
+    "mode_reject_count",
+]
+
 METHOD_LABELS = {
     "rule_baseline": "Reactive rule baseline",
     "geometry_fsm": "DEGNAV-Rule / Geometry-FSM",
@@ -111,6 +161,11 @@ METHOD_LABELS = {
     "fsm_no_alignment": "DEGNAV-Rule w/o alignment",
     "fsm_local_memory": "DEGNAV-Rule + local memory",
     "fsm_cross_memory": "DEGNAV-Rule + cross-episode memory",
+    "full": "DEGNAV-Rule / Geometry-FSM",
+    "no_alignment": "DEGNAV-Rule w/o alignment",
+    "no_recovery": "DEGNAV-Rule w/o recovery",
+    "deterministic_margin": "DEGNAV-Rule deterministic margin",
+    "no_yaw_prior": "DEGNAV-Rule w/o yaw prior",
 }
 
 
@@ -133,10 +188,26 @@ def _mode_bucket(mode: str) -> str:
     return "commit"
 
 
-def _belief_metrics(obs: np.ndarray, memory_risk: float = 0.0) -> dict:
+def _variant_for_method(method: str) -> str:
+    return LEGACY_METHOD_TO_VARIANT.get(method, "full")
+
+
+def _belief_cfg_for_variant(variant: str) -> BeliefStateConfig:
+    return BeliefStateConfig(use_yaw_prior=(variant != "no_yaw_prior"))
+
+
+def _belief_metrics(
+    obs: np.ndarray,
+    memory_risk: float = 0.0,
+    variant: str = "full",
+) -> dict:
     """Return common feasibility-belief diagnostics for CSV visualizations."""
 
-    belief = BeliefState.from_obs(obs, memory_risk=memory_risk)
+    belief = BeliefState.from_obs(
+        obs,
+        memory_risk=memory_risk,
+        cfg=_belief_cfg_for_variant(variant),
+    )
     risk = float(np.clip(1.0 - belief.p_feas + belief.memory_risk, 0.0, 1.0))
     return {
         "d_hat": belief.d_hat,
@@ -148,6 +219,26 @@ def _belief_metrics(obs: np.ndarray, memory_risk: float = 0.0) -> dict:
         "risk": risk,
         "memory_risk": belief.memory_risk,
     }
+
+
+def _feasibility_acceptance(obs: np.ndarray, variant: str,
+                            memory_risk: float = 0.0) -> tuple[bool, dict, str]:
+    """Return whether the passage should be accepted under the variant gate.
+
+    ``full`` uses the probabilistic feasibility belief.  ``deterministic_margin``
+    uses only the hard margin threshold and intentionally ignores ``p_feas`` and
+    ``delta_var`` for mode decisions.  ``no_yaw_prior`` keeps the probabilistic
+    machinery but builds the belief with a fixed frontal envelope.
+    """
+
+    belief_row = _belief_metrics(obs, memory_risk=memory_risk, variant=variant)
+    if variant == "deterministic_margin":
+        return bool(belief_row["delta_mean"] > TAU_MARGIN), belief_row, "deterministic_margin"
+    accept = (
+        float(belief_row["p_feas"]) >= PROB_FEAS_THRESHOLD
+        and float(belief_row["risk"]) <= RISK_THRESHOLD
+    )
+    return bool(accept), belief_row, "probabilistic_belief"
 
 
 # ── Controllers ───────────────────────────────────────────────────────────────
@@ -332,18 +423,26 @@ def fsm_action(obs, variant="full", local_mem: Optional[PassageFailureMemory] = 
     speed_fwd = 0.15 if cautious else 0.20
     speed_explore = 0.05 if cautious else 0.08
 
-    if variant == "no_alignment":
-        return _act(speed_fwd, float(np.clip(he * 0.9, -0.8, 0.8))), "COMMIT_NOALIGN"
+    memory_risk = 1.0 if cautious else 0.0
+    accept_feasible, _belief_row, _decision_rule = _feasibility_acceptance(
+        obs,
+        variant,
+        memory_risk=memory_risk,
+    )
 
     # FOLLOW_SPACE: sector-depth corner detection takes priority over ALIGN.
     # Only active for variants that use alignment (i.e. not no_alignment).
-    fs = _follow_space_mode(obs)
+    fs = None if variant == "no_alignment" else _follow_space_mode(obs)
     if fs is not None:
         return fs[1], fs[0]
 
     # Local memory overrides
     if local_mem is not None and local_mem.should_recover(obs):
         mode = "RECOVER"
+    elif collision_flag or stuck > 0.80:
+        mode = "RECOVER" if variant not in ("no_recovery",) else "COMMIT"
+    elif variant == "no_alignment":
+        mode = "COMMIT_NOALIGN" if accept_feasible else "EXPLORE_NOALIGN"
     elif abs(he) > 0.7 and float(obs[9]) > 0.3:
         # Large heading error AND outside/wide corridor → full ALIGN (spin in place).
         mode = "ALIGN"
@@ -352,8 +451,8 @@ def fsm_action(obs, variant="full", local_mem: Optional[PassageFailureMemory] = 
         # would drive the robot into the wall (straight-line goal ≠ local path direction).
         # Instead use corridor-following: go slow and correct laterally only.
         mode = "CORRIDOR_FOLLOW"
-    elif collision_flag or stuck > 0.80:
-        mode = "RECOVER" if variant not in ("no_recovery",) else "COMMIT"
+    elif not accept_feasible:
+        mode = "EXPLORE"
     elif abs(he) > 0.45 or abs(lat) > 0.25:
         mode = "EXPLORE"
     else:
@@ -410,6 +509,12 @@ def fsm_action(obs, variant="full", local_mem: Optional[PassageFailureMemory] = 
         wz = wz_narrow if in_narrow else _wz(obs, 1.6 if not cautious else 2.0)
         vx = vx_in_narrow if vx_in_narrow is not None else speed_explore
         action = _act(vx, wz)
+    elif mode == "COMMIT_NOALIGN":
+        vx = vx_in_narrow if vx_in_narrow is not None else speed_fwd
+        action = _act(vx, 0.0)
+    elif mode == "EXPLORE_NOALIGN":
+        vx = vx_in_narrow if vx_in_narrow is not None else speed_explore
+        action = _act(vx, 0.0)
     elif mode == "RECOVER":
         action = _act(-0.12, float(np.clip(he * 0.4, -0.8, 0.8)))
     else:
@@ -425,6 +530,7 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
                 cross_mem: Optional[CrossEpisodeMemory],
                 max_steps: int,
                 entry_obs_ref: list,
+                variant: str = "full",
                 agent: Optional["TurnCommitFSM"] = None,
                 entry_jitter_sigma: float = 0.0) -> dict:
     obs, _ = env.reset()
@@ -475,13 +581,6 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         elif agent is not None:
             action, mode = agent.step(obs)
         else:
-            variant = {
-                "geometry_fsm": "full",
-                "fsm_no_recovery": "no_recovery",
-                "fsm_no_alignment": "no_alignment",
-                "fsm_local_memory": "full",
-                "fsm_cross_memory": "full",
-            }.get(method, "full")
             action, mode = fsm_action(obs, variant, local_mem, cross_mem)
 
         last_mode = str(mode)
@@ -523,9 +622,10 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
     # The base success criterion only checks dist/heading/lateral — no collision guard.
     # body_overlap_steps > 0 means the robot was inside a wall (Habitat allow_sliding).
     collision_free_success = float(success > 0.5 and body_overlap_steps == 0)
-    belief_row = _belief_metrics(obs)
+    belief_row = _belief_metrics(obs, variant=variant)
 
     return {
+        "variant": variant,
         "success": success,
         "collision_free_success": collision_free_success,
         "collision": float(any_collision),
@@ -565,6 +665,7 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
                 log_belief_diagnostics: bool = False) -> List[dict]:
     env_cfg = {"corridor_types": ctypes, "seed": seed}
     env = HarderNarrowPassageEnv(env_cfg)
+    variant = _variant_for_method(method)
 
     local_mem = None
     cross_mem = None
@@ -577,13 +678,6 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
 
     # Use TurnCommitFSM for all FSM variants (handles L/S turn commitment)
     if method != "rule_baseline":
-        variant = {
-            "geometry_fsm": "full",
-            "fsm_no_recovery": "no_recovery",
-            "fsm_no_alignment": "no_alignment",
-            "fsm_local_memory": "full",
-            "fsm_cross_memory": "full",
-        }.get(method, "full")
         agent = TurnCommitFSM(variant=variant, local_mem=local_mem,
                               cross_mem=cross_mem)
 
@@ -595,6 +689,7 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
 
         stat = run_episode(env, method, local_mem, cross_mem,
                            max_steps=env.max_steps, entry_obs_ref=entry_obs_ref,
+                           variant=variant,
                            agent=agent, entry_jitter_sigma=entry_jitter_sigma)
         belief_row = stat.pop("_belief_row", {})
         mode_counts = stat.pop("_mode_counts", {})
@@ -606,6 +701,8 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
         stat["split"] = "procedural_v2"
         stat["seed"] = seed
         stat["method"] = method
+        stat["variant"] = variant
+        stat["paper_method"] = METHOD_LABELS.get(method, method)
         has_interface = method != "rule_baseline"
         # The reactive rule baseline receives direct geometry observations but
         # does not implement the DEGNAV feasibility-belief interface.  Keep its
@@ -871,6 +968,10 @@ def main():
     ap.add_argument("--methods", nargs="+",
                     default=["rule_baseline", "geometry_fsm", "fsm_no_recovery",
                              "fsm_no_alignment", "fsm_local_memory", "fsm_cross_memory"])
+    ap.add_argument("--variants", nargs="+", choices=CORE_VARIANTS, default=None,
+                    help="Run core DEGNAV-Rule procedural ablations. When set, "
+                         "this overrides --methods and uses the variant names as "
+                         "the CSV method identifiers.")
     ap.add_argument("--corridor-types", "--ctypes", nargs="+", dest="corridor_types",
                     default=["straight", "l_shaped", "s_shaped",
                              "narrow_exit", "narrow_entry", "asymmetric", "false_feasible"])
@@ -895,6 +996,7 @@ def main():
     args = ap.parse_args()
 
     ctypes = args.corridor_types
+    methods = list(args.variants) if args.variants is not None else list(args.methods)
     if args.seeds is None:
         count = args.num_seeds or 1
         seed_values = [args.seed + i for i in range(count)]
@@ -917,7 +1019,7 @@ def main():
             )
 
     # Collect per-seed stats for all methods
-    per_seed_stats: Dict[str, List[List[dict]]] = {m: [] for m in args.methods}
+    per_seed_stats: Dict[str, List[List[dict]]] = {m: [] for m in methods}
 
     for seed_idx, run_seed in enumerate(seed_values):
         print(f"\n{'='*60}")
@@ -925,7 +1027,7 @@ def main():
               + (f"  entry_jitter={jitter:.2f}m" if jitter > 0 else ""))
         print(f"{'='*60}")
 
-        for method in args.methods:
+        for method in methods:
             print(f"\n--- {method} ---")
             stats = eval_method(method, ctypes, args.episodes, run_seed,
                                 entry_jitter_sigma=jitter,
@@ -939,7 +1041,7 @@ def main():
 
     # Aggregate across seeds
     all_stats = []
-    for method in args.methods:
+    for method in methods:
         for seed_stats in per_seed_stats[method]:
             all_stats.extend(seed_stats)
 
@@ -947,7 +1049,7 @@ def main():
     multi_seed_std: Optional[Dict[str, float]] = None
     if n_seeds > 1:
         multi_seed_std = {}
-        for method in args.methods:
+        for method in methods:
             seed_srs = [
                 np.mean([s["success"] for s in seed_stats])
                 for seed_stats in per_seed_stats[method]
@@ -959,15 +1061,17 @@ def main():
                                for s in all_stats if s["method"] == method])
             print(f"  {method:22s}: {mean_sr:.3f} ± {std:.3f}")
 
-    print_summary(all_stats, args.methods, ctypes, multi_seed_std)
+    print_summary(all_stats, methods, ctypes, multi_seed_std)
     write_csv(all_stats, args.output_csv)
-    write_summary_rows(all_stats, args.methods, ctypes, output_summary)
+    write_summary_rows(all_stats, methods, ctypes, output_summary)
+    if args.variants is not None:
+        _assert_columns(all_stats, CORE_ABLATION_REQUIRED_COLUMNS, "core procedural ablation")
     if args.log_belief_diagnostics:
         _assert_columns(all_stats, MARGIN_PHASE_REQUIRED_COLUMNS, "margin-phase diagnostic")
     if args.log_outcome_decomposition:
         _assert_columns(all_stats, FALSE_FEASIBLE_REQUIRED_COLUMNS, "false-feasible outcome")
         if set(str(ct).lower() for ct in ctypes) == {"false_feasible"}:
-            write_false_feasible_outcome_tables(all_stats, args.methods)
+            write_false_feasible_outcome_tables(all_stats, methods)
         else:
             print("[info] mixed corridor run: outcome decomposition columns were logged, "
                   "but false-feasible-only paper tables were not overwritten")

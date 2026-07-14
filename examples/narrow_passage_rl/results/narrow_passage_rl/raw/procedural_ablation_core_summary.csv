@@ -1,0 +1,6 @@
+case,success_rate,collision_free_success_rate,collision_rate,tight_passage_rate,body_overlap_rate,avg_min_clearance,sr_straight,sr_l_shaped,sr_s_shaped,sr_narrow_exit,sr_narrow_entry,sr_asymmetric,sr_false_feasible
+v2_full,0.6993,0.6993,0.17,0.4193,0.00593,0.0639,0.8875,0.798,0.7532,0.9463,0.5986,0.461,0.0
+v2_no_alignment,0.024,0.024,0.4813,0.7507,0.0275,0.9139,0.0781,0.0,0.0,0.0195,0.0204,0.0284,0.0
+v2_no_recovery,0.6993,0.6993,0.17,0.4193,0.00593,0.0639,0.8875,0.798,0.7532,0.9463,0.5986,0.461,0.0
+v2_deterministic_margin,0.6933,0.6933,0.178,0.4193,0.00596,0.0637,0.8875,0.798,0.7362,0.9366,0.5986,0.4397,0.0
+v2_no_yaw_prior,0.7007,0.7007,0.1687,0.4193,0.00593,0.0639,0.8906,0.798,0.7489,0.9463,0.6054,0.4681,0.0

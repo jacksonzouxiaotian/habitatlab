@@ -73,6 +73,9 @@ class BeliefStateConfig:
     sigma_d: float = 0.04
     sigma_w: float = 0.03
     min_variance: float = 1e-8
+    use_yaw_prior: bool = True
+    max_yaw_prior_angle: float = math.radians(60.0)
+    min_yaw_cos: float = 0.5
 
     @property
     def default_w_req_cons(self) -> float:
@@ -147,12 +150,12 @@ class BeliefState:
 
         memory_risk = _finite_float("memory_risk", memory_risk)
         w_req_prior_value = (
-            cfg.default_w_req_prior
+            _yaw_projected_width_prior(features, cfg)
             if w_req_prior is None
             else _finite_float("w_req_prior", w_req_prior)
         )
         w_req_cons_value = (
-            cfg.default_w_req_cons
+            w_req_prior_value + float(cfg.conservative_margin)
             if w_req_cons is None
             else _finite_float("w_req_cons", w_req_cons)
         )
@@ -187,6 +190,24 @@ class BeliefState:
 
 def _normal_cdf(x: float) -> float:
     return 0.5 * (1.0 + math.erf(float(x) / math.sqrt(2.0)))
+
+
+def _yaw_projected_width_prior(features: np.ndarray, cfg: BeliefStateConfig) -> float:
+    """Return the required body-width prior after yaw projection.
+
+    When the robot enters a passage at a heading error, its effective lateral
+    envelope is larger than its frontal width.  We use a lightweight
+    ``width / cos(|heading_error|)`` approximation, capped by
+    ``max_yaw_prior_angle`` and ``min_yaw_cos`` so the prior stays finite.  The
+    ``no_yaw_prior`` ablation disables this and uses the fixed frontal envelope.
+    """
+
+    base_width = float(cfg.default_w_req_prior)
+    if not cfg.use_yaw_prior:
+        return base_width
+    yaw = min(abs(float(features[IDX_HEADING_ERROR])), float(cfg.max_yaw_prior_angle))
+    cos_yaw = max(float(cfg.min_yaw_cos), math.cos(yaw))
+    return float(base_width / cos_yaw)
 
 
 def _coerce_features(

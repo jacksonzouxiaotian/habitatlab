@@ -181,13 +181,17 @@ The stress protocol evaluates:
 - Feature Gaussian noise: sigma = 0.0, 0.02, 0.05.
 - Extreme-narrow subset: `body_margin < 0.05 m`.
 
-The +60 degree extreme-narrow slice exposes heading alignment as the key module:
-full FSM succeeds, while removing heading alignment fails.
+The +60 degree extreme-narrow slice exposes heading-alignment sensitivity:
+full FSM remains at 100.0% nominal success, while removing heading alignment
+drops to 79.2% with higher timeout. Clearance-aware strict success is reported
+separately as a diagnostic body-margin proxy.
 
 Primary files:
 
 - `examples/narrow_passage_rl/eval_habitat_stress_validation.py`
-- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_clearance_diagnostic.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_key_slices.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/habitat_stress_validation.csv`
 
 ### 4. Clearance-Aware RL Diagnostic

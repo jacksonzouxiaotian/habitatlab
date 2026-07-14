@@ -158,6 +158,31 @@ FALSE_FEASIBLE_OUTCOME_COLUMNS = [
     ("wasted_attempt", "Wasted attempts"),
 ]
 
+CALIBRATION_EXTENDED_COLUMNS = [
+    ("prior_width", "Prior W_hat"),
+    ("interpretation", "Type"),
+    ("final_posterior_mean", "Final posterior mean"),
+    ("final_posterior_q95", "Final q95"),
+    ("mean_p_feas", "Mean p_feas"),
+    ("empirical_feasible_rate", "Empirical feasible"),
+    ("reject_rate", "Reject"),
+    ("unsafe_attempt_rate", "Unsafe attempt"),
+    ("brier", "Brier"),
+    ("ece", "ECE"),
+]
+
+CALIBRATION_EXTENDED_COMMAND = (
+    "python examples/narrow_passage_rl/eval_dmin_calibration.py "
+    "--priors 0.26 0.31 0.36 0.46 0.56 --true-width 0.36 "
+    "--episodes 300 --seeds 0 1 2 "
+    "--output-dir examples/narrow_passage_rl/results/narrow_passage_rl"
+)
+
+HABITAT_STRESS_COMMAND = (
+    "python examples/narrow_passage_rl/eval_habitat_stress_validation.py "
+    "--preset paper --split val --num-episodes -1"
+)
+
 FALSE_FEASIBLE_METHOD_LABELS = {
     "rule_baseline": "Reactive rule baseline",
     "geometry_fsm": "DEGNAV-Rule / Geometry-FSM",
@@ -166,6 +191,65 @@ FALSE_FEASIBLE_METHOD_LABELS = {
     "fsm_local_memory": "DEGNAV-Rule + local memory",
     "fsm_cross_memory": "DEGNAV-Rule + cross-episode memory",
 }
+
+PROCEDURAL_CORE_ABLATION_COLUMNS = [
+    ("variant", "Variant"),
+    ("overall", "Overall"),
+    ("straight", "Straight"),
+    ("l_shaped", "L-shaped"),
+    ("s_shaped", "S-shaped"),
+    ("narrow_exit", "Narrow exit"),
+    ("narrow_entry", "Narrow entry"),
+    ("asymmetric", "Asymmetric"),
+    ("false_feasible_success", "False-feasible traversal success"),
+    ("correct_reject", "Correct reject"),
+    ("collision", "Collision"),
+    ("near_collision", "Near collision"),
+    ("timeout_stuck", "Timeout/stuck"),
+]
+
+PROCEDURAL_CORE_ABLATION_ORDER = [
+    "full",
+    "no_alignment",
+    "no_recovery",
+    "deterministic_margin",
+    "no_yaw_prior",
+]
+
+PROCEDURAL_CORE_ABLATION_LABELS = {
+    "full": "DEGNAV full",
+    "no_alignment": "w/o alignment",
+    "no_recovery": "w/o recovery",
+    "deterministic_margin": "deterministic margin only",
+    "no_yaw_prior": "w/o yaw prior",
+}
+
+PROCEDURAL_CORE_ABLATION_OPTIONAL_ORDER = [
+    "no_uncertainty",
+    "no_free_space_continuation",
+]
+
+PROCEDURAL_CORE_ABLATION_OPTIONAL_LABELS = {
+    "no_uncertainty": "w/o uncertainty",
+    "no_free_space_continuation": "w/o free-space continuation",
+}
+
+PROCEDURAL_CORE_CORRIDORS = [
+    ("straight", "straight"),
+    ("l_shaped", "l_shaped"),
+    ("s_shaped", "s_shaped"),
+    ("narrow_exit", "narrow_exit"),
+    ("narrow_entry", "narrow_entry"),
+    ("asymmetric", "asymmetric"),
+]
+
+PROCEDURAL_CORE_COMMAND = (
+    "python examples/narrow_passage_rl/eval_harder_benchmark.py "
+    "--variants full no_alignment no_recovery deterministic_margin no_yaw_prior "
+    "--episodes 500 --seeds 0 1 2 --log-belief-diagnostics "
+    "--log-outcome-decomposition --output-csv "
+    "examples/narrow_passage_rl/results/narrow_passage_rl/raw/procedural_ablation_core.csv"
+)
 
 
 def read_rows(path):
@@ -730,6 +814,649 @@ def false_feasible_outcome_latex(rows):
     return "\n".join(lines)
 
 
+def _calibration_extended_rows(path):
+    rows = read_rows(path)
+    if not rows:
+        return [], [f"No calibration prior-sweep CSV found at `{_display_path(path)}`."]
+    return rows, [f"Loaded calibration prior sweep from `{_display_path(path)}`."]
+
+
+def _calibration_percent(row, key):
+    raw = row.get(key, "")
+    if raw == "":
+        return "not run"
+    try:
+        return _fmt_percent_for_table(float(raw))
+    except (TypeError, ValueError):
+        return "not run"
+
+
+def _latex_percent_text(text):
+    return str(text).replace("%", r"\%")
+
+
+def calibration_extended_markdown(rows, notes):
+    header = "| " + " | ".join(label for _, label in CALIBRATION_EXTENDED_COLUMNS) + " |"
+    sep = "| " + " | ".join(":---" if i == 1 else "---:" for i, _ in enumerate(CALIBRATION_EXTENDED_COLUMNS)) + " |"
+    body = []
+    for row in rows:
+        mean = row.get("final_posterior_mean", "not run")
+        mean_std = row.get("final_posterior_mean_std", "not run")
+        q95 = row.get("final_posterior_q95", "not run")
+        q95_std = row.get("final_posterior_q95_std", "not run")
+        cells = [
+            f"{float(row.get('prior_width', 0.0)):.2f}",
+            row.get("interpretation", ""),
+            f"{mean}±{mean_std}",
+            f"{q95}±{q95_std}",
+            row.get("mean_p_feas", "not run"),
+            _calibration_percent(row, "empirical_feasible_rate"),
+            _calibration_percent(row, "reject_rate"),
+            _calibration_percent(row, "unsafe_attempt_rate"),
+            row.get("brier", "not run"),
+            row.get("ece", "not run"),
+        ]
+        body.append("| " + " | ".join(cells) + " |")
+    note_lines = [
+        "",
+        "Notes:",
+        "- `outcome_success` in the raw episode CSV is the oracle physical feasibility label under `true_width`, used for p_feas reliability analysis.",
+        "- `unsafe_attempt` is an attempted passage with `passage_width < true_width`, exposing under-conservative priors.",
+        "- Reliability claims should be made from `calibration_episode_predictions.csv` and `calibration_reliability_bins.csv`, not from the summary row alone.",
+        f"- Exact command: `{CALIBRATION_EXTENDED_COMMAND}`.",
+    ]
+    for note in notes:
+        note_lines.append(f"- {note}")
+    return "\n".join([
+        "# Table: Extended Required-Width Calibration",
+        "",
+        *([header, sep, *body] if body else ["No calibration data found."]),
+        *note_lines,
+    ])
+
+
+def calibration_extended_latex(rows):
+    lines = [
+        r"\begin{tabular}{rlrrrrrrrr}",
+        r"\toprule",
+        r"$\hat{W}$ & Type & Final mean & Final q95 & Mean $p_{feas}$ & Emp. feasible & Reject & Unsafe attempt & Brier & ECE \\",
+        r"\midrule",
+    ]
+    for row in rows:
+        lines.append(
+            f"{float(row.get('prior_width', 0.0)):.2f} & {row.get('interpretation', '')} "
+            f"& {row.get('final_posterior_mean', 'not run')} $\\pm$ {row.get('final_posterior_mean_std', 'not run')} "
+            f"& {row.get('final_posterior_q95', 'not run')} $\\pm$ {row.get('final_posterior_q95_std', 'not run')} "
+            f"& {row.get('mean_p_feas', 'not run')} "
+            f"& {_latex_percent_text(_calibration_percent(row, 'empirical_feasible_rate'))} "
+            f"& {_latex_percent_text(_calibration_percent(row, 'reject_rate'))} "
+            f"& {_latex_percent_text(_calibration_percent(row, 'unsafe_attempt_rate'))} "
+            f"& {row.get('brier', 'not run')} & {row.get('ece', 'not run')} \\\\"
+        )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return "\n".join(lines)
+
+
+def write_calibration_extended_tables(output_dir, csv_path):
+    rows, notes = _calibration_extended_rows(csv_path)
+    if not rows:
+        print(f"[warn] {notes[0] if notes else 'no calibration rows found'}")
+        return False
+    table_dir = Path(output_dir) / "tables"
+    write_text(
+        table_dir / "paper_table_calibration_extended.md",
+        calibration_extended_markdown(rows, notes),
+    )
+    write_text(
+        table_dir / "paper_table_calibration_extended.tex",
+        calibration_extended_latex(rows),
+    )
+    print("[write] tables/paper_table_calibration_extended.md")
+    print("[write] tables/paper_table_calibration_extended.tex")
+    return True
+
+
+def _stress_float(row, key, default=0.0):
+    try:
+        return float(row.get(key, default) or default)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _stress_fmt_pct(value):
+    return _fmt_percent_for_table(value)
+
+
+def _stress_fmt_pct_latex(value):
+    return _fmt_percent_latex_for_table(value)
+
+
+def _habitat_stress_rows(path):
+    rows = read_rows(path)
+    if rows:
+        return rows, [
+            f"Loaded raw Habitat stress rows from `{_display_path(path)}`.",
+            f"Regenerate with: `{HABITAT_STRESS_COMMAND}`.",
+        ]
+    return [], [
+        f"No raw Habitat stress CSV found at `{_display_path(path)}`.",
+        f"Regenerate with: `{HABITAT_STRESS_COMMAND}`.",
+    ]
+
+
+def _summarize_habitat_stress(rows):
+    groups = {}
+    for row in rows:
+        groups.setdefault((row.get("stress", ""), row.get("method", "")), []).append(row)
+    summary = []
+    for (stress, method), vals in sorted(groups.items()):
+        n = len(vals)
+        if not n:
+            continue
+        summary.append({
+            "stress": stress,
+            "method": method,
+            "episodes": n,
+            "success_rate": _mean(vals, "success"),
+            "strict_success_rate": _mean(vals, "strict_success"),
+            "collision_rate": _mean(vals, "collision"),
+            "near_collision_rate": _mean(vals, "near_collision"),
+            "avg_min_clearance": _mean(vals, "min_clearance"),
+            "avg_steps": _mean(vals, "steps"),
+            "timeout_rate": _mean(vals, "timeout"),
+            "success_but_unsafe_rate": sum(
+                float(_stress_float(v, "success") > 0.5 and _stress_float(v, "strict_success") < 0.5)
+                for v in vals
+            ) / n,
+        })
+    return summary
+
+
+def _stress_tex(text):
+    return str(text).replace("_", r"\_").replace("%", r"\%")
+
+
+def _write_raw_habitat_stress_copy(output_dir, rows):
+    if not rows:
+        return
+    raw_path = Path(output_dir) / "raw" / "habitat_stress_all.csv"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    with raw_path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+    print("[write] raw/habitat_stress_all.csv")
+
+
+def habitat_stress_nominal_markdown(summary, notes):
+    lines = [
+        "# Table: Habitat Stress Validation - Nominal Metrics",
+        "",
+        "Nominal task metrics under controlled Habitat perturbations. Clearance-aware diagnostics are reported separately in `paper_table_habitat_clearance_diagnostic.md`.",
+        "",
+        "| Stress | Method | Episodes | Success rate | Collision | Timeout | Avg steps |",
+        "|:---|:---|---:|---:|---:|---:|---:|",
+    ]
+    for row in summary:
+        lines.append(
+            "| {stress} | {method} | {episodes} | {sr} | {collision} | {timeout} | {steps:.1f} |".format(
+                stress=row["stress"],
+                method=row["method"],
+                episodes=row["episodes"],
+                sr=_stress_fmt_pct(row["success_rate"]),
+                collision=_stress_fmt_pct(row["collision_rate"]),
+                timeout=_stress_fmt_pct(row["timeout_rate"]),
+                steps=row["avg_steps"],
+            )
+        )
+    lines.extend(["", "Notes:"])
+    for note in notes:
+        lines.append(f"- {note}")
+    return "\n".join(lines)
+
+
+def habitat_stress_nominal_latex(summary):
+    lines = [
+        r"\begin{tabular}{llrrrrr}",
+        r"\toprule",
+        r"Stress & Method & N & Success & Collision & Timeout & Avg steps \\",
+        r"\midrule",
+    ]
+    for row in summary:
+        lines.append(
+            "{} & {} & {} & {} & {} & {} & {:.1f} \\\\".format(
+                _stress_tex(row["stress"]),
+                _stress_tex(row["method"]),
+                row["episodes"],
+                _stress_fmt_pct_latex(row["success_rate"]),
+                _stress_fmt_pct_latex(row["collision_rate"]),
+                _stress_fmt_pct_latex(row["timeout_rate"]),
+                row["avg_steps"],
+            )
+        )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return "\n".join(lines)
+
+
+def habitat_clearance_diagnostic_markdown(summary, notes):
+    diagnostic_note = (
+        "The strict clearance metric is a depth-derived body-margin proxy. "
+        "Negative values and high near-collision rates may reflect scanned-scene, "
+        "navmesh, or depth-proxy artifacts. We report it as a diagnostic metric, "
+        "not as a direct physical contact measurement."
+    )
+    lines = [
+        "# Table: Habitat Clearance Diagnostic Metrics",
+        "",
+        diagnostic_note,
+        "",
+        "| Stress | Method | Strict success | Near collision | Avg min clearance | Success-but-unsafe |",
+        "|:---|:---|---:|---:|---:|---:|",
+    ]
+    for row in summary:
+        lines.append(
+            "| {stress} | {method} | {strict} | {near} | {clearance:.3f} | {sbu} |".format(
+                stress=row["stress"],
+                method=row["method"],
+                strict=_stress_fmt_pct(row["strict_success_rate"]),
+                near=_stress_fmt_pct(row["near_collision_rate"]),
+                clearance=row["avg_min_clearance"],
+                sbu=_stress_fmt_pct(row["success_but_unsafe_rate"]),
+            )
+        )
+    lines.extend(["", "Notes:"])
+    for note in notes:
+        lines.append(f"- {note}")
+    return "\n".join(lines)
+
+
+def habitat_clearance_diagnostic_latex(summary):
+    lines = [
+        r"\begin{tabular}{llrrrr}",
+        r"\toprule",
+        r"Stress & Method & Strict success & Near collision & Min clearance & Success-but-unsafe \\",
+        r"\midrule",
+    ]
+    for row in summary:
+        lines.append(
+            "{} & {} & {} & {} & {:.3f} & {} \\\\".format(
+                _stress_tex(row["stress"]),
+                _stress_tex(row["method"]),
+                _stress_fmt_pct_latex(row["strict_success_rate"]),
+                _stress_fmt_pct_latex(row["near_collision_rate"]),
+                row["avg_min_clearance"],
+                _stress_fmt_pct_latex(row["success_but_unsafe_rate"]),
+            )
+        )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return "\n".join(lines)
+
+
+def _habitat_key_slice(row):
+    stress = row["stress"]
+    method = row["method"]
+    if stress == "nominal":
+        return method in {"apf_gap", "fsm_full"}
+    if stress in {"yaw60", "extreme_yaw60", "lat020"}:
+        return method in {"apf_gap", "fsm_full", "fsm_no_heading_alignment"}
+    return False
+
+
+HABITAT_KEY_SLICE_ORDER = {
+    "nominal": 0,
+    "yaw60": 1,
+    "extreme_yaw60": 2,
+    "lat020": 3,
+}
+
+HABITAT_KEY_SLICE_METHOD_ORDER = {
+    "apf_gap": 0,
+    "fsm_full": 1,
+    "fsm_no_heading_alignment": 2,
+}
+
+
+def habitat_key_slices_markdown(summary, notes):
+    rows = sorted(
+        [row for row in summary if _habitat_key_slice(row)],
+        key=lambda row: (
+            HABITAT_KEY_SLICE_ORDER.get(row["stress"], 99),
+            HABITAT_KEY_SLICE_METHOD_ORDER.get(row["method"], 99),
+        ),
+    )
+    lines = [
+        "# Table: Habitat Stress Key Slices",
+        "",
+        "Key slices for manuscript discussion. Clearance columns are diagnostic body-margin proxies, not calibrated physical contact measurements.",
+        "",
+        "| Stress | Method | Episodes | Success rate | Collision | Timeout | Avg steps | Strict success (diagnostic) | Near collision (diagnostic) | Avg min clearance (diagnostic) |",
+        "|:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            "| {stress} | {method} | {episodes} | {sr} | {collision} | {timeout} | {steps:.1f} | {strict} | {near} | {clearance:.3f} |".format(
+                stress=row["stress"],
+                method=row["method"],
+                episodes=row["episodes"],
+                sr=_stress_fmt_pct(row["success_rate"]),
+                collision=_stress_fmt_pct(row["collision_rate"]),
+                timeout=_stress_fmt_pct(row["timeout_rate"]),
+                steps=row["avg_steps"],
+                strict=_stress_fmt_pct(row["strict_success_rate"]),
+                near=_stress_fmt_pct(row["near_collision_rate"]),
+                clearance=row["avg_min_clearance"],
+            )
+        )
+    lines.extend(["", "Notes:"])
+    for note in notes:
+        lines.append(f"- {note}")
+    return "\n".join(lines)
+
+
+def habitat_key_slices_latex(summary):
+    rows = sorted(
+        [row for row in summary if _habitat_key_slice(row)],
+        key=lambda row: (
+            HABITAT_KEY_SLICE_ORDER.get(row["stress"], 99),
+            HABITAT_KEY_SLICE_METHOD_ORDER.get(row["method"], 99),
+        ),
+    )
+    lines = [
+        r"\begin{tabular}{llrrrrrrrr}",
+        r"\toprule",
+        r"Stress & Method & N & Success & Collision & Timeout & Steps & Strict diag. & Near diag. & Min clearance diag. \\",
+        r"\midrule",
+    ]
+    for row in rows:
+        lines.append(
+            "{} & {} & {} & {} & {} & {} & {:.1f} & {} & {} & {:.3f} \\\\".format(
+                _stress_tex(row["stress"]),
+                _stress_tex(row["method"]),
+                row["episodes"],
+                _stress_fmt_pct_latex(row["success_rate"]),
+                _stress_fmt_pct_latex(row["collision_rate"]),
+                _stress_fmt_pct_latex(row["timeout_rate"]),
+                row["avg_steps"],
+                _stress_fmt_pct_latex(row["strict_success_rate"]),
+                _stress_fmt_pct_latex(row["near_collision_rate"]),
+                row["avg_min_clearance"],
+            )
+        )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return "\n".join(lines)
+
+
+def write_habitat_stress_split_tables(output_dir, csv_path):
+    rows, notes = _habitat_stress_rows(csv_path)
+    if not rows:
+        for note in notes:
+            print(f"[warn] {note}")
+        return False
+    summary = _summarize_habitat_stress(rows)
+    table_dir = Path(output_dir) / "tables"
+    table_dir.mkdir(parents=True, exist_ok=True)
+    _write_raw_habitat_stress_copy(output_dir, rows)
+    write_text(
+        table_dir / "paper_table_habitat_stress_nominal.md",
+        habitat_stress_nominal_markdown(summary, notes),
+    )
+    write_text(
+        table_dir / "paper_table_habitat_stress_nominal.tex",
+        habitat_stress_nominal_latex(summary),
+    )
+    write_text(
+        table_dir / "paper_table_habitat_clearance_diagnostic.md",
+        habitat_clearance_diagnostic_markdown(summary, notes),
+    )
+    write_text(
+        table_dir / "paper_table_habitat_clearance_diagnostic.tex",
+        habitat_clearance_diagnostic_latex(summary),
+    )
+    write_text(
+        table_dir / "paper_table_habitat_stress_key_slices.md",
+        habitat_key_slices_markdown(summary, notes),
+    )
+    write_text(
+        table_dir / "paper_table_habitat_stress_key_slices.tex",
+        habitat_key_slices_latex(summary),
+    )
+    print("[write] tables/paper_table_habitat_stress_nominal.md")
+    print("[write] tables/paper_table_habitat_stress_nominal.tex")
+    print("[write] tables/paper_table_habitat_clearance_diagnostic.md")
+    print("[write] tables/paper_table_habitat_clearance_diagnostic.tex")
+    print("[write] tables/paper_table_habitat_stress_key_slices.md")
+    print("[write] tables/paper_table_habitat_stress_key_slices.tex")
+    return True
+
+
+def _as_float(row, key, default=0.0):
+    try:
+        return float(row.get(key, default) or default)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _seed_metric(rows, metric):
+    if not rows:
+        return None
+    if metric == "timeout_stuck":
+        values = [
+            float(_as_float(row, "timeout") > 0.5 or _as_float(row, "stuck") > 0.5)
+            for row in rows
+        ]
+    else:
+        values = [_as_float(row, metric) for row in rows]
+    return sum(values) / len(values) if values else None
+
+
+def _mean_std(values):
+    vals = [float(v) for v in values if v is not None]
+    if not vals:
+        return None, None
+    mean = sum(vals) / len(vals)
+    if len(vals) <= 1:
+        return mean, 0.0
+    var = sum((v - mean) ** 2 for v in vals) / (len(vals) - 1)
+    return mean, var ** 0.5
+
+
+def _fmt_mean_std(mean, std):
+    if mean is None:
+        return "not run"
+    if std is None:
+        return f"{100.0 * mean:.1f}%"
+    return f"{100.0 * mean:.1f}±{100.0 * std:.1f}%"
+
+
+def _fmt_mean_std_latex(mean, std):
+    return _fmt_mean_std(mean, std).replace("%", r"\%").replace("±", r"$\pm$")
+
+
+def _variant_order_for_rows(rows):
+    present = {
+        (row.get("variant", "").strip() or row.get("method", "").strip())
+        for row in rows
+    }
+    order = list(PROCEDURAL_CORE_ABLATION_ORDER)
+    order.extend(
+        variant for variant in PROCEDURAL_CORE_ABLATION_OPTIONAL_ORDER
+        if variant in present
+    )
+    return order
+
+
+def _variant_label(variant):
+    if variant in PROCEDURAL_CORE_ABLATION_LABELS:
+        return PROCEDURAL_CORE_ABLATION_LABELS[variant]
+    if variant in PROCEDURAL_CORE_ABLATION_OPTIONAL_LABELS:
+        return PROCEDURAL_CORE_ABLATION_OPTIONAL_LABELS[variant]
+    return variant
+
+
+def _procedural_core_ablation_rows(path):
+    rows = read_rows(path)
+    if not rows:
+        notes = [f"No procedural core ablation CSV found at `{_display_path(path)}`."]
+        return [], [], notes
+
+    by_variant_seed = {}
+    for row in rows:
+        variant = row.get("variant", "").strip() or row.get("method", "").strip()
+        seed = row.get("seed", "")
+        by_variant_seed.setdefault((variant, seed), []).append(row)
+
+    table_rows = []
+    summary_rows = []
+    for variant in _variant_order_for_rows(rows):
+        label = _variant_label(variant)
+        variant_rows = [row for row in rows if (row.get("variant", "").strip() or row.get("method", "").strip()) == variant]
+        seeds = sorted({row.get("seed", "") for row in variant_rows})
+        table_row = {
+            "variant": label,
+            "variant_key": variant,
+            "episodes": len(variant_rows),
+            "seeds": len(seeds),
+        }
+        metric_specs = [
+            ("overall", "success", None),
+            *[(out_key, "success", corridor) for out_key, corridor in PROCEDURAL_CORE_CORRIDORS],
+            ("false_feasible_success", "success", "false_feasible"),
+            ("correct_reject", "correct_reject", "false_feasible"),
+            ("collision", "collision", None),
+            ("near_collision", "near_collision", None),
+            ("timeout_stuck", "timeout_stuck", None),
+        ]
+        for out_key, metric, corridor in metric_specs:
+            seed_values = []
+            for seed in seeds:
+                seed_rows = by_variant_seed.get((variant, seed), [])
+                if corridor is not None:
+                    seed_rows = [
+                        row for row in seed_rows
+                        if str(row.get("corridor_type", "")).lower() == corridor
+                    ]
+                seed_values.append(_seed_metric(seed_rows, metric))
+            mean, std = _mean_std(seed_values)
+            table_row[out_key] = {"mean": mean, "std": std}
+            summary_rows.append({
+                "variant": variant,
+                "label": label,
+                "metric": out_key,
+                "mean": "" if mean is None else f"{mean:.6f}",
+                "std": "" if std is None else f"{std:.6f}",
+                "seeds": len([v for v in seed_values if v is not None]),
+                "episodes": len(variant_rows),
+                "corridor_type": corridor or "all",
+            })
+        table_rows.append(table_row)
+
+    notes = [
+        f"Loaded raw episode rows from `{_display_path(path)}`.",
+        f"Exact evaluation command: `{PROCEDURAL_CORE_COMMAND}`.",
+    ]
+    return table_rows, summary_rows, notes
+
+
+def procedural_core_ablation_markdown(rows, notes):
+    header = "| " + " | ".join(label for _, label in PROCEDURAL_CORE_ABLATION_COLUMNS) + " |"
+    sep = "| " + " | ".join(":---" if i == 0 else "---:" for i, _ in enumerate(PROCEDURAL_CORE_ABLATION_COLUMNS)) + " |"
+    body = []
+    for row in rows:
+        cells = []
+        for key, _label in PROCEDURAL_CORE_ABLATION_COLUMNS:
+            if key == "variant":
+                cells.append(str(row[key]))
+            else:
+                metric = row.get(key, {})
+                cells.append(_fmt_mean_std(metric.get("mean"), metric.get("std")))
+        body.append("| " + " | ".join(cells) + " |")
+
+    note_lines = [
+        "",
+        "Notes:",
+        "- Values are mean±std across seeds. Rates are computed per seed first, then averaged.",
+        "- False-feasible traversal success is reported separately from correct rejection; 0% traversal success is not treated as correct rejection.",
+        "- `deterministic margin only` replaces probabilistic feasibility gating with `d_hat - w_req_cons > tau_margin` while preserving the yaw-aware width prior and alignment controller.",
+        "- `w/o yaw prior` keeps probabilistic uncertainty and alignment but uses a fixed frontal required-width prior.",
+        "- Recovery should be interpreted conservatively here: this unperturbed procedural benchmark does not strongly activate recovery, so recovery benefit should be assessed in stress or stuck-specific settings.",
+        "- This table is computed from episode-level procedural v2 rows and is intended to isolate belief, yaw-prior, alignment, and recovery components.",
+    ]
+    for note in notes:
+        note_lines.append(f"- {note}")
+    return "\n".join([
+        "# Table: Procedural v2 Core Ablations",
+        "",
+        *([header, sep, *body] if body else ["No procedural core ablation data found."]),
+        *note_lines,
+    ])
+
+
+def procedural_core_ablation_latex(rows):
+    lines = [
+        r"\begin{tabular}{lrrrrrrrrrrrr}",
+        r"\toprule",
+        r"Variant & Overall & Straight & L-shaped & S-shaped & Narrow exit & Narrow entry & Asymmetric & False-feasible success & Correct reject & Collision & Near collision & Timeout/stuck \\",
+        r"\midrule",
+    ]
+    for row in rows:
+        variant = str(row["variant"]).replace("_", r"\_")
+        cells = [variant]
+        for key, _label in PROCEDURAL_CORE_ABLATION_COLUMNS[1:]:
+            metric = row.get(key, {})
+            cells.append(_fmt_mean_std_latex(metric.get("mean"), metric.get("std")))
+        lines.append(" & ".join(cells) + r" \\")
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return "\n".join(lines)
+
+
+def write_procedural_core_ablation_tables(output_dir, csv_path):
+    rows, summary_rows, notes = _procedural_core_ablation_rows(csv_path)
+    if not rows:
+        print(f"[warn] {notes[0] if notes else 'no procedural core ablation rows found'}")
+        return False
+    table_dir = Path(output_dir) / "tables"
+    write_text(
+        table_dir / "paper_table_procedural_v2_ablation_core.md",
+        procedural_core_ablation_markdown(rows, notes),
+    )
+    write_text(
+        table_dir / "paper_table_procedural_v2_ablation_core.tex",
+        procedural_core_ablation_latex(rows),
+    )
+    if summary_rows:
+        summary_path = table_dir / "procedural_ablation_core_summary.csv"
+        with summary_path.open("w", newline="") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "variant",
+                    "label",
+                    "metric",
+                    "mean",
+                    "std",
+                    "seeds",
+                    "episodes",
+                    "corridor_type",
+                ],
+                lineterminator="\n",
+            )
+            writer.writeheader()
+            writer.writerows(summary_rows)
+        print("[write] tables/procedural_ablation_core_summary.csv")
+    # Keep the previous filenames as compatibility aliases for older README links.
+    write_text(
+        table_dir / "paper_table_procedural_core_ablation.md",
+        procedural_core_ablation_markdown(rows, notes),
+    )
+    write_text(
+        table_dir / "paper_table_procedural_core_ablation.tex",
+        procedural_core_ablation_latex(rows),
+    )
+    print("[write] tables/paper_table_procedural_v2_ablation_core.md")
+    print("[write] tables/paper_table_procedural_v2_ablation_core.tex")
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -772,7 +1499,59 @@ def main():
         default=None,
         help="Optional raw false-feasible outcome decomposition CSV.",
     )
+    parser.add_argument(
+        "--procedural-core-ablation",
+        type=Path,
+        default=None,
+        help="Optional raw procedural core ablation CSV.",
+    )
+    parser.add_argument(
+        "--calibration-prior-sweep",
+        type=Path,
+        default=None,
+        help="Optional calibration prior-sweep summary CSV.",
+    )
+    parser.add_argument(
+        "--habitat-stress-input",
+        type=Path,
+        default=None,
+        help="Optional raw Habitat stress episode CSV.",
+    )
+    parser.add_argument(
+        "--only-procedural-core-ablation",
+        action="store_true",
+        help="Only generate the procedural core ablation table.",
+    )
+    parser.add_argument(
+        "--only-calibration-extended",
+        action="store_true",
+        help="Only generate the extended calibration table.",
+    )
+    parser.add_argument(
+        "--only-habitat-stress-split",
+        action="store_true",
+        help="Only generate split Habitat stress/clearance diagnostic tables.",
+    )
     args = parser.parse_args()
+
+    procedural_core_path = args.procedural_core_ablation or (
+        args.output_dir / "raw" / "procedural_ablation_core.csv"
+    )
+    calibration_path = args.calibration_prior_sweep or (
+        args.output_dir / "raw" / "calibration_prior_sweep.csv"
+    )
+    habitat_stress_path = args.habitat_stress_input or (
+        args.output_dir / "habitat_stress_validation.csv"
+    )
+    if args.only_procedural_core_ablation:
+        write_procedural_core_ablation_tables(args.output_dir, procedural_core_path)
+        return
+    if args.only_calibration_extended:
+        write_calibration_extended_tables(args.output_dir, calibration_path)
+        return
+    if args.only_habitat_stress_split:
+        write_habitat_stress_split_tables(args.output_dir, habitat_stress_path)
+        return
 
     rows = read_rows(args.input)
     main_rows = select_rows(rows, MAIN_CASES)
@@ -871,6 +1650,15 @@ def main():
         )
         print("[write] tables/paper_table_false_feasible_outcomes.md")
         print("[write] tables/paper_table_false_feasible_outcomes.tex")
+
+    if procedural_core_path.exists():
+        write_procedural_core_ablation_tables(args.output_dir, procedural_core_path)
+
+    if calibration_path.exists():
+        write_calibration_extended_tables(args.output_dir, calibration_path)
+
+    if habitat_stress_path.exists():
+        write_habitat_stress_split_tables(args.output_dir, habitat_stress_path)
 
 
 if __name__ == "__main__":

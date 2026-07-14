@@ -233,16 +233,16 @@ results:
     canonical: true
     legacy: false
     diagnostic: false
-    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.md"
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.md"
     table_status: available
     split: "HM3D val mined anchors with yaw, lateral offset, dropout, noise, and extreme-narrow filters"
     split_policy: stress_grid
     source_csvs:
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_stress_validation.csv"
-    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.md"
-    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.tex"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/habitat_stress_all.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.tex"
     raw_csv:
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/habitat_stress_validation.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/habitat_stress_all.csv"
     domain: "Habitat HM3D NarrowPassageNav-v0 stress validation"
     eval_split: "HM3D val mined anchors with yaw, lateral offset, dropout, noise, and extreme-narrow filters"
     train_domain: "none for rule-controller variants; APF+Gap has no learning"
@@ -262,24 +262,97 @@ results:
     episodes: "see raw CSV; varies by stress factor and subset"
     metrics:
       - "success_rate"
-      - "strict_success_rate"
       - "collision_rate"
-      - "near_collision_rate"
-      - "avg_min_clearance"
       - "avg_steps"
       - "timeout_rate"
     metric_definitions:
       success_rate: "Nominal Habitat task success."
-      strict_success_rate: "Success plus clearance-safe and no collision/stuck condition."
       collision_rate: "Habitat collision flag."
-      near_collision_rate: "Fraction of episodes with min clearance below the near-collision threshold."
-      avg_min_clearance: "Mean minimum clearance observed over each episode."
       avg_steps: "Mean episode length."
       timeout_rate: "Fraction of episodes ending due to max-step timeout."
     notes:
       - "Primary Habitat robustness evidence beyond nominal anchors."
       - "Use this table to discuss module sensitivity under Habitat perturbations."
-      - "Clearance-aware metrics are depth-derived body-margin diagnostics, not calibrated physical safety measurements."
+      - "Clearance-aware strict success, near-collision, and min-clearance metrics are split into habitat_stress_clearance_diagnostic."
+
+  habitat_stress_clearance_diagnostic:
+    role: diagnostic
+    status: diagnostic
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_clearance_diagnostic.md"
+    table_status: available
+    split: "HM3D val mined anchors with yaw, lateral offset, dropout, noise, and extreme-narrow filters"
+    split_policy: stress_grid
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/habitat_stress_all.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_clearance_diagnostic.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_clearance_diagnostic.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/habitat_stress_all.csv"
+    domain: "Habitat HM3D NarrowPassageNav-v0 stress validation"
+    eval_split: "HM3D val mined anchors with yaw, lateral offset, dropout, noise, and extreme-narrow filters"
+    train_domain: "none for rule-controller variants; APF+Gap has no learning"
+    methods:
+      - "Full Geometry-FSM"
+      - "FSM w/o heading alignment"
+      - "FSM w/o recovery"
+      - "FSM w/o lateral alignment"
+      - "APF+Gap"
+    metrics:
+      - "strict_success_rate"
+      - "near_collision_rate"
+      - "avg_min_clearance"
+      - "success_but_unsafe_rate"
+    metric_definitions:
+      strict_success_rate: "Depth-derived body-margin diagnostic success, not a calibrated physical safety measurement."
+      near_collision_rate: "Fraction of episodes with min clearance below the near-collision threshold."
+      avg_min_clearance: "Mean minimum depth-derived body-margin proxy."
+      success_but_unsafe_rate: "Nominal success with failed clearance-aware strict diagnostic."
+    notes:
+      - "The strict clearance metric is a depth-derived body-margin proxy."
+      - "Negative values and high near-collision rates may reflect scanned-scene, navmesh, or depth-proxy artifacts."
+      - "Report as diagnostic indicators, not direct physical contact measurements."
+
+  habitat_stress_key_slices:
+    role: perturbation_sensitivity_summary
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_key_slices.md"
+    table_status: available
+    split: "selected HM3D val stress slices: nominal, yaw60, extreme_yaw60, lat020"
+    split_policy: selected_stress_slices
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/habitat_stress_all.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_key_slices.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_key_slices.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/habitat_stress_all.csv"
+    domain: "Habitat HM3D NarrowPassageNav-v0 stress validation"
+    eval_split: "selected HM3D val stress slices"
+    train_domain: "none for rule-controller variants; APF+Gap has no learning"
+    methods:
+      - "APF+Gap"
+      - "Full Geometry-FSM"
+      - "FSM w/o heading alignment"
+    metrics:
+      - "success_rate"
+      - "collision_rate"
+      - "timeout_rate"
+      - "avg_steps"
+      - "strict_success_rate_diagnostic"
+      - "near_collision_rate_diagnostic"
+      - "avg_min_clearance_diagnostic"
+    notes:
+      - "Key slices are for compact manuscript discussion."
+      - "Clearance columns are diagnostic body-margin proxies, not calibrated physical contact measurements."
 
   habitat_clearance_diagnostic:
     role: diagnostic

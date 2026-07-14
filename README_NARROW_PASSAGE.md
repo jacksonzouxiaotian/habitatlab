@@ -145,8 +145,10 @@ Outputs:
 
 ```text
 examples/narrow_passage_rl/results/narrow_passage_rl/habitat_stress_validation.csv
-examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.md
-examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_habitat_stress.tex
+examples/narrow_passage_rl/results/narrow_passage_rl/raw/habitat_stress_all.csv
+examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.md
+examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_clearance_diagnostic.md
+examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_key_slices.md
 ```
 
 ## Diagnostic Baselines

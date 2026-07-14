@@ -1,0 +1,61 @@
+variant,label,metric,mean,std,seeds,episodes,corridor_type
+full,DEGNAV full,overall,0.699333,0.016042,3,1500,all
+full,DEGNAV full,straight,0.888221,0.054171,3,1500,straight
+full,DEGNAV full,l_shaped,0.797978,0.022749,3,1500,l_shaped
+full,DEGNAV full,s_shaped,0.753370,0.036020,3,1500,s_shaped
+full,DEGNAV full,narrow_exit,0.945077,0.014837,3,1500,narrow_exit
+full,DEGNAV full,narrow_entry,0.593470,0.050203,3,1500,narrow_entry
+full,DEGNAV full,asymmetric,0.460613,0.045342,3,1500,asymmetric
+full,DEGNAV full,false_feasible_success,0.000000,0.000000,3,1500,false_feasible
+full,DEGNAV full,correct_reject,0.000000,0.000000,3,1500,false_feasible
+full,DEGNAV full,collision,0.170000,0.014000,3,1500,all
+full,DEGNAV full,near_collision,0.419333,0.003055,3,1500,all
+full,DEGNAV full,timeout_stuck,0.130667,0.018903,3,1500,all
+no_alignment,w/o alignment,overall,0.024000,0.005292,3,1500,all
+no_alignment,w/o alignment,straight,0.077898,0.007450,3,1500,straight
+no_alignment,w/o alignment,l_shaped,0.000000,0.000000,3,1500,l_shaped
+no_alignment,w/o alignment,s_shaped,0.000000,0.000000,3,1500,s_shaped
+no_alignment,w/o alignment,narrow_exit,0.019361,0.020331,3,1500,narrow_exit
+no_alignment,w/o alignment,narrow_entry,0.020781,0.003438,3,1500,narrow_entry
+no_alignment,w/o alignment,asymmetric,0.028105,0.011018,3,1500,asymmetric
+no_alignment,w/o alignment,false_feasible_success,0.000000,0.000000,3,1500,false_feasible
+no_alignment,w/o alignment,correct_reject,0.000000,0.000000,3,1500,false_feasible
+no_alignment,w/o alignment,collision,0.481333,0.018148,3,1500,all
+no_alignment,w/o alignment,near_collision,0.750667,0.009452,3,1500,all
+no_alignment,w/o alignment,timeout_stuck,0.494667,0.015144,3,1500,all
+no_recovery,w/o recovery,overall,0.699333,0.016042,3,1500,all
+no_recovery,w/o recovery,straight,0.888221,0.054171,3,1500,straight
+no_recovery,w/o recovery,l_shaped,0.797978,0.022749,3,1500,l_shaped
+no_recovery,w/o recovery,s_shaped,0.753370,0.036020,3,1500,s_shaped
+no_recovery,w/o recovery,narrow_exit,0.945077,0.014837,3,1500,narrow_exit
+no_recovery,w/o recovery,narrow_entry,0.593470,0.050203,3,1500,narrow_entry
+no_recovery,w/o recovery,asymmetric,0.460613,0.045342,3,1500,asymmetric
+no_recovery,w/o recovery,false_feasible_success,0.000000,0.000000,3,1500,false_feasible
+no_recovery,w/o recovery,correct_reject,0.000000,0.000000,3,1500,false_feasible
+no_recovery,w/o recovery,collision,0.170000,0.014000,3,1500,all
+no_recovery,w/o recovery,near_collision,0.419333,0.003055,3,1500,all
+no_recovery,w/o recovery,timeout_stuck,0.130667,0.018903,3,1500,all
+deterministic_margin,deterministic margin only,overall,0.693333,0.015011,3,1500,all
+deterministic_margin,deterministic margin only,straight,0.888221,0.054171,3,1500,straight
+deterministic_margin,deterministic margin only,l_shaped,0.797914,0.032227,3,1500,l_shaped
+deterministic_margin,deterministic margin only,s_shaped,0.736507,0.031645,3,1500,s_shaped
+deterministic_margin,deterministic margin only,narrow_exit,0.934724,0.023673,3,1500,narrow_exit
+deterministic_margin,deterministic margin only,narrow_entry,0.593470,0.050203,3,1500,narrow_entry
+deterministic_margin,deterministic margin only,asymmetric,0.439626,0.024850,3,1500,asymmetric
+deterministic_margin,deterministic margin only,false_feasible_success,0.000000,0.000000,3,1500,false_feasible
+deterministic_margin,deterministic margin only,correct_reject,0.000000,0.000000,3,1500,false_feasible
+deterministic_margin,deterministic margin only,collision,0.178000,0.015620,3,1500,all
+deterministic_margin,deterministic margin only,near_collision,0.419333,0.003055,3,1500,all
+deterministic_margin,deterministic margin only,timeout_stuck,0.128667,0.021385,3,1500,all
+no_yaw_prior,w/o yaw prior,overall,0.700667,0.017243,3,1500,all
+no_yaw_prior,w/o yaw prior,straight,0.891279,0.048875,3,1500,straight
+no_yaw_prior,w/o yaw prior,l_shaped,0.797978,0.022749,3,1500,l_shaped
+no_yaw_prior,w/o yaw prior,s_shaped,0.749204,0.043132,3,1500,s_shaped
+no_yaw_prior,w/o yaw prior,narrow_exit,0.945077,0.014837,3,1500,narrow_exit
+no_yaw_prior,w/o yaw prior,narrow_entry,0.601600,0.036486,3,1500,narrow_entry
+no_yaw_prior,w/o yaw prior,asymmetric,0.468021,0.036977,3,1500,asymmetric
+no_yaw_prior,w/o yaw prior,false_feasible_success,0.000000,0.000000,3,1500,false_feasible
+no_yaw_prior,w/o yaw prior,correct_reject,0.000000,0.000000,3,1500,false_feasible
+no_yaw_prior,w/o yaw prior,collision,0.168667,0.010263,3,1500,all
+no_yaw_prior,w/o yaw prior,near_collision,0.419333,0.003055,3,1500,all
+no_yaw_prior,w/o yaw prior,timeout_stuck,0.130667,0.018903,3,1500,all
