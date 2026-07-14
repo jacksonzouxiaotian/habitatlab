@@ -70,6 +70,40 @@ FALSE_FEASIBLE_REQUIRED_COLUMNS = [
     "mode_reject_count",
 ]
 
+MARGIN_PHASE_REQUIRED_COLUMNS = [
+    "method",
+    "episode_id",
+    "seed",
+    "domain",
+    "split",
+    "corridor_type",
+    "passable_label",
+    "success",
+    "reject",
+    "correct_reject",
+    "false_reject",
+    "collision",
+    "near_collision",
+    "timeout",
+    "stuck",
+    "d_hat",
+    "w_req_prior",
+    "w_req_cons",
+    "delta_mean",
+    "delta_var",
+    "p_feas",
+    "risk",
+    "memory_risk",
+    "body_margin",
+    "min_clearance",
+    "final_heading_error",
+    "final_lateral_error",
+    "mode_commit_count",
+    "mode_explore_count",
+    "mode_recover_count",
+    "mode_reject_count",
+]
+
 METHOD_LABELS = {
     "rule_baseline": "Reactive rule baseline",
     "geometry_fsm": "DEGNAV-Rule / Geometry-FSM",
@@ -106,11 +140,13 @@ def _belief_metrics(obs: np.ndarray, memory_risk: float = 0.0) -> dict:
     risk = float(np.clip(1.0 - belief.p_feas + belief.memory_risk, 0.0, 1.0))
     return {
         "d_hat": belief.d_hat,
+        "w_req_prior": belief.w_req_prior,
         "w_req_cons": belief.w_req_cons,
         "delta_mean": belief.delta_mean,
         "delta_var": belief.delta_var,
         "p_feas": belief.p_feas,
         "risk": risk,
+        "memory_risk": belief.memory_risk,
     }
 
 
@@ -514,6 +550,8 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         "timeout": float(timeout),
         "stuck": float(stuck),
         "wasted_attempt": float(wasted_attempt),
+        "final_heading_error": float(obs[10]),
+        "final_lateral_error": float(obs[11]),
         "_belief_row": belief_row,
         "_mode_counts": dict(mode_counts),
         "_last_mode": last_mode,
@@ -523,7 +561,8 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
 # ── Per-method runner ─────────────────────────────────────────────────────────
 
 def eval_method(method: str, ctypes: List[str], n_episodes: int,
-                seed: int = 42, entry_jitter_sigma: float = 0.0) -> List[dict]:
+                seed: int = 42, entry_jitter_sigma: float = 0.0,
+                log_belief_diagnostics: bool = False) -> List[dict]:
     env_cfg = {"corridor_types": ctypes, "seed": seed}
     env = HarderNarrowPassageEnv(env_cfg)
 
@@ -563,10 +602,15 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
         stat["episode_idx"] = ep_idx
         stat["episode_id"] = f"{method}_{seed}_{ep_idx:06d}"
         stat["scene_id"] = "procedural_v2"
+        stat["domain"] = "procedural_v2"
         stat["split"] = "procedural_v2"
         stat["seed"] = seed
         stat["method"] = method
         has_interface = method != "rule_baseline"
+        # The reactive rule baseline receives direct geometry observations but
+        # does not implement the DEGNAV feasibility-belief interface.  Keep its
+        # belief columns as NaN so margin-phase plots cannot mistake it for a
+        # belief-aware method.
         stat = finalize_episode_row(
             stat,
             belief=belief_row if has_interface else None,
@@ -576,6 +620,15 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
             mode_interface_available=has_interface,
             final_mode=last_mode,
         )
+        if log_belief_diagnostics:
+            # For direct/reactive baselines, these fields are diagnostic margins
+            # computed from the shared environment geometry.  They are logged for
+            # common x-axis binning in margin-phase plots, but
+            # belief_available=False still records that the controller did not
+            # consume or maintain a feasibility-belief state.
+            for key, value in belief_row.items():
+                stat[key] = value
+            stat["diagnostic_margin_available"] = True
         # Explicit aliases for false-feasible outcome decomposition.  These use
         # the controller's actual episode modes, not inferred failure outcomes.
         stat["mode_commit_count"] = int(mode_counts.get("commit", 0))
@@ -805,6 +858,12 @@ def write_false_feasible_outcome_tables(all_stats: List[dict], methods: List[str
     print(f"[write] {tex_path}")
 
 
+def _assert_columns(rows: List[dict], required: List[str], label: str) -> None:
+    missing = [col for col in required if all(col not in row for row in rows)]
+    if missing:
+        raise RuntimeError(f"{label} columns missing: {missing}")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -828,9 +887,11 @@ def main():
     ap.add_argument("--output-csv",
                     type=Path, default=RESULTS / "harder_benchmark_episodes.csv")
     ap.add_argument("--output-summary",
-                    type=Path, default=RESULTS / "harder_benchmark_summary.csv")
+                    type=Path, default=None)
     ap.add_argument("--log-outcome-decomposition", action="store_true",
                     help="write false-feasible reject/collision/timeout/wasted-attempt tables")
+    ap.add_argument("--log-belief-diagnostics", action="store_true",
+                    help="validate and retain margin-phase belief diagnostic columns")
     args = ap.parse_args()
 
     ctypes = args.corridor_types
@@ -845,6 +906,15 @@ def main():
         seed_values = list(args.seeds)
     n_seeds = len(seed_values)
     jitter = args.entry_jitter
+    output_summary = args.output_summary
+    if output_summary is None:
+        default_csv = RESULTS / "harder_benchmark_episodes.csv"
+        if Path(args.output_csv) == default_csv:
+            output_summary = RESULTS / "harder_benchmark_summary.csv"
+        else:
+            output_summary = Path(args.output_csv).with_name(
+                f"{Path(args.output_csv).stem}_summary.csv"
+            )
 
     # Collect per-seed stats for all methods
     per_seed_stats: Dict[str, List[List[dict]]] = {m: [] for m in args.methods}
@@ -858,7 +928,8 @@ def main():
         for method in args.methods:
             print(f"\n--- {method} ---")
             stats = eval_method(method, ctypes, args.episodes, run_seed,
-                                entry_jitter_sigma=jitter)
+                                entry_jitter_sigma=jitter,
+                                log_belief_diagnostics=args.log_belief_diagnostics)
             per_seed_stats[method].append(stats)
             for ct in ctypes:
                 grp = [s for s in stats if s["corridor_type"] == ct]
@@ -890,15 +961,16 @@ def main():
 
     print_summary(all_stats, args.methods, ctypes, multi_seed_std)
     write_csv(all_stats, args.output_csv)
-    write_summary_rows(all_stats, args.methods, ctypes, args.output_summary)
+    write_summary_rows(all_stats, args.methods, ctypes, output_summary)
+    if args.log_belief_diagnostics:
+        _assert_columns(all_stats, MARGIN_PHASE_REQUIRED_COLUMNS, "margin-phase diagnostic")
     if args.log_outcome_decomposition:
-        missing = [
-            col for col in FALSE_FEASIBLE_REQUIRED_COLUMNS
-            if all(col not in row for row in all_stats)
-        ]
-        if missing:
-            raise RuntimeError(f"false-feasible outcome columns missing: {missing}")
-        write_false_feasible_outcome_tables(all_stats, args.methods)
+        _assert_columns(all_stats, FALSE_FEASIBLE_REQUIRED_COLUMNS, "false-feasible outcome")
+        if set(str(ct).lower() for ct in ctypes) == {"false_feasible"}:
+            write_false_feasible_outcome_tables(all_stats, args.methods)
+        else:
+            print("[info] mixed corridor run: outcome decomposition columns were logged, "
+                  "but false-feasible-only paper tables were not overwritten")
 
 
 if __name__ == "__main__":

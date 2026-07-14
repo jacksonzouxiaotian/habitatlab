@@ -16,7 +16,16 @@ import numpy as np
 
 
 MODE_NAMES = ("commit", "explore", "recover", "reject")
-BELIEF_KEYS = ("d_hat", "w_req_cons", "delta_mean", "delta_var", "p_feas", "risk")
+BELIEF_KEYS = (
+    "d_hat",
+    "w_req_prior",
+    "w_req_cons",
+    "delta_mean",
+    "delta_var",
+    "p_feas",
+    "risk",
+    "memory_risk",
+)
 BELIEF_AGG_STATS = ("mean", "min", "max", "final")
 
 EPISODE_LOG_FIELDS = [
@@ -34,11 +43,13 @@ EPISODE_LOG_FIELDS = [
     "min_clearance",
     "body_margin",
     "d_hat",
+    "w_req_prior",
     "w_req_cons",
     "delta_mean",
     "delta_var",
     "p_feas",
     "risk",
+    "memory_risk",
     "commit_count",
     "explore_count",
     "recover_count",
