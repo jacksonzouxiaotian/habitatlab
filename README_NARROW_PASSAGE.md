@@ -62,6 +62,16 @@ Use the manifest below as the provenance source for paper-facing results:
 examples/narrow_passage_rl/results/narrow_passage_rl/results_manifest.yaml
 ```
 
+Use the paper-ready index below as the human-facing entry point for final
+tables and figures:
+
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_ready_results.md
+```
+
+It separates main-paper evidence from diagnostic, smoke, mixed-split, and legacy
+artifacts.  Start there when deciding what to cite in the manuscript.
+
 The current procedural v2 main table is:
 
 ```text
@@ -128,7 +138,7 @@ Habitat experiments should be interpreted in three separate categories:
   such as clearance-aware strict success, near-collision, and
   success-but-unsafe.
 
-The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated physical safety measurements.
+The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated contact measurements.
 
 Older single-run PPO mined-val logs reported 6.0% on 151 episodes.  That number
 is kept only as legacy/single-run provenance and is not the formal 3-seed
@@ -340,7 +350,12 @@ for seed in 0 1 2; do
 done
 
 # D_min calibration
-python examples/narrow_passage_rl/eval_dmin_calibration.py
+python examples/narrow_passage_rl/eval_dmin_calibration.py \
+    --priors 0.26 0.31 0.36 0.46 0.56 \
+    --true-width 0.36 \
+    --episodes 300 \
+    --seeds 0 1 2 \
+    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl
 
 # Rule-vs-DEGNAV width-margin phase analysis
 python examples/narrow_passage_rl/eval_harder_benchmark.py \

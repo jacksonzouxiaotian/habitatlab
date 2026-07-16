@@ -82,7 +82,7 @@ Key result:
 Output tables:
 
 - `results/narrow_passage_rl/paper_table_procedural_v2_main.md`
-- `results/narrow_passage_rl/paper_table_harder_ablation.md`
+- `results/narrow_passage_rl/tables/paper_table_procedural_v2_ablation_core.md`
 - `results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md`
 
 False-feasible outcome decomposition:
@@ -191,7 +191,7 @@ clearance-aware strict success.  This demonstrates that nominal goal-reaching
 success can be exploited by RL and must be reported together with clearance
 diagnostics.
 
-The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated physical safety measurements.
+The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated contact measurements.
 
 Output:
 
@@ -271,20 +271,27 @@ success while transferring rejection to similar new false-feasible passages.
 Script:
 
 ```bash
-python examples/narrow_passage_rl/eval_dmin_calibration.py
+python examples/narrow_passage_rl/eval_dmin_calibration.py \
+    --priors 0.26 0.31 0.36 0.46 0.56 \
+    --true-width 0.36 \
+    --episodes 300 \
+    --seeds 0 1 2 \
+    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl
 ```
 
 What it tests:
 
 - Online calibration of the effective robot width / minimum traversable
-  clearance threshold.
-- Recovery from an initially conservative wrong estimate.
+  clearance threshold under under-conservative, oracle, and over-conservative
+  priors.
+- Directional reliability of `p_feas` from raw per-episode predictions.
 
 Output:
 
-- `results/narrow_passage_rl/dmin_calibration.png`
-- `results/narrow_passage_rl/dmin_calib_episodes.csv`
-- `results/narrow_passage_rl/dmin_calib_convergence.csv`
+- `results/narrow_passage_rl/tables/paper_table_calibration_extended.md`
+- `results/narrow_passage_rl/raw/calibration_prior_sweep.csv`
+- `results/narrow_passage_rl/raw/calibration_episode_predictions.csv`
+- `results/narrow_passage_rl/tables/calibration_reliability_bins.csv`
 
 ## Diagnostic And Smoke Baselines
 
@@ -542,7 +549,12 @@ python examples/narrow_passage_rl/eval_memory_transfer_interference.py \
     --preset paper
 
 # D_min calibration
-python examples/narrow_passage_rl/eval_dmin_calibration.py
+python examples/narrow_passage_rl/eval_dmin_calibration.py \
+    --priors 0.26 0.31 0.36 0.46 0.56 \
+    --true-width 0.36 \
+    --episodes 300 \
+    --seeds 0 1 2 \
+    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl
 
 # Regenerate paper tables from available CSV artifacts
 python examples/narrow_passage_rl/make_paper_tables.py
@@ -688,33 +700,56 @@ python examples/narrow_passage_rl/render_trajectories.py \
 
 ## Result Files
 
-Important table outputs:
+Start with the paper-ready result index:
+
+```text
+results/narrow_passage_rl/paper_ready_results.md
+```
+
+This index is the intended entry point for the final effective data and tables.
+It separates main-paper results from diagnostic, smoke, mixed-split, and legacy
+artifacts.
+
+Main paper table/figure outputs:
 
 ```text
 results/narrow_passage_rl/paper_table_procedural_v2_main.md
-results/narrow_passage_rl/paper_table_harder_ablation.md
-results/narrow_passage_rl/paper_table_habitat.md
+results/narrow_passage_rl/tables/paper_table_procedural_v2_ablation_core.md
+results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md
+results/narrow_passage_rl/paper_table_habitat_same_split.md
 results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.md
-results/narrow_passage_rl/tables/paper_table_habitat_clearance_diagnostic.md
 results/narrow_passage_rl/tables/paper_table_habitat_stress_key_slices.md
-results/narrow_passage_rl/paper_table_formal_baselines.md
-results/narrow_passage_rl/paper_table_diagnostic_baselines.md
-results/narrow_passage_rl/paper_table_smoke_baselines.md
 results/narrow_passage_rl/paper_table_repeated_failure_memory.md
 results/narrow_passage_rl/paper_table_memory_transfer_interference.md
+results/narrow_passage_rl/tables/paper_table_calibration_extended.md
+results/narrow_passage_rl/tables/paper_table_margin_phase_summary.md
+results/narrow_passage_rl/figures/margin_phase_rule_vs_degnav_rule.{pdf,png}
+```
+
+Diagnostic or appendix-only outputs:
+
+```text
+results/narrow_passage_rl/tables/paper_table_habitat_clearance_diagnostic.md
+results/narrow_passage_rl/paper_table_diagnostic_baselines.md
 results/narrow_passage_rl/paper_table_degnav_rl_diagnostic.md
 results/narrow_passage_rl/paper_table_belief_mode_ablation.md
-results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md
+results/narrow_passage_rl/paper_table_formal_baselines.md  # mixed-split diagnostic, not a main ranking
+results/narrow_passage_rl/paper_table_smoke_baselines.md
 ```
 
 Important raw CSV outputs:
 
 ```text
 results/narrow_passage_rl/harder_benchmark_episodes.csv
+results/narrow_passage_rl/raw/procedural_ablation_core.csv
 results/narrow_passage_rl/raw/false_feasible_outcomes.csv
+results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv
 results/narrow_passage_rl/habitat_stress_validation.csv
+results/narrow_passage_rl/raw/habitat_stress_all.csv
 results/narrow_passage_rl/repeated_failure_memory.csv
 results/narrow_passage_rl/memory_transfer_interference.csv
+results/narrow_passage_rl/raw/calibration_prior_sweep.csv
+results/narrow_passage_rl/raw/calibration_episode_predictions.csv
 results/narrow_passage_rl/belief_mode_full_seed*_eval.csv
 results/narrow_passage_rl/belief_mode_<ablation>_seed*_eval.csv
 results/narrow_passage_rl/habitat_td3_habitat_native_strict_eval.csv

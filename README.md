@@ -64,6 +64,19 @@ habitat-baselines/habitat_baselines/
 
 Everything else is inherited Habitat-Lab infrastructure unless explicitly noted.
 
+## Paper-Ready Result Index
+
+Start from this citation-facing index before using any historical
+`paper_table_*.md` artifact:
+
+```text
+examples/narrow_passage_rl/results/narrow_passage_rl/paper_ready_results.md
+```
+
+It separates main-paper tables/figures from diagnostic, smoke, mixed-split, and
+legacy artifacts.  This is the intended entry point for the final effective
+data and tables.
+
 ## Main Claim
 
 Near the boundary of geometric feasibility, learning-only policies and generic
@@ -127,7 +140,7 @@ Primary files:
 
 - `examples/narrow_passage_rl/eval_harder_benchmark.py`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_procedural_v2_main.md`
-- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_harder_ablation.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_v2_ablation_core.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/raw/false_feasible_outcomes.csv`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md`
 
@@ -160,7 +173,7 @@ Habitat experiments should be interpreted in three separate categories:
   such as clearance-aware strict success, near-collision, and
   success-but-unsafe.
 
-The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated physical safety measurements.
+The Habitat clearance-related metrics are derived from depth observations and an approximate robot body-margin model. They are used as clearance-aware diagnostic indicators rather than calibrated contact measurements.
 
 `paper_table_formal_baselines.md` is a mixed-split Habitat diagnostic
 comparison because it contains both HM3D Val set A and mined Val set B rows. It
@@ -260,21 +273,24 @@ Primary files:
 
 ### 7. D_min Calibration
 
-The robot body-width threshold can be calibrated from outcomes.  Starting from a
-wrong conservative estimate, the Bayesian calibrator converges from 0.56 m to
-0.39 m within roughly 75 episodes.
+The required-width calibration study now includes under-conservative,
+oracle-width, and over-conservative priors.  Use the extended calibration table
+for paper claims about width-prior misspecification and `p_feas` reliability.
 
-| Agent | Success | Reject rate |
-|---|---:|---:|
-| Oracle D_true = 0.36 m | 94.0% | 0% |
-| Fixed wrong D_hat = 0.56 m | 67.7% | 32% |
-| Calibrated | 89.3% | 8% |
+| Prior W_hat | Type | Final posterior mean | Final q95 | Reject | Unsafe attempt | Brier |
+|---:|---|---:|---:|---:|---:|---:|
+| 0.26 | under-conservative | 0.3453 +/- 0.0017 | 0.3580 +/- 0.0014 | 28.1% | 12.2% | 0.04357 |
+| 0.36 | oracle | 0.3399 +/- 0.0026 | 0.3526 +/- 0.0025 | 30.0% | 11.0% | 0.03794 |
+| 0.56 | over-conservative | 0.3434 +/- 0.0029 | 0.3562 +/- 0.0013 | 32.8% | 10.1% | 0.03760 |
 
 Primary files:
 
 - `examples/narrow_passage_rl/eval_dmin_calibration.py`
 - `examples/narrow_passage_rl/dmin_calibrator.py`
-- `examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calibration.png`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_calibration_extended.md`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/raw/calibration_prior_sweep.csv`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/raw/calibration_episode_predictions.csv`
+- `examples/narrow_passage_rl/results/narrow_passage_rl/tables/calibration_reliability_bins.csv`
 
 ## Diagnostic And Smoke Baselines
 
@@ -305,6 +321,7 @@ formal baseline tables.
 
 Tables:
 
+- `examples/narrow_passage_rl/results/narrow_passage_rl/paper_ready_results.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_formal_baselines.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_diagnostic_baselines.md`
 - `examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_smoke_baselines.md`
@@ -433,7 +450,12 @@ python examples/narrow_passage_rl/eval_memory_transfer_interference.py \
     --preset paper
 
 # 5. D_min calibration
-python examples/narrow_passage_rl/eval_dmin_calibration.py
+python examples/narrow_passage_rl/eval_dmin_calibration.py \
+    --priors 0.26 0.31 0.36 0.46 0.56 \
+    --true-width 0.36 \
+    --episodes 300 \
+    --seeds 0 1 2 \
+    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl
 
 # 6. DEGNAV-RL diagnostic mode-selection run
 for seed in 0 1 2; do

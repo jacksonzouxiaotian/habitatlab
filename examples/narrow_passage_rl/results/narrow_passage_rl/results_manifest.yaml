@@ -1,5 +1,5 @@
 version: 1
-updated: "2026-07-14"
+updated: "2026-07-17"
 scope: "AAAI narrow-passage paper result registry"
 
 registry_rules:
@@ -72,47 +72,55 @@ results:
     canonical: true
     legacy: false
     diagnostic: false
-    path: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_harder_ablation.md"
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_v2_ablation_core.md"
     table_status: available
     split: "synthetic v2 benchmark, held procedural seeds"
     split_policy: same
     source_csvs:
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/benchmark_ablation_episodes.csv"
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/benchmark_ablation_summary.csv"
-    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_harder_ablation.md"
-    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_harder_ablation.tex"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/procedural_ablation_core.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/procedural_ablation_core_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/procedural_ablation_core_summary.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_v2_ablation_core.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_v2_ablation_core.tex"
     raw_csv:
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/benchmark_ablation_episodes.csv"
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/benchmark_ablation_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/procedural_ablation_core.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/procedural_ablation_core_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/procedural_ablation_core_summary.csv"
     domain: "Procedural v2 HarderNarrowPassageEnv"
     eval_split: "synthetic v2 benchmark, held procedural seeds"
     train_domain: "none; rule-controller ablations"
     methods:
-      - "Geometry-FSM full"
-      - "FSM w/o recovery"
-      - "FSM w/o heading alignment"
-      - "FSM w/o lateral alignment"
+      - "DEGNAV full"
+      - "w/o alignment"
+      - "w/o recovery"
+      - "deterministic margin only"
+      - "w/o yaw prior"
     paper_method_names:
-      Geometry-FSM full: "DEGNAV-Rule"
-      FSM w/o recovery: "DEGNAV-Rule w/o recovery"
-      FSM w/o heading alignment: "DEGNAV-Rule w/o heading alignment"
-      FSM w/o lateral alignment: "DEGNAV-Rule w/o lateral alignment"
-    seeds: [42, 43, 44]
+      DEGNAV full: "DEGNAV-Rule"
+      w/o alignment: "DEGNAV-Rule w/o alignment"
+      w/o recovery: "DEGNAV-Rule w/o recovery"
+      deterministic margin only: "DEGNAV-Rule deterministic margin"
+      w/o yaw prior: "DEGNAV-Rule w/o yaw prior"
+    seeds: [0, 1, 2]
     episodes: "500 per seed"
     metrics:
       - "success_rate"
       - "collision_rate"
-      - "stuck_rate"
-      - "steps"
+      - "near_collision_rate"
+      - "timeout_or_stuck"
+      - "correct_reject"
       - "corridor_type_success"
     metric_definitions:
       success_rate: "Fraction of episodes that reach the procedural goal without terminating as failure."
       collision_rate: "Fraction of episodes that report collision through the procedural environment."
-      stuck_rate: "Fraction of episodes that terminate due to low progress or stuck detection."
-      steps: "Episode length in environment steps."
+      near_collision_rate: "Episode reaches body margin below the near-collision diagnostic threshold."
+      timeout_or_stuck: "Episode timed out or reported stuck."
+      correct_reject: "Explicit Reject mode on benchmark-labeled false-feasible passages; not inferred from failure."
       corridor_type_success: "Success rate grouped by procedural corridor type."
     notes:
       - "Use this table to support module-level ablations in procedural v2."
+      - "This replaces the older entry-jitter-only paper_table_harder_ablation.md as the paper-facing core ablation table."
+      - "False-feasible traversal success is reported separately from correct rejection."
 
   false_feasible_outcome_decomposition:
     role: canonical_diagnostic
@@ -308,7 +316,7 @@ results:
       - "avg_min_clearance"
       - "success_but_unsafe_rate"
     metric_definitions:
-      strict_success_rate: "Depth-derived body-margin diagnostic success, not a calibrated physical safety measurement."
+      strict_success_rate: "Depth-derived body-margin diagnostic success, not a calibrated contact measurement."
       near_collision_rate: "Fraction of episodes with min clearance below the near-collision threshold."
       avg_min_clearance: "Mean minimum depth-derived body-margin proxy."
       success_but_unsafe_rate: "Nominal success with failed clearance-aware strict diagnostic."
@@ -399,7 +407,7 @@ results:
       avg_min_clearance: "Mean minimum clearance across episodes."
     notes:
       - "Diagnostic evidence that nominal success alone can be exploited by direct-control RL."
-      - "Habitat clearance metrics are depth-derived body-margin diagnostics, not calibrated physical safety measurements."
+      - "Habitat clearance metrics are depth-derived body-margin diagnostics, not calibrated contact measurements."
       - "This row should not be presented as calibrated clearance performance."
 
   rl_direct_control_baselines:
@@ -676,18 +684,20 @@ results:
     canonical: true
     legacy: false
     diagnostic: false
-    path: null
-    table_status: missing
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_calibration_extended.md"
+    table_status: available
     split: "synthetic calibration episodes"
     split_policy: same
     source_csvs:
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calib_episodes.csv"
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calib_convergence.csv"
-    table_md: null
-    table_tex: null
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/calibration_prior_sweep.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/calibration_episode_predictions.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/calibration_reliability_bins.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_calibration_extended.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_calibration_extended.tex"
     raw_csv:
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calib_episodes.csv"
-      - "examples/narrow_passage_rl/results/narrow_passage_rl/dmin_calib_convergence.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/calibration_prior_sweep.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/calibration_episode_predictions.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/calibration_reliability_bins.csv"
     domain: "Procedural D_min / clearance calibration"
     eval_split: "synthetic calibration episodes"
     train_domain: "none"
@@ -698,16 +708,26 @@ results:
     seeds: "see raw CSV"
     episodes: "see raw CSV"
     metrics:
-      - "d_min"
-      - "clearance_error"
-      - "convergence"
+      - "posterior_mean"
+      - "posterior_q95"
+      - "p_feas"
+      - "empirical_feasible"
+      - "reject_rate"
+      - "unsafe_attempt"
+      - "brier_score"
+      - "ece"
     metric_definitions:
-      d_min: "Estimated minimum clearance or required width margin."
-      clearance_error: "Calibration error between predicted and observed clearance."
-      convergence: "Iteration-level convergence statistics in dmin_calib_convergence.csv."
+      posterior_mean: "Final posterior estimate of required width under each prior."
+      posterior_q95: "Final 95th percentile posterior required width."
+      p_feas: "Predicted feasibility probability."
+      empirical_feasible: "Oracle physical feasibility label under true_width."
+      reject_rate: "Fraction rejected by the calibration policy."
+      unsafe_attempt: "Attempted passage with passage_width below true_width."
+      brier_score: "Reliability score for p_feas predictions."
+      ece: "Expected calibration error over p_feas bins."
     notes:
-      - "Use with dmin_calibration.png for calibration evidence."
-      - "No standalone Markdown or LaTeX table exists yet."
+      - "Use this table to discuss over-conservative and under-conservative width priors."
+      - "Reliability claims should cite calibration_episode_predictions.csv and calibration_reliability_bins.csv."
 
   margin_phase:
     role: canonical_figure
@@ -819,7 +839,7 @@ results:
     notes:
       - "This probe increases negative-margin support and must remain separate from the canonical main margin-phase figure."
       - "The conservative reject gate is diagnostic; current results show nontrivial false rejects and little false-feasible correct rejection."
-      - "Near-collision is a clearance diagnostic, not calibrated physical safety."
+      - "Near-collision is a clearance diagnostic, not calibrated contact measurement."
 
   legacy_old_procedural_table:
     role: legacy
