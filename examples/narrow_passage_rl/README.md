@@ -97,6 +97,28 @@ to correct rejection.  The raw CSV logs `reject`, `correct_reject`,
 `false_reject`, `collision`, `timeout`, `stuck`, and `wasted_attempt` per
 episode.
 
+Reject is therefore reported as an explicit mode, not inferred from failure.
+The default DEGNAV-Rule / Geometry-FSM controller does not currently demonstrate
+correct rejection on benchmark-labeled false-feasible passages.  To test an
+explicit abstention policy without changing the default main method, the
+evaluator includes a separate conservative diagnostic variant:
+
+```bash
+python examples/narrow_passage_rl/eval_harder_benchmark.py \
+  --methods rule_baseline geometry_fsm feasibility_reject \
+  --corridor-types false_feasible \
+  --episodes 500 \
+  --seeds 0 1 2 \
+  --log-belief-diagnostics \
+  --log-outcome-decomposition \
+  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/raw/false_feasible_reject_probe.csv
+```
+
+`feasibility_reject` uses only observable geometry/belief signals and does not
+read the environment passability label.  Treat it as a diagnostic candidate, not
+as a replacement for the current main DEGNAV-Rule row unless its false-reject
+rate on passable corridors is also reported.
+
 ### 2. Habitat HM3D Nominal Anchor Validation
 
 Scripts:
@@ -580,6 +602,44 @@ Margin is computed at the shared pre-divergence decision snapshot.  Belief
 diagnostics for the reactive rule baseline are used only for stratification and
 do not influence its actions.  `Reject` denotes an explicit Reject mode, not
 generic failure.
+
+The default sampled benchmark has limited support on the infeasible side of the
+margin axis.  To stress negative margins directly, run a separate probe instead
+of over-interpreting the low-support bins in the main figure:
+
+```bash
+python examples/narrow_passage_rl/eval_harder_benchmark.py \
+  --methods rule_baseline geometry_fsm feasibility_reject \
+  --episodes 500 \
+  --seeds 0 1 2 \
+  --width-range 0.30 0.55 \
+  --log-belief-diagnostics \
+  --log-outcome-decomposition \
+  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_infeasible_probe.csv
+```
+
+This probe is for sensitivity analysis.  Keep it separate from the main paired
+Rule-vs-DEGNAV figure unless the paper explicitly labels it as a deliberately
+harder width-prior slice.
+
+Current infeasible-side probe outputs:
+
+```text
+results/narrow_passage_rl/raw/margin_phase_infeasible_probe.csv
+results/narrow_passage_rl/figures/infeasible_probe/margin_phase_rule_vs_degnav_rule.{pdf,png}
+results/narrow_passage_rl/figures/infeasible_probe/margin_phase_near_boundary_zoom.{pdf,png}
+results/narrow_passage_rl/tables/infeasible_probe/paper_table_margin_phase_summary.{md,tex}
+```
+
+This probe fixes the low-support issue for negative margins: it contains 381
+episodes per method with `delta_mean < -0.05` and 872 episodes per method in
+`[-0.10, 0.10]`.  It also shows why the conservative reject gate remains
+diagnostic rather than part of the main method: it triggers Reject in 10.2% of
+episodes, but only 0.1% are correct rejects overall and 10.1% are false rejects.
+On false-feasible corridors specifically, correct reject is 1.3% and timeout
+remains 98.7%.  This supports the current paper interpretation: false-feasible
+rejection needs failure memory or an explicit blockage/occlusion model, not just
+a static width-margin gate.
 
 Habitat runs require:
 

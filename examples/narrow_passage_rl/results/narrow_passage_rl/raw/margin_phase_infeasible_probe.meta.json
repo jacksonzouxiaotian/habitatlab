@@ -1,0 +1,47 @@
+{
+  "belief_config": {
+    "conservative_margin": 0.06,
+    "default_w_req_prior": 0.36,
+    "feature_dim": 19,
+    "sigma_d": 0.04,
+    "sigma_w": 0.03,
+    "use_yaw_prior": true
+  },
+  "command": "python examples/narrow_passage_rl/eval_harder_benchmark.py --methods rule_baseline geometry_fsm feasibility_reject --episodes 500 --seeds 0 1 2 --width-range 0.30 0.55 --log-belief-diagnostics --log-outcome-decomposition --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_infeasible_probe.csv",
+  "corridor_types": [
+    "straight",
+    "l_shaped",
+    "s_shaped",
+    "narrow_exit",
+    "narrow_entry",
+    "asymmetric",
+    "false_feasible"
+  ],
+  "episode_semantics": "--episodes is per method per seed.",
+  "episodes_per_seed": 500,
+  "git_commit": "0c3a0f7902e0c4202d18c74d8fc048c288a2415a",
+  "margin_snapshot_definition": "Primary delta_mean is computed at the canonical pre-behavior entry projection: the reset lateral offset is projected onto the corridor entry, reset yaw is preserved, and the first finite d_hat / w_req_cons diagnostic is used. If unavailable, the reset finite diagnostic is used as fallback.",
+  "methods": [
+    "rule_baseline",
+    "geometry_fsm",
+    "feasibility_reject"
+  ],
+  "morphology_config": {
+    "entry_jitter_sigma": 0.0,
+    "environment": "HarderNarrowPassageEnv",
+    "max_steps": 400,
+    "robot_radius": 0.18,
+    "width_range": [
+      0.3,
+      0.55
+    ]
+  },
+  "number_of_rows": 4500,
+  "scenario_count": 1500,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "timestamp": "2026-07-16T15:59:34.664893+00:00"
+}

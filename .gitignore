@@ -97,6 +97,16 @@ data
 /tb
 examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/
 
+# Narrow-passage local artifacts (large videos, ROS workspace, scratch outputs)
+/video_dir/
+/ros2_ws/
+/results/narrow_passage_rl/keyframes/
+/data_old/
+/narrow_passage_fix_files/
+/pointnav_sanity_check.py
+*.bak
+*_local.yaml
+
 # HITL outputs
 /hitl_output*
 

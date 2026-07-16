@@ -80,6 +80,12 @@ Reactive rule baseline and DEGNAV-Rule / Geometry-FSM, but correct reject is
 also 0.0%.  Therefore 0% traversal success must not be interpreted as correct
 rejection; it is decomposed into collision, timeout/stuck, and wasted attempts.
 
+Reject is counted only when a controller explicitly emits the Reject mode.  The
+default DEGNAV-Rule / Geometry-FSM row should not be described as solving
+false-feasible rejection.  A separate diagnostic candidate can be run with
+`--methods rule_baseline geometry_fsm feasibility_reject` to test conservative
+observable-geometry rejection and report false-reject rate separately.
+
 Deprecated legacy tables such as `paper_table_main.md` and
 `paper_table_ablation.md` are stubs only.  Their old contents are preserved under
 `examples/narrow_passage_rl/results/narrow_passage_rl/legacy/` and must not be
@@ -356,9 +362,26 @@ python examples/narrow_passage_rl/plot_margin_phase.py \
     --margin-max 0.30 \
     --min-bin-count 5
 
+# Optional infeasible-side margin probe; keep separate from the main figure
+python examples/narrow_passage_rl/eval_harder_benchmark.py \
+    --methods rule_baseline geometry_fsm feasibility_reject \
+    --episodes 500 \
+    --seeds 0 1 2 \
+    --width-range 0.30 0.55 \
+    --log-belief-diagnostics \
+    --log-outcome-decomposition \
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_infeasible_probe.csv
+
 # Regenerate paper tables from available CSV artifacts
 python examples/narrow_passage_rl/make_paper_tables.py
 ```
+
+The infeasible-side probe is a sensitivity analysis, not the main paired figure.
+It increases negative-margin support and tests the diagnostic
+`feasibility_reject` variant.  Current results show that this conservative gate
+does not solve false-feasible rejection: it introduces false rejects and leaves
+most false-feasible blockers as timeout/wasted-attempt cases.  Use repeated
+failure-memory experiments for the memory/rejection claim.
 
 Habitat runs require:
 

@@ -55,6 +55,7 @@ CORE_VARIANTS = [
     "no_recovery",
     "deterministic_margin",
     "no_yaw_prior",
+    "feasibility_reject",
 ]
 
 LEGACY_METHOD_TO_VARIANT = {
@@ -68,11 +69,16 @@ LEGACY_METHOD_TO_VARIANT = {
     "no_recovery": "no_recovery",
     "deterministic_margin": "deterministic_margin",
     "no_yaw_prior": "no_yaw_prior",
+    "feasibility_reject": "feasibility_reject",
 }
 
 PROB_FEAS_THRESHOLD = 0.70
 RISK_THRESHOLD = 0.35
 TAU_MARGIN = 0.05
+REJECT_P_FEAS_THRESHOLD = 0.08
+REJECT_MARGIN_THRESHOLD = -0.08
+REJECT_FRONT_DEPTH_THRESHOLD = 0.18
+REJECT_STUCK_THRESHOLD = 0.65
 
 FALSE_FEASIBLE_REQUIRED_COLUMNS = [
     "episode_id",
@@ -172,6 +178,7 @@ METHOD_LABELS = {
     "no_recovery": "DEGNAV-Rule w/o recovery",
     "deterministic_margin": "DEGNAV-Rule deterministic margin",
     "no_yaw_prior": "DEGNAV-Rule w/o yaw prior",
+    "feasibility_reject": "DEGNAV-Rule conservative reject gate",
 }
 
 
@@ -324,6 +331,31 @@ def _feasibility_acceptance(obs: np.ndarray, variant: str,
         and float(belief_row["risk"]) <= RISK_THRESHOLD
     )
     return bool(accept), belief_row, "probabilistic_belief"
+
+
+def _conservative_reject_gate(obs: np.ndarray, belief_row: dict) -> bool:
+    """Return True for explicit abstention from clearly unsafe entry.
+
+    This gate is intentionally conservative and uses only observable geometry:
+    a very low probabilistic margin, a clearly negative width margin, or a
+    near-front blockage combined with stuckness.  It is *not* the default
+    DEGNAV-Rule policy and never reads the environment passability label.
+    """
+
+    p_feas = float(belief_row.get("p_feas", 1.0))
+    delta = float(belief_row.get("delta_mean", 1.0))
+    d_center = float(obs[1])
+    stuck = float(obs[15])
+    collision_flag = float(obs[16]) > 0.5
+    if collision_flag:
+        return True
+    if p_feas <= REJECT_P_FEAS_THRESHOLD:
+        return True
+    if delta <= REJECT_MARGIN_THRESHOLD:
+        return True
+    if d_center <= REJECT_FRONT_DEPTH_THRESHOLD and stuck >= REJECT_STUCK_THRESHOLD:
+        return True
+    return False
 
 
 # ── Controllers ───────────────────────────────────────────────────────────────
@@ -521,6 +553,9 @@ def fsm_action(obs, variant="full", local_mem: Optional[PassageFailureMemory] = 
     if fs is not None:
         return fs[1], fs[0]
 
+    if variant == "feasibility_reject" and _conservative_reject_gate(obs, _belief_row):
+        return _act(0.0, 0.0), "REJECT"
+
     # Local memory overrides
     if local_mem is not None and local_mem.should_recover(obs):
         mode = "RECOVER"
@@ -683,6 +718,20 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         last_mode = str(mode)
         mode_counts[_mode_bucket(last_mode)] += 1
 
+        if _mode_bucket(last_mode) == "reject":
+            steps += 1
+            info = {
+                "success": 0.0,
+                "collision": 0.0,
+                "stuck": float(obs[15] >= 1.0),
+                "passable": env.is_passable,
+                "corridor_type": env.corridor_type.value if env.corridor_type else "unknown",
+                "passage_width": getattr(env, "_episode_W", float(obs[8])),
+                "body_margin": float(obs[9]),
+                "min_body_margin": min_bm,
+            }
+            break
+
         obs, _, term, trunc, info = env.step(action)
         post_bm = float(obs[9])
         if post_bm < min_bm:
@@ -776,8 +825,16 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
 
 def eval_method(method: str, ctypes: List[str], n_episodes: int,
                 seed: int = 42, entry_jitter_sigma: float = 0.0,
-                log_belief_diagnostics: bool = False) -> List[dict]:
-    env_cfg = {"corridor_types": ctypes, "seed": seed}
+                log_belief_diagnostics: bool = False,
+                width_range: tuple[float, float] = (0.45, 0.90),
+                max_steps: Optional[int] = None) -> List[dict]:
+    env_cfg = {
+        "corridor_types": ctypes,
+        "seed": seed,
+        "width_range": width_range,
+    }
+    if max_steps is not None:
+        env_cfg["max_steps"] = max_steps
     env = HarderNarrowPassageEnv(env_cfg)
     variant = _variant_for_method(method)
 
@@ -1082,6 +1139,14 @@ def write_false_feasible_outcome_tables(all_stats: List[dict], methods: List[str
     print(f"[write] {tex_path}")
 
 
+def _path_is_under(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def _assert_columns(rows: List[dict], required: List[str], label: str) -> None:
     missing = [col for col in required if all(col not in row for row in rows)]
     if missing:
@@ -1226,9 +1291,9 @@ def write_metadata(
         "corridor_types": ctypes,
         "morphology_config": {
             "environment": "HarderNarrowPassageEnv",
-            "width_range": [0.45, 0.90],
+            "width_range": list(args.width_range),
             "robot_radius": 0.18,
-            "max_steps": 400,
+            "max_steps": int(args.max_steps) if args.max_steps is not None else 400,
             "entry_jitter_sigma": float(args.entry_jitter),
         },
         "belief_config": {
@@ -1277,6 +1342,12 @@ def main():
     ap.add_argument("--entry-jitter", type=float, default=0.0,
                     help="std dev (m) of lateral start-position noise — use 0.20–0.30 "
                          "to force RECOVER activations for ablation robustness testing")
+    ap.add_argument("--width-range", nargs=2, type=float, default=(0.45, 0.90),
+                    metavar=("MIN", "MAX"),
+                    help="corridor width sampling range in meters. Use e.g. "
+                         "--width-range 0.30 0.55 for an infeasible-side margin probe")
+    ap.add_argument("--max-steps", type=int, default=None,
+                    help="override HarderNarrowPassageEnv max_steps")
     ap.add_argument("--output-csv",
                     type=Path, default=RESULTS / "harder_benchmark_episodes.csv")
     ap.add_argument("--output-summary",
@@ -1323,7 +1394,9 @@ def main():
             print(f"\n--- {method} ---")
             stats = eval_method(method, ctypes, args.episodes, run_seed,
                                 entry_jitter_sigma=jitter,
-                                log_belief_diagnostics=args.log_belief_diagnostics)
+                                log_belief_diagnostics=args.log_belief_diagnostics,
+                                width_range=tuple(args.width_range),
+                                max_steps=args.max_steps)
             per_seed_stats[method].append(stats)
             for ct in ctypes:
                 grp = [s for s in stats if s["corridor_type"] == ct]
@@ -1364,7 +1437,11 @@ def main():
     if args.log_outcome_decomposition:
         _assert_columns(all_stats, FALSE_FEASIBLE_REQUIRED_COLUMNS, "false-feasible outcome")
         if set(str(ct).lower() for ct in ctypes) == {"false_feasible"}:
-            write_false_feasible_outcome_tables(all_stats, methods)
+            if _path_is_under(Path(args.output_csv), RESULTS):
+                write_false_feasible_outcome_tables(all_stats, methods)
+            else:
+                print("[info] output CSV is outside results/narrow_passage_rl; "
+                      "skipping canonical false-feasible paper table update")
         else:
             print("[info] mixed corridor run: outcome decomposition columns were logged, "
                   "but false-feasible-only paper tables were not overwritten")

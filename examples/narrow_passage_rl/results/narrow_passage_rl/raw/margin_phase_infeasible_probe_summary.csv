@@ -1,0 +1,4 @@
+case,success_rate,collision_free_success_rate,collision_rate,tight_passage_rate,body_overlap_rate,avg_min_clearance,sr_straight,sr_l_shaped,sr_s_shaped,sr_narrow_exit,sr_narrow_entry,sr_asymmetric,sr_false_feasible
+v2_rule_baseline,0.1113,0.1113,0.87,0.916,0.05697,-0.0471,0.1906,0.0,0.0,0.3171,0.2653,0.0142,0.0
+v2_geometry_fsm,0.2807,0.2807,0.594,0.7687,0.03093,0.0054,0.2719,0.0795,0.1191,0.9463,0.5986,0.0,0.0
+v2_feasibility_reject,0.2673,0.2673,0.5127,0.762,0.02961,0.0076,0.2719,0.053,0.0681,0.9463,0.5986,0.0,0.0

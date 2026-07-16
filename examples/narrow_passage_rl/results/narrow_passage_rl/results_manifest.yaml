@@ -765,6 +765,62 @@ results:
       - "For rule_baseline, d_hat/w_req_cons/delta_mean are logged as diagnostic environment-derived margins for common x-axis binning; belief_available remains false."
       - "Do not fabricate missing method rows; the plot script uses only logged CSV columns."
 
+  margin_phase_infeasible_probe:
+    role: diagnostic
+    status: diagnostic
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/narrow_passage_rl/figures/infeasible_probe/margin_phase_rule_vs_degnav_rule.pdf"
+    table_status: generated
+    split: "procedural v2 deliberately narrow width-range probe"
+    split_policy: diagnostic_width_slice
+    source_csvs:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_infeasible_probe.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_infeasible_probe_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/infeasible_probe/margin_phase_rule_vs_degnav_rule.csv"
+    table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/infeasible_probe/paper_table_margin_phase_summary.md"
+    table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/infeasible_probe/paper_table_margin_phase_summary.tex"
+    raw_csv:
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_infeasible_probe.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_infeasible_probe_summary.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/tables/infeasible_probe/margin_phase_rule_vs_degnav_rule.csv"
+    domain: "Procedural v2 width-range stress probe"
+    eval_split: "procedural v2, width_range=[0.30, 0.55]"
+    train_domain: "none for rule methods"
+    methods:
+      - "Reactive rule baseline"
+      - "DEGNAV-Rule"
+      - "DEGNAV-Rule conservative reject gate"
+    paper_method_names:
+      rule_baseline: "Reactive rule baseline"
+      geometry_fsm: "DEGNAV-Rule / Geometry-FSM"
+      feasibility_reject: "DEGNAV-Rule conservative reject gate"
+    seeds: "[0, 1, 2]"
+    episodes: "1500 per method"
+    metrics:
+      - "delta_mean_bin"
+      - "success_rate"
+      - "collision_rate"
+      - "near_collision_rate"
+      - "reject_rate"
+      - "correct_reject_rate"
+      - "false_reject_rate"
+    metric_definitions:
+      delta_mean_bin: "Bin of estimated margin d_hat - w_req_cons."
+      success_rate: "Mean success within each margin bin."
+      collision_rate: "Mean collision within each margin bin."
+      near_collision_rate: "Mean near-collision diagnostic within each margin bin."
+      reject_rate: "Explicit Reject mode rate within each margin bin."
+      correct_reject_rate: "Reject and passable_label == false."
+      false_reject_rate: "Reject and passable_label == true."
+    notes:
+      - "This probe increases negative-margin support and must remain separate from the canonical main margin-phase figure."
+      - "The conservative reject gate is diagnostic; current results show nontrivial false rejects and little false-feasible correct rejection."
+      - "Near-collision is a clearance diagnostic, not calibrated physical safety."
+
   legacy_old_procedural_table:
     role: legacy
     status: legacy

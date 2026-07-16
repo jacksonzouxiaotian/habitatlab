@@ -117,6 +117,12 @@ equivalent to correct rejection.  The current benchmark-labeled false-feasible
 rows show execution failure or wasted attempts, not learned or rule-based
 abstention.
 
+Reject is tracked only when a controller explicitly emits the Reject mode.  The
+default DEGNAV-Rule / Geometry-FSM row should not be described as solving
+false-feasible rejection.  A separate diagnostic candidate can be run with
+`--methods rule_baseline geometry_fsm feasibility_reject` to test conservative
+observable-geometry rejection and report false-reject rate separately.
+
 Primary files:
 
 - `examples/narrow_passage_rl/eval_harder_benchmark.py`
@@ -470,9 +476,26 @@ python examples/narrow_passage_rl/plot_margin_phase.py \
     --margin-max 0.30 \
     --min-bin-count 5
 
+# Optional infeasible-side margin probe; keep separate from the main figure
+python examples/narrow_passage_rl/eval_harder_benchmark.py \
+    --methods rule_baseline geometry_fsm feasibility_reject \
+    --episodes 500 \
+    --seeds 0 1 2 \
+    --width-range 0.30 0.55 \
+    --log-belief-diagnostics \
+    --log-outcome-decomposition \
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_infeasible_probe.csv
+
 # 8. Regenerate paper tables from existing CSV artifacts
 python examples/narrow_passage_rl/make_paper_tables.py
 ```
+
+The infeasible-side probe is a sensitivity analysis, not the main paired figure.
+It increases negative-margin support and tests the diagnostic
+`feasibility_reject` variant.  Current results show that this conservative gate
+does not solve false-feasible rejection: it introduces false rejects and leaves
+most false-feasible blockers as timeout/wasted-attempt cases.  Use repeated
+failure-memory experiments for the memory/rejection claim.
 
 Habitat commands require a working Habitat/HM3D installation and the generated
 narrow-passage dataset under:
