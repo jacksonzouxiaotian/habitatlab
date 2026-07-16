@@ -1,8 +1,12 @@
-\begin{tabular}{lrrrrrrrr}
+\begin{tabular}{llrrrrrrr}
 \toprule
-Method & Episodes & Success & Collision & Near collision & Reject & Near-boundary eps. & Bins & Low-support bins \\
+Method & Regime & Episodes & Success & Collision & Near collision & Reject & Correct reject & Timeout/stuck \\
 \midrule
-Reactive rule baseline & 880 & 16.1\% & 83.9\% & 88.4\% & 0.0\% & 265 & 9 & 3 \\
-DEGNAV-Rule & 724 & 51.4\% & 30.0\% & 55.7\% & 0.0\% & 306 & 7 & 1 \\
+Reactive rule baseline & Infeasible-side & 2 & 0.0\% & 100.0\% & 100.0\% & 0.0\% & 0.0\% & 0.0\% \\
+Reactive rule baseline & Near-boundary & 136 & 12.5\% & 83.1\% & 97.8\% & 0.0\% & 0.0\% & 4.4\% \\
+Reactive rule baseline & Feasible-side & 786 & 18.7\% & 70.6\% & 79.3\% & 0.0\% & 0.0\% & 10.7\% \\
+DEGNAV-Rule & Infeasible-side & 2 & 0.0\% & 100.0\% & 100.0\% & 0.0\% & 0.0\% & 0.0\% \\
+DEGNAV-Rule & Near-boundary & 136 & 25.0\% & 67.6\% & 92.6\% & 0.0\% & 0.0\% & 7.4\% \\
+DEGNAV-Rule & Feasible-side & 786 & 65.9\% & 16.5\% & 44.0\% & 0.0\% & 0.0\% & 17.6\% \\
 \bottomrule
 \end{tabular}

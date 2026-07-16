@@ -525,23 +525,61 @@ python examples/narrow_passage_rl/eval_dmin_calibration.py
 # Regenerate paper tables from available CSV artifacts
 python examples/narrow_passage_rl/make_paper_tables.py
 
-# Width-margin phase diagram for paper figures
-python examples/narrow_passage_rl/plot_margin_phase.py \
-    --inputs \
-      examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv \
-      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv \
-    --labels DEGNAV-Rule DEGNAV-RL \
-    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl \
-    --bin-width 0.02 \
-    --margin-min -0.10 \
-    --margin-max 0.10
 ```
 
-The margin-phase script writes
-`results/narrow_passage_rl/figures/margin_phase_all_methods.{png,pdf}` and
-`results/narrow_passage_rl/tables/margin_phase_summary.csv`.  It uses
-`delta_mean` directly when available, or computes `d_hat - w_req_cons` from the
-CSV columns.
+## Rule vs DEGNAV Margin-Phase Analysis
+
+This is the paper-facing margin-phase analysis for the main method.  It compares
+the reactive rule baseline against DEGNAV-Rule / Geometry-FSM on paired
+procedural v2 scenarios.  `--episodes 500` means 500 episodes per method per
+seed.
+
+```bash
+python examples/narrow_passage_rl/eval_harder_benchmark.py \
+  --methods rule_baseline geometry_fsm \
+  --episodes 500 \
+  --seeds 0 1 2 \
+  --log-belief-diagnostics \
+  --log-outcome-decomposition \
+  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv
+```
+
+The evaluator writes the paired raw CSV and metadata:
+
+```text
+results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv
+results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.meta.json
+results/narrow_passage_rl/tables/margin_phase_raw_validation.md
+```
+
+Generate the publication figures and regime summary:
+
+```bash
+python examples/narrow_passage_rl/plot_margin_phase.py \
+  --inputs examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv \
+  --output-dir examples/narrow_passage_rl/results/narrow_passage_rl/figures \
+  --table-dir examples/narrow_passage_rl/results/narrow_passage_rl/tables \
+  --methods rule_baseline geometry_fsm \
+  --labels "Reactive rule baseline,DEGNAV-Rule" \
+  --bin-width 0.05 \
+  --margin-min -0.30 \
+  --margin-max 0.30 \
+  --min-bin-count 5
+```
+
+Outputs:
+
+```text
+results/narrow_passage_rl/figures/margin_phase_rule_vs_degnav_rule.{pdf,png}
+results/narrow_passage_rl/figures/margin_phase_near_boundary_zoom.{pdf,png}
+results/narrow_passage_rl/tables/margin_phase_rule_vs_degnav_rule.csv
+results/narrow_passage_rl/tables/paper_table_margin_phase_summary.{md,tex}
+```
+
+Margin is computed at the shared pre-divergence decision snapshot.  Belief
+diagnostics for the reactive rule baseline are used only for stratification and
+do not influence its actions.  `Reject` denotes an explicit Reject mode, not
+generic failure.
 
 Habitat runs require:
 

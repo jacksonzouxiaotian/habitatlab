@@ -41,6 +41,8 @@ BOOL_KEYS = {
     "reject": ("reject", "rejected"),
     "correct_reject": ("correct_reject",),
     "false_reject": ("false_reject",),
+    "timeout": ("timeout",),
+    "stuck": ("stuck",),
 }
 
 MODE_COUNT_KEYS = {
@@ -50,9 +52,10 @@ MODE_COUNT_KEYS = {
     "reject": ("mode_reject_count", "reject_count"),
 }
 
-DELTA_DIRECT_KEYS = ("delta_mean", "Delta_mean", "final_delta_mean", "delta", "margin")
-D_HAT_KEYS = ("d_hat", "D_hat", "final_d_hat")
-W_REQ_KEYS = ("w_req_cons", "W_req_cons", "final_w_req_cons")
+DELTA_DIRECT_KEYS = ("delta_mean", "Delta_mean", "delta", "margin")
+D_HAT_KEYS = ("d_hat", "D_hat")
+W_REQ_KEYS = ("w_req_cons", "W_req_cons")
+P_FEAS_KEYS = ("p_feas", "P_feas")
 
 
 def _split_cli_values(values: list[str] | None) -> list[str] | None:
@@ -155,8 +158,13 @@ def load_records(
     inputs: list[Path],
     labels: list[str] | None,
     methods: list[str] | None,
-) -> list[dict[str, object]]:
+) -> tuple[list[dict[str, object]], dict[str, int]]:
     records: list[dict[str, object]] = []
+    stats = {
+        "total_rows": 0,
+        "filtered_by_method": 0,
+        "dropped_missing_margin": 0,
+    }
     method_filter = set(methods or [])
     method_labels: dict[str, str] = {}
     file_labels: dict[int, str] = {}
@@ -176,14 +184,19 @@ def load_records(
             reader = csv.DictReader(f)
             _validate_required_columns(Path(path), reader.fieldnames)
             for row_idx, row in enumerate(reader):
+                stats["total_rows"] += 1
                 raw_method = str(row.get("method") or Path(path).stem)
                 if method_filter and raw_method not in method_filter:
+                    stats["filtered_by_method"] += 1
                     continue
                 delta = _delta(row)
                 if delta is None:
+                    stats["dropped_missing_margin"] += 1
                     continue
                 method = method_labels.get(raw_method, file_label or raw_method)
                 mode_counts = _mode_counts(row)
+                timeout = _metric(row, "timeout")
+                stuck = _metric(row, "stuck")
                 records.append(
                     {
                         "source": str(path),
@@ -198,10 +211,20 @@ def load_records(
                         "reject": _metric(row, "reject"),
                         "correct_reject": _metric(row, "correct_reject"),
                         "false_reject": _metric(row, "false_reject"),
+                        "timeout": timeout,
+                        "stuck": stuck,
+                        "timeout_or_stuck": (
+                            None
+                            if timeout is None and stuck is None
+                            else float((timeout or 0.0) > 0.5 or (stuck or 0.0) > 0.5)
+                        ),
+                        "p_feas": _get_first_float(row, P_FEAS_KEYS),
+                        "d_hat": _get_first_float(row, D_HAT_KEYS),
+                        "w_req_cons": _get_first_float(row, W_REQ_KEYS),
                         "mode_counts": mode_counts,
                     }
                 )
-    return records
+    return records, stats
 
 
 def _bin_index(delta: float, edges: np.ndarray) -> int | None:
@@ -224,6 +247,31 @@ def _mean_available(records: list[dict[str, object]], key: str) -> float | None:
     if not values:
         return None
     return float(np.mean(values))
+
+
+def _wilson_interval(successes: float, n: int, z: float = 1.959963984540054) -> tuple[float | None, float | None]:
+    """Dependency-free Wilson score interval for a binomial rate."""
+
+    if n <= 0:
+        return None, None
+    phat = float(successes) / float(n)
+    denom = 1.0 + (z * z) / n
+    center = (phat + (z * z) / (2.0 * n)) / denom
+    half = (z / denom) * math.sqrt((phat * (1.0 - phat) / n) + (z * z) / (4.0 * n * n))
+    return max(0.0, center - half), min(1.0, center + half)
+
+
+def _rate_and_ci(records: list[dict[str, object]], key: str) -> tuple[float | None, float | None, float | None]:
+    values = [
+        float(rec[key])
+        for rec in records
+        if rec.get(key) is not None and math.isfinite(float(rec[key]))
+    ]
+    if not values:
+        return None, None, None
+    rate = float(np.mean(values))
+    lo, hi = _wilson_interval(float(np.sum(values)), len(values))
+    return rate, lo, hi
 
 
 def summarize_records(
@@ -262,11 +310,20 @@ def summarize_records(
             "bin_left": round(float(edges[idx]), 6),
             "bin_right": round(float(edges[idx + 1]), 6),
             "bin_center": round(float((edges[idx] + edges[idx + 1]) / 2.0), 6),
+            "episode_count": len(vals),
             "n": len(vals),
             "low_support": len(vals) < min_bin_count,
         }
         for metric_name in BOOL_KEYS:
             row[f"{metric_name}_rate"] = _mean_available(vals, metric_name)
+        for metric_name in ("success", "collision", "reject"):
+            rate, lo, hi = _rate_and_ci(vals, metric_name)
+            row[f"{metric_name}_rate"] = rate
+            row[f"{metric_name}_ci_low"] = lo
+            row[f"{metric_name}_ci_high"] = hi
+        row["mean_p_feas"] = _mean_available(vals, "p_feas")
+        row["mean_d_hat"] = _mean_available(vals, "d_hat")
+        row["mean_w_req_cons"] = _mean_available(vals, "w_req_cons")
         for mode, total in mode_totals.items():
             row[f"{mode}_freq"] = (
                 float(total / total_mode_count) if total_mode_count > 0 else None
@@ -282,15 +339,26 @@ def write_summary_csv(rows: list[dict[str, object]], path: Path) -> None:
         "bin_left",
         "bin_right",
         "bin_center",
-        "n",
+        "episode_count",
         "low_support",
         "success_rate",
+        "success_ci_low",
+        "success_ci_high",
         "strict_success_rate",
         "collision_rate",
+        "collision_ci_low",
+        "collision_ci_high",
         "near_collision_rate",
         "reject_rate",
+        "reject_ci_low",
+        "reject_ci_high",
         "correct_reject_rate",
         "false_reject_rate",
+        "timeout_rate",
+        "stuck_rate",
+        "mean_p_feas",
+        "mean_d_hat",
+        "mean_w_req_cons",
         "commit_freq",
         "explore_freq",
         "recover_freq",
@@ -336,9 +404,15 @@ def _series_with_support(
     rows: list[dict[str, object]],
     method: str,
     key: str,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     vals = [
-        (float(row["bin_center"]), row.get(key), bool(row.get("low_support", False)))
+        (
+            float(row["bin_center"]),
+            row.get(key),
+            bool(row.get("low_support", False)),
+            row.get(key.replace("_rate", "_ci_low")),
+            row.get(key.replace("_rate", "_ci_high")),
+        )
         for row in rows
         if row.get("method") == method and row.get(key) is not None
     ]
@@ -347,12 +421,22 @@ def _series_with_support(
             np.asarray([], dtype=np.float32),
             np.asarray([], dtype=np.float32),
             np.asarray([], dtype=bool),
+            np.asarray([], dtype=np.float32),
+            np.asarray([], dtype=np.float32),
         )
     vals.sort(key=lambda x: x[0])
     x = np.asarray([v[0] for v in vals], dtype=np.float32)
     y = np.asarray([float(v[1]) for v in vals], dtype=np.float32)
     low = np.asarray([bool(v[2]) for v in vals], dtype=bool)
-    return x, y, low
+    ci_low = np.asarray([
+        float(v[3]) if v[3] is not None else float(v[1])
+        for v in vals
+    ], dtype=np.float32)
+    ci_high = np.asarray([
+        float(v[4]) if v[4] is not None else float(v[1])
+        for v in vals
+    ], dtype=np.float32)
+    return x, y, low, ci_low, ci_high
 
 
 def _plot_metric_lines(
@@ -365,30 +449,46 @@ def _plot_metric_lines(
 ) -> None:
     any_line = False
     colors = plt.rcParams["axes.prop_cycle"].by_key().get("color", [])
-    linestyles = ["-", "--", ":", "-."]
     markers = ["o", "s", "^", "D"]
     used_low_marker = False
     for method_idx, method in enumerate(methods):
         color = colors[method_idx % len(colors)] if colors else None
         for metric_idx, (key, label) in enumerate(metric_keys):
-            x, y, low = _series_with_support(rows, method, key)
+            x, y, low, ci_low, ci_high = _series_with_support(rows, method, key)
             if len(x) == 0:
                 continue
             any_line = True
-            style = linestyles[metric_idx % len(linestyles)]
-            marker = markers[metric_idx % len(markers)]
-            ax.plot(
-                x,
-                y,
-                linestyle=style,
-                linewidth=1.8,
-                alpha=0.65,
-                color=color,
-                label=f"{method}: {label}",
-            )
+            marker = markers[method_idx % len(markers)]
             high = ~low
             if np.any(high):
-                ax.scatter(x[high], y[high], marker=marker, s=26, color=color)
+                first_segment = True
+                start = None
+                for idx, is_high in enumerate(high):
+                    if is_high and start is None:
+                        start = idx
+                    at_end = idx == len(high) - 1
+                    if start is not None and ((not is_high) or at_end):
+                        end = idx + 1 if is_high and at_end else idx
+                        seg = slice(start, end)
+                        yerr = np.vstack([
+                            np.maximum(0.0, y[seg] - ci_low[seg]),
+                            np.maximum(0.0, ci_high[seg] - y[seg]),
+                        ])
+                        ax.errorbar(
+                            x[seg],
+                            y[seg],
+                            yerr=yerr,
+                            linestyle="-",
+                            linewidth=1.8,
+                            marker=marker,
+                            markersize=4.5,
+                            capsize=2.5,
+                            alpha=0.85,
+                            color=color,
+                            label=f"{method}: {label}" if first_segment else None,
+                        )
+                        first_segment = False
+                        start = None
             if np.any(low):
                 ax.scatter(
                     x[low],
@@ -405,10 +505,11 @@ def _plot_metric_lines(
                     ),
                 )
                 used_low_marker = True
+    ax.axvspan(-0.05, 0.05, color="0.8", alpha=0.22, zorder=0)
     ax.axvline(0.0, color="0.4", linestyle="--", linewidth=1.0)
     ax.set_title(title)
     ax.set_xlabel(r"Estimated margin $\hat{D} - W_{\mathrm{req,cons}}$ (m)")
-    ax.set_ylim(-0.03, 1.03)
+    ax.set_ylim(0.0, 1.0)
     ax.grid(True, alpha=0.25)
     if any_line:
         ax.legend(fontsize=7)
@@ -434,28 +535,24 @@ def plot_summary(
         axes[0],
         rows,
         methods,
-        [("success_rate", "success"), ("strict_success_rate", "strict")],
-        "Task success by feasibility margin",
+        [("success_rate", "success")],
+        "Success rate",
         min_bin_count,
     )
     _plot_metric_lines(
         axes[1],
         rows,
         methods,
-        [("collision_rate", "collision"), ("near_collision_rate", "near")],
-        "Safety events by feasibility margin",
+        [("collision_rate", "collision")],
+        "Collision rate",
         min_bin_count,
     )
     _plot_metric_lines(
         axes[2],
         rows,
         methods,
-        [
-            ("reject_rate", "reject"),
-            ("correct_reject_rate", "correct"),
-            ("false_reject_rate", "false"),
-        ],
-        "Reject decisions by feasibility margin",
+        [("reject_rate", "explicit reject")],
+        "Explicit reject rate",
         min_bin_count,
     )
     if xlim is not None:
@@ -466,7 +563,7 @@ def plot_summary(
     fig.suptitle(title, fontsize=14)
     if write_png:
         png_path = figures_dir / f"{stem}.png"
-        fig.savefig(png_path, dpi=240)
+        fig.savefig(png_path, dpi=300)
         print(f"[write] {png_path}")
     if write_pdf:
         pdf_path = figures_dir / f"{stem}.pdf"
@@ -505,34 +602,32 @@ def _paper_table_rows(
     min_bin_count: int,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
+    regimes = [
+        ("Infeasible-side", lambda d: d < -0.05),
+        ("Near-boundary", lambda d: -0.05 <= d <= 0.05),
+        ("Feasible-side", lambda d: d > 0.05),
+    ]
     for method in methods:
-        method_records = [
-            rec for rec in records
-            if rec.get("method") == method
-            and margin_min <= float(rec["delta"]) <= margin_max
-        ]
-        method_summary = [row for row in summary if row.get("method") == method]
-        near_records = [
-            rec for rec in method_records
-            if -0.10 <= float(rec["delta"]) <= 0.10
-        ]
-        rows.append(
-            {
-                "method": method,
-                "episodes": len(method_records),
-                "success": _rate(method_records, "success"),
-                "collision": _rate(method_records, "collision"),
-                "near_collision": _rate(method_records, "near_collision"),
-                "reject": _rate(method_records, "reject"),
-                "near_boundary_episodes": len(near_records),
-                "bins": len(method_summary),
-                "low_support_bins": sum(
-                    1 for row in method_summary
-                    if bool(row.get("low_support", False))
-                    or int(row.get("n", 0)) < min_bin_count
-                ),
-            }
-        )
+        for regime_name, predicate in regimes:
+            method_records = [
+                rec for rec in records
+                if rec.get("method") == method
+                and margin_min <= float(rec["delta"]) <= margin_max
+                and predicate(float(rec["delta"]))
+            ]
+            rows.append(
+                {
+                    "method": method,
+                    "regime": regime_name,
+                    "episodes": len(method_records),
+                    "success": _rate(method_records, "success"),
+                    "collision": _rate(method_records, "collision"),
+                    "near_collision": _rate(method_records, "near_collision"),
+                    "reject": _rate(method_records, "reject"),
+                    "correct_reject": _rate(method_records, "correct_reject"),
+                    "timeout_stuck": _rate(method_records, "timeout_or_stuck"),
+                }
+            )
     return rows
 
 
@@ -552,52 +647,54 @@ def write_paper_tables(
     md_lines = [
         "# Table: Margin-Phase Summary",
         "",
-        "Binned by `delta_mean = d_hat - w_req_cons`. Episode counts are rows inside "
-        f"the plotted margin range [{margin_min:.2f}, {margin_max:.2f}] m. "
-        f"Low-support bins are bins with fewer than {min_bin_count} episodes.",
+        "Regime summary by `delta_mean = d_hat - w_req_cons`. Episode counts are rows inside "
+        f"the plotted margin range [{margin_min:.2f}, {margin_max:.2f}] m.",
         "",
-        "| Method | Episodes | Success | Collision | Near collision | Reject | Near-boundary episodes | Bins | Low-support bins |",
-        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Method | Regime | Episodes | Success | Collision | Near collision | Reject | Correct reject | Timeout/stuck |",
+        "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         md_lines.append(
-            "| {method} | {episodes} | {success} | {collision} | {near_collision} | "
-            "{reject} | {near_boundary_episodes} | {bins} | {low_support_bins} |".format(
+            "| {method} | {regime} | {episodes} | {success} | {collision} | {near_collision} | "
+            "{reject} | {correct_reject} | {timeout_stuck} |".format(
                 method=row["method"],
+                regime=row["regime"],
                 episodes=row["episodes"],
                 success=_fmt_rate(row["success"]),
                 collision=_fmt_rate(row["collision"]),
                 near_collision=_fmt_rate(row["near_collision"]),
                 reject=_fmt_rate(row["reject"]),
-                near_boundary_episodes=row["near_boundary_episodes"],
-                bins=row["bins"],
-                low_support_bins=row["low_support_bins"],
+                correct_reject=_fmt_rate(row["correct_reject"]),
+                timeout_stuck=_fmt_rate(row["timeout_stuck"]),
             )
         )
     md_lines.extend([
         "",
-        "Note: the reactive rule baseline does not consume a feasibility-belief state; its margin is logged as an environment-derived diagnostic for common x-axis binning.",
+        "Notes:",
+        "- Margin is computed at the shared pre-divergence decision snapshot.",
+        "- Belief diagnostics for the rule baseline are used only for stratification and do not influence its actions.",
+        f"- Bins with fewer than {min_bin_count} episodes are marked low support.",
+        "- Reject denotes an explicit Reject mode, not generic failure.",
     ])
     md_path = table_dir / "paper_table_margin_phase_summary.md"
     md_path.write_text("\n".join(md_lines) + "\n")
     print(f"[write] {md_path}")
 
     tex_lines = [
-        r"\begin{tabular}{lrrrrrrrr}",
+        r"\begin{tabular}{llrrrrrrr}",
         r"\toprule",
-        r"Method & Episodes & Success & Collision & Near collision & Reject & Near-boundary eps. & Bins & Low-support bins \\",
+        r"Method & Regime & Episodes & Success & Collision & Near collision & Reject & Correct reject & Timeout/stuck \\",
         r"\midrule",
     ]
     for row in rows:
         tex_lines.append(
-            f"{str(row['method']).replace('_', r'\\_')} & {row['episodes']} "
+            f"{str(row['method']).replace('_', r'\\_')} & {row['regime']} & {row['episodes']} "
             f"& {_fmt_tex_rate(row['success'])} "
             f"& {_fmt_tex_rate(row['collision'])} "
             f"& {_fmt_tex_rate(row['near_collision'])} "
             f"& {_fmt_tex_rate(row['reject'])} "
-            f"& {row['near_boundary_episodes']} "
-            f"& {row['bins']} "
-            f"& {row['low_support_bins']} \\\\"
+            f"& {_fmt_tex_rate(row['correct_reject'])} "
+            f"& {_fmt_tex_rate(row['timeout_stuck'])} \\\\"
         )
     tex_lines.extend([r"\bottomrule", r"\end{tabular}"])
     tex_path = table_dir / "paper_table_margin_phase_summary.tex"
@@ -637,12 +734,21 @@ def main() -> None:
 
     labels = _split_cli_values(args.labels)
     methods_filter = _split_cli_values(args.methods)
-    records = load_records(args.inputs, labels, methods_filter)
+    records, load_stats = load_records(args.inputs, labels, methods_filter)
     if not records:
         raise RuntimeError(
             "No rows with usable margin data found. Expected delta_mean, "
-            "final_delta_mean, or d_hat/w_req_cons columns."
+            "or d_hat/w_req_cons columns."
         )
+    if methods_filter:
+        present_raw_methods = {str(rec["raw_method"]) for rec in records}
+        missing_methods = [method for method in methods_filter if method not in present_raw_methods]
+        if missing_methods:
+            raise RuntimeError(f"Requested methods missing from finite-margin data: {missing_methods}")
+        for method in methods_filter:
+            count = sum(1 for rec in records if str(rec["raw_method"]) == method)
+            if count <= 0:
+                raise RuntimeError(f"Requested method has no finite-margin episodes: {method}")
     methods = []
     seen = set()
     for rec in records:
@@ -650,6 +756,21 @@ def main() -> None:
         if method not in seen:
             methods.append(method)
             seen.add(method)
+
+    in_range_records = [
+        rec for rec in records
+        if float(args.margin_min) <= float(rec["delta"]) <= float(args.margin_max)
+    ]
+    dropped_out_of_range = len(records) - len(in_range_records)
+    print(
+        "[load] total_rows={total} filtered_by_method={filtered} "
+        "dropped_missing_margin={missing} dropped_out_of_range={out_of_range}".format(
+            total=load_stats["total_rows"],
+            filtered=load_stats["filtered_by_method"],
+            missing=load_stats["dropped_missing_margin"],
+            out_of_range=dropped_out_of_range,
+        )
+    )
 
     summary, _edges = summarize_records(
         records=records,
@@ -662,6 +783,18 @@ def main() -> None:
         raise RuntimeError(
             "No rows fell inside the requested margin range. Adjust "
             "--margin-min/--margin-max."
+        )
+    total_bin_support: dict[float, int] = defaultdict(int)
+    for row in summary:
+        total_bin_support[float(row["bin_center"])] += int(row.get("episode_count", 0))
+    sufficient_bins = [
+        center for center, count in total_bin_support.items()
+        if count >= int(args.min_bin_count)
+    ]
+    if len(sufficient_bins) < 3:
+        raise RuntimeError(
+            f"Need at least three bins with >= {args.min_bin_count} total episodes; "
+            f"found {len(sufficient_bins)}"
         )
 
     output_dir = Path(args.output_dir)
@@ -699,7 +832,7 @@ def main() -> None:
     zoom_rows = [
         row for row in summary
         if -0.10 <= float(row["bin_center"]) <= 0.10
-        and int(row.get("n", 0)) >= int(args.min_bin_count)
+        and int(row.get("episode_count", 0)) >= int(args.min_bin_count)
     ]
     if zoom_rows:
         plot_summary(
@@ -710,7 +843,7 @@ def main() -> None:
             stem="margin_phase_near_boundary_zoom",
             title="Near-Boundary Margin Phase",
             xlim=(-0.10, 0.10),
-            write_png=False,
+            write_png=True,
             write_pdf=True,
         )
     else:

@@ -27,9 +27,13 @@ Usage
 
 import argparse
 import csv
+import json
 import math
+import shlex
+import subprocess
 import sys
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -97,18 +101,20 @@ FALSE_FEASIBLE_REQUIRED_COLUMNS = [
 
 MARGIN_PHASE_REQUIRED_COLUMNS = [
     "method",
+    "scenario_id",
     "episode_id",
     "seed",
-    "domain",
-    "split",
     "corridor_type",
+    "passage_width",
+    "entry_yaw",
+    "lateral_offset",
     "passable_label",
     "success",
+    "collision",
+    "near_collision",
     "reject",
     "correct_reject",
     "false_reject",
-    "collision",
-    "near_collision",
     "timeout",
     "stuck",
     "d_hat",
@@ -118,11 +124,11 @@ MARGIN_PHASE_REQUIRED_COLUMNS = [
     "delta_var",
     "p_feas",
     "risk",
-    "memory_risk",
     "body_margin",
     "min_clearance",
-    "final_heading_error",
-    "final_lateral_error",
+    "margin_snapshot_step",
+    "margin_snapshot_source",
+    "belief_used_by_policy",
     "mode_commit_count",
     "mode_explore_count",
     "mode_recover_count",
@@ -219,6 +225,85 @@ def _belief_metrics(
         "risk": risk,
         "memory_risk": belief.memory_risk,
     }
+
+
+def _finite_belief_metrics(obs: np.ndarray, variant: str = "full") -> Optional[dict]:
+    """Return shared belief diagnostics when finite, otherwise ``None``."""
+
+    try:
+        row = _belief_metrics(obs, variant=variant)
+    except ValueError:
+        return None
+    values = [row.get(k, float("nan")) for k in (
+        "d_hat", "w_req_prior", "w_req_cons", "delta_mean", "delta_var", "p_feas"
+    )]
+    if not all(np.isfinite(float(v)) for v in values):
+        return None
+    return row
+
+
+def _canonical_margin_snapshot(
+    env: HarderNarrowPassageEnv,
+    reset_obs: np.ndarray,
+    variant: str = "full",
+) -> tuple[dict, int, str, np.ndarray]:
+    """Compute the pre-behavior margin snapshot shared by paired methods.
+
+    The margin-phase x-axis should describe the passage before the controller
+    choices diverge.  The v2 environment starts the robot behind the corridor,
+    where the observation reports open space.  We therefore project the reset
+    pose laterally onto the corridor entry, keep the reset yaw, and query the
+    same 19-D geometry observation without executing an action.
+    """
+
+    fallback = _finite_belief_metrics(reset_obs, variant=variant)
+    if fallback is None:
+        fallback = {
+            "d_hat": float("nan"),
+            "w_req_prior": float("nan"),
+            "w_req_cons": float("nan"),
+            "delta_mean": float("nan"),
+            "delta_var": float("nan"),
+            "p_feas": float("nan"),
+            "risk": float("nan"),
+            "memory_risk": float("nan"),
+        }
+
+    if len(getattr(env, "_pts", [])) < 2:
+        return fallback, 0, "reset_finite_fallback", reset_obs
+
+    old_pose = env.pose.copy()
+    old_prev = env.prev_action.copy()
+    old_collision = bool(env.collision)
+    old_step_count = int(env.step_count)
+    old_stuck = int(env.stuck_steps)
+    rng_state = getattr(env.rng.bit_generator, "state", None)
+
+    try:
+        first_tang = env._pts[1] - env._pts[0]
+        first_tang = first_tang / (np.linalg.norm(first_tang) + 1e-9)
+        left = np.array([-first_tang[1], first_tang[0]])
+        lateral_n = float(np.dot(old_pose[:2] - env._pts[0], left))
+        env.pose[:2] = env._pts[0] + left * lateral_n
+        env.pose[2] = old_pose[2]
+        env.prev_action[:] = 0.0
+        env.collision = False
+        obs = env._obs()
+        row = _finite_belief_metrics(obs, variant=variant)
+        if row is not None and float(obs[9]) <= 0.5:
+            return row, 0, "entry_projection", obs.copy()
+        if row is not None:
+            return row, 0, "entry_projection_finite_fallback", obs.copy()
+    finally:
+        env.pose[:] = old_pose
+        env.prev_action[:] = old_prev
+        env.collision = old_collision
+        env.step_count = old_step_count
+        env.stuck_steps = old_stuck
+        if rng_state is not None:
+            env.rng.bit_generator.state = rng_state
+
+    return fallback, 0, "reset_finite_fallback", reset_obs
 
 
 def _feasibility_acceptance(obs: np.ndarray, variant: str,
@@ -547,6 +632,13 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
     entry_obs = obs.copy()
     entry_obs_ref.clear()
     entry_obs_ref.append(entry_obs)
+    entry_yaw = float(env.pose[2])
+    entry_lateral_offset = float(entry_obs[11])
+    margin_row, margin_step, margin_source, margin_obs = _canonical_margin_snapshot(
+        env,
+        entry_obs,
+        variant=variant,
+    )
 
     if agent is not None:
         agent.reset()
@@ -559,6 +651,7 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
     body_overlap_steps = 0  # steps where bm < 0 (Habitat sliding through wall)
     mode_counts: Counter[str] = Counter()
     last_mode = ""
+    belief_samples: List[dict] = [margin_row]
 
     if cross_mem is not None:
         cross_mem.reset_local()
@@ -574,6 +667,10 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
             body_overlap_steps += 1
         if float(obs[16]) > 0.5:
             any_collision = True
+
+        step_belief = _finite_belief_metrics(obs, variant=variant)
+        if step_belief is not None:
+            belief_samples.append(step_belief)
 
         if method == "rule_baseline":
             action = rule_baseline_action(obs)
@@ -596,6 +693,9 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
             body_overlap_steps += 1
         if float(obs[16]) > 0.5 or float(info.get("collision", 0.0)) > 0.5:
             any_collision = True
+        post_belief = _finite_belief_metrics(obs, variant=variant)
+        if post_belief is not None:
+            belief_samples.append(post_belief)
         done = term or trunc
 
         if local_mem is not None and any_collision:
@@ -622,7 +722,12 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
     # The base success criterion only checks dist/heading/lateral — no collision guard.
     # body_overlap_steps > 0 means the robot was inside a wall (Habitat allow_sliding).
     collision_free_success = float(success > 0.5 and body_overlap_steps == 0)
-    belief_row = _belief_metrics(obs, variant=variant)
+    final_belief = belief_samples[-1] if belief_samples else margin_row
+    finite_deltas = [
+        float(sample["delta_mean"])
+        for sample in belief_samples
+        if np.isfinite(float(sample.get("delta_mean", float("nan"))))
+    ]
 
     return {
         "variant": variant,
@@ -640,10 +745,13 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         "is_false_feasible": float(is_false_feasible),
         "corridor_type": info.get("corridor_type", "unknown"),
         "passage_width": info.get("passage_width", float(obs[8])),
+        "entry_yaw": entry_yaw,
+        "lateral_offset": entry_lateral_offset,
         "strict_success": collision_free_success,
         "near_collision": float(tight_passage),
         "min_clearance": min_bm,
         "body_margin_min": min_bm,
+        "body_margin": float(margin_obs[9]) if np.isfinite(float(margin_obs[9])) else min_bm,
         "reject": float(reject),
         "correct_reject": float(correct_reject),
         "false_reject": float(false_reject),
@@ -652,7 +760,13 @@ def run_episode(env: HarderNarrowPassageEnv, method: str,
         "wasted_attempt": float(wasted_attempt),
         "final_heading_error": float(obs[10]),
         "final_lateral_error": float(obs[11]),
-        "_belief_row": belief_row,
+        "margin_snapshot_step": margin_step,
+        "margin_snapshot_source": margin_source,
+        "final_delta_mean": float(final_belief.get("delta_mean", float("nan"))),
+        "min_delta_mean": float(np.min(finite_deltas)) if finite_deltas else float("nan"),
+        "_belief_row": margin_row,
+        "_belief_samples": belief_samples,
+        "_final_belief_row": final_belief,
         "_mode_counts": dict(mode_counts),
         "_last_mode": last_mode,
     }
@@ -692,9 +806,12 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
                            variant=variant,
                            agent=agent, entry_jitter_sigma=entry_jitter_sigma)
         belief_row = stat.pop("_belief_row", {})
+        belief_samples = stat.pop("_belief_samples", [])
+        final_belief_row = stat.pop("_final_belief_row", {})
         mode_counts = stat.pop("_mode_counts", {})
         last_mode = stat.pop("_last_mode", "unavailable")
         stat["episode_idx"] = ep_idx
+        stat["scenario_id"] = f"seed{seed}_ep{ep_idx:06d}"
         stat["episode_id"] = f"{method}_{seed}_{ep_idx:06d}"
         stat["scene_id"] = "procedural_v2"
         stat["domain"] = "procedural_v2"
@@ -711,12 +828,14 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
         stat = finalize_episode_row(
             stat,
             belief=belief_row if has_interface else None,
-            belief_samples=[belief_row] if has_interface else [],
+            belief_samples=belief_samples if has_interface else [],
             belief_available=has_interface,
             mode_counts=mode_counts if has_interface else None,
             mode_interface_available=has_interface,
-            final_mode=last_mode,
+            final_mode=last_mode if has_interface else "direct_velocity",
         )
+        stat["belief_used_by_policy"] = int(has_interface)
+        stat["mode_semantics_available"] = int(has_interface)
         if log_belief_diagnostics:
             # For direct/reactive baselines, these fields are diagnostic margins
             # computed from the shared environment geometry.  They are logged for
@@ -725,13 +844,21 @@ def eval_method(method: str, ctypes: List[str], n_episodes: int,
             # consume or maintain a feasibility-belief state.
             for key, value in belief_row.items():
                 stat[key] = value
+            for key, value in final_belief_row.items():
+                stat[f"final_{key}"] = value
             stat["diagnostic_margin_available"] = True
         # Explicit aliases for false-feasible outcome decomposition.  These use
         # the controller's actual episode modes, not inferred failure outcomes.
-        stat["mode_commit_count"] = int(mode_counts.get("commit", 0))
-        stat["mode_explore_count"] = int(mode_counts.get("explore", 0))
-        stat["mode_recover_count"] = int(mode_counts.get("recover", 0))
-        stat["mode_reject_count"] = int(mode_counts.get("reject", 0))
+        if has_interface:
+            stat["mode_commit_count"] = int(mode_counts.get("commit", 0))
+            stat["mode_explore_count"] = int(mode_counts.get("explore", 0))
+            stat["mode_recover_count"] = int(mode_counts.get("recover", 0))
+            stat["mode_reject_count"] = int(mode_counts.get("reject", 0))
+        else:
+            stat["mode_commit_count"] = float("nan")
+            stat["mode_explore_count"] = float("nan")
+            stat["mode_recover_count"] = float("nan")
+            stat["mode_reject_count"] = float("nan")
         all_stats.append(stat)
 
         # Update cross-episode memory
@@ -961,6 +1088,171 @@ def _assert_columns(rows: List[dict], required: List[str], label: str) -> None:
         raise RuntimeError(f"{label} columns missing: {missing}")
 
 
+def _float_or_nan(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+
+
+def _validate_paired_margin_rows(rows: List[dict], methods: List[str]) -> None:
+    """Validate paired scenario semantics for margin-phase exports."""
+
+    if not rows:
+        raise RuntimeError("margin-phase validation received no rows")
+
+    required_methods = set(methods)
+    present_methods = {str(row.get("method", "")) for row in rows}
+    missing_methods = sorted(required_methods - present_methods)
+    if missing_methods:
+        raise RuntimeError(f"missing methods in margin-phase rows: {missing_methods}")
+
+    scenario_sets = {
+        method: {
+            str(row.get("scenario_id"))
+            for row in rows
+            if str(row.get("method", "")) == method
+        }
+        for method in methods
+    }
+    reference_method = methods[0]
+    reference_set = scenario_sets[reference_method]
+    for method, scenarios in scenario_sets.items():
+        if scenarios != reference_set:
+            missing = sorted(reference_set - scenarios)[:5]
+            extra = sorted(scenarios - reference_set)[:5]
+            raise RuntimeError(
+                f"scenario_id mismatch for {method}: missing={missing}, extra={extra}"
+            )
+
+    rows_by_scenario: Dict[str, List[dict]] = {}
+    for row in rows:
+        rows_by_scenario.setdefault(str(row.get("scenario_id")), []).append(row)
+    for scenario_id, scenario_rows in rows_by_scenario.items():
+        methods_here = {str(row.get("method", "")) for row in scenario_rows}
+        if not required_methods.issubset(methods_here):
+            raise RuntimeError(
+                f"scenario {scenario_id} does not contain all methods: {methods_here}"
+            )
+        corridor_types = {str(row.get("corridor_type", "")) for row in scenario_rows}
+        if len(corridor_types) != 1:
+            raise RuntimeError(
+                f"scenario {scenario_id} has mismatched corridor_type values: {corridor_types}"
+            )
+        for key in ("passage_width", "entry_yaw", "lateral_offset"):
+            values = [
+                _float_or_nan(row.get(key))
+                for row in scenario_rows
+                if str(row.get("method", "")) in required_methods
+            ]
+            finite = [value for value in values if np.isfinite(value)]
+            if len(finite) != len(required_methods):
+                raise RuntimeError(f"scenario {scenario_id} has missing {key}: {values}")
+            if max(finite) - min(finite) > 1e-6:
+                raise RuntimeError(
+                    f"scenario {scenario_id} has mismatched {key}: {finite}"
+                )
+
+    seen = set()
+    for row in rows:
+        key = (row.get("method"), row.get("seed"), row.get("episode_id"))
+        if key in seen:
+            raise RuntimeError(f"duplicate method+seed+episode_id row: {key}")
+        seen.add(key)
+
+    finite_delta_count = 0
+    finite_margin_count = 0
+    for row in rows:
+        d_hat = _float_or_nan(row.get("d_hat"))
+        w_req_cons = _float_or_nan(row.get("w_req_cons"))
+        delta = _float_or_nan(row.get("delta_mean"))
+        p_feas = _float_or_nan(row.get("p_feas"))
+        if np.isfinite(delta):
+            finite_delta_count += 1
+        if np.isfinite(d_hat) and np.isfinite(w_req_cons) and np.isfinite(delta):
+            finite_margin_count += 1
+            if abs(delta - (d_hat - w_req_cons)) > 1e-6:
+                raise RuntimeError(
+                    "delta_mean does not match d_hat - w_req_cons for "
+                    f"scenario={row.get('scenario_id')} method={row.get('method')}"
+                )
+        if np.isfinite(p_feas) and not (0.0 <= p_feas <= 1.0):
+            raise RuntimeError(
+                f"p_feas out of [0,1]: {p_feas} for row {row.get('episode_id')}"
+            )
+
+    min_expected = max(1, int(0.8 * len(rows)))
+    if finite_delta_count < min_expected or finite_margin_count < min_expected:
+        raise RuntimeError(
+            "too few finite paired margin diagnostics: "
+            f"delta={finite_delta_count}/{len(rows)}, "
+            f"margin={finite_margin_count}/{len(rows)}"
+        )
+
+
+def _git_commit_hash() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parents[2],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def write_metadata(
+    csv_path: Path,
+    *,
+    args: argparse.Namespace,
+    methods: List[str],
+    seed_values: List[int],
+    rows: List[dict],
+    ctypes: List[str],
+) -> None:
+    scenario_count = len({str(row.get("scenario_id", "")) for row in rows})
+    belief_cfg = BeliefStateConfig()
+    meta = {
+        "git_commit": _git_commit_hash(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "command": shlex.join(["python", *sys.argv]),
+        "episode_semantics": "--episodes is per method per seed.",
+        "methods": methods,
+        "seeds": seed_values,
+        "episodes_per_seed": int(args.episodes),
+        "number_of_rows": len(rows),
+        "scenario_count": scenario_count,
+        "corridor_types": ctypes,
+        "morphology_config": {
+            "environment": "HarderNarrowPassageEnv",
+            "width_range": [0.45, 0.90],
+            "robot_radius": 0.18,
+            "max_steps": 400,
+            "entry_jitter_sigma": float(args.entry_jitter),
+        },
+        "belief_config": {
+            "feature_dim": belief_cfg.feature_dim,
+            "default_w_req_prior": belief_cfg.default_w_req_prior,
+            "conservative_margin": belief_cfg.conservative_margin,
+            "sigma_d": belief_cfg.sigma_d,
+            "sigma_w": belief_cfg.sigma_w,
+            "use_yaw_prior": belief_cfg.use_yaw_prior,
+        },
+        "margin_snapshot_definition": (
+            "Primary delta_mean is computed at the canonical pre-behavior "
+            "entry projection: the reset lateral offset is projected onto the "
+            "corridor entry, reset yaw is preserved, and the first finite "
+            "d_hat / w_req_cons diagnostic is used. If unavailable, the reset "
+            "finite diagnostic is used as fallback."
+        ),
+    }
+    meta_path = Path(csv_path).with_suffix(".meta.json")
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    print(f"[write] {meta_path}")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -1068,6 +1360,7 @@ def main():
         _assert_columns(all_stats, CORE_ABLATION_REQUIRED_COLUMNS, "core procedural ablation")
     if args.log_belief_diagnostics:
         _assert_columns(all_stats, MARGIN_PHASE_REQUIRED_COLUMNS, "margin-phase diagnostic")
+        _validate_paired_margin_rows(all_stats, methods)
     if args.log_outcome_decomposition:
         _assert_columns(all_stats, FALSE_FEASIBLE_REQUIRED_COLUMNS, "false-feasible outcome")
         if set(str(ct).lower() for ct in ctypes) == {"false_feasible"}:
@@ -1075,6 +1368,14 @@ def main():
         else:
             print("[info] mixed corridor run: outcome decomposition columns were logged, "
                   "but false-feasible-only paper tables were not overwritten")
+    write_metadata(
+        Path(args.output_csv),
+        args=args,
+        methods=methods,
+        seed_values=seed_values,
+        rows=all_stats,
+        ctypes=ctypes,
+    )
 
 
 if __name__ == "__main__":
