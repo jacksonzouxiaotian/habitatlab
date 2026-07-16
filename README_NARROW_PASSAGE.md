@@ -40,7 +40,7 @@ examples/narrow_passage_rl/
   train_recurrent_ppo_v2.py             # RecurrentPPO smoke baseline
   train_bc_dagger_v2.py                 # BC/DAgger smoke baselines
   train_replay_memory_policy_v2.py      # Generic replay-memory smoke baseline
-  plot_margin_phase.py                  # Width-margin phase diagram
+  plot_margin_phase.py                  # Rule-vs-DEGNAV width-margin phase diagram
   record_habitat_video.py               # Habitat video/keyframe generation
   narrow_passage/models/belief_state.py # Compact feasibility-belief state
   narrow_passage/envs/belief_mode_env.py# Discrete mode wrapper for DEGNAV-RL
@@ -336,13 +336,25 @@ done
 # D_min calibration
 python examples/narrow_passage_rl/eval_dmin_calibration.py
 
-# Width-margin phase diagram
+# Rule-vs-DEGNAV width-margin phase analysis
+python examples/narrow_passage_rl/eval_harder_benchmark.py \
+    --methods rule_baseline geometry_fsm \
+    --episodes 500 \
+    --seeds 0 1 2 \
+    --log-belief-diagnostics \
+    --log-outcome-decomposition \
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv
+
 python examples/narrow_passage_rl/plot_margin_phase.py \
-    --inputs \
-      examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv \
-      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv \
-    --labels DEGNAV-Rule DEGNAV-RL \
-    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl
+    --inputs examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv \
+    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl/figures \
+    --table-dir examples/narrow_passage_rl/results/narrow_passage_rl/tables \
+    --methods rule_baseline geometry_fsm \
+    --labels "Reactive rule baseline,DEGNAV-Rule" \
+    --bin-width 0.05 \
+    --margin-min -0.30 \
+    --margin-max 0.30 \
+    --min-bin-count 5
 
 # Regenerate paper tables from available CSV artifacts
 python examples/narrow_passage_rl/make_paper_tables.py

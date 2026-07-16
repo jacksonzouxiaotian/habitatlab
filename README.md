@@ -42,7 +42,7 @@ examples/narrow_passage_rl/
   train_recurrent_ppo_v2.py             # RecurrentPPO smoke baseline
   train_bc_dagger_v2.py                 # BC/DAgger smoke baselines
   train_replay_memory_policy_v2.py      # Generic replay-memory smoke baseline
-  plot_margin_phase.py                  # Width-margin phase diagram
+  plot_margin_phase.py                  # Rule-vs-DEGNAV width-margin phase diagram
   failure_memory.py                     # Episode-local passage memory
   cross_episode_memory.py               # Cross-episode failure memory
   fair_reward_wrapper.py                # Dense/fair reward wrapper for RL baselines
@@ -450,13 +450,25 @@ for seed in 0 1 2; do
       --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed${seed}_eval.csv
 done
 
-# 7. Width-margin phase diagram
+# 7. Rule-vs-DEGNAV width-margin phase analysis
+python examples/narrow_passage_rl/eval_harder_benchmark.py \
+    --methods rule_baseline geometry_fsm \
+    --episodes 500 \
+    --seeds 0 1 2 \
+    --log-belief-diagnostics \
+    --log-outcome-decomposition \
+    --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv
+
 python examples/narrow_passage_rl/plot_margin_phase.py \
-    --inputs \
-      examples/narrow_passage_rl/results/narrow_passage_rl/harder_benchmark_episodes.csv \
-      examples/narrow_passage_rl/results/narrow_passage_rl/belief_mode_full_seed0_eval.csv \
-    --labels DEGNAV-Rule DEGNAV-RL \
-    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl
+    --inputs examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv \
+    --output-dir examples/narrow_passage_rl/results/narrow_passage_rl/figures \
+    --table-dir examples/narrow_passage_rl/results/narrow_passage_rl/tables \
+    --methods rule_baseline geometry_fsm \
+    --labels "Reactive rule baseline,DEGNAV-Rule" \
+    --bin-width 0.05 \
+    --margin-min -0.30 \
+    --margin-max 0.30 \
+    --min-bin-count 5
 
 # 8. Regenerate paper tables from existing CSV artifacts
 python examples/narrow_passage_rl/make_paper_tables.py
