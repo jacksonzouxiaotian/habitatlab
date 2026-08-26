@@ -16,6 +16,46 @@ Naming convention:
 
 Geometry-FSM is referred to as DEGNAV-Rule in the paper.
 
+## Latest Paired Local-Baseline Results (2026-08-24)
+
+The latest unified Procedural-v2 comparison evaluates five method rows on the
+same ordered held-out scenarios: evaluation seeds `42/43/44`, 500 episodes per
+method and seed, seven corridor types, passage width `[0.45, 0.90] m`, and a
+400-step budget.  This is a 19-D analytical local-navigation benchmark, not an
+end-to-end Habitat RGB evaluation.
+
+| Method | Success ↑ | Collision ↓ | Near collision ↓ | Timeout/stuck ↓ | Avg steps ↓ |
+|:---|---:|---:|---:|---:|---:|
+| Geometry rule | 23.3±1.9% | 70.3±2.2% | 38.6±1.6% | 6.3±0.5% | 60.0±2.6 |
+| Direct-control PPO | 84.3±0.5% | 15.7±0.5% | 14.9±0.4% | 0.0±0.0% | 68.5±0.1 |
+| Recurrent PPO (from scratch) | 0.1±0.1% | 20.3±0.3% | 19.1±0.2% | 79.7±0.4% | 323.8±1.1 |
+| Recurrent PPO (Direct-init + PPO fine-tune) | **85.0±0.9%** | **15.0±0.9%** | **14.1±0.7%** | **0.0±0.0%** | **68.3±0.2** |
+| DEGNAV + geometry-guided memory | 83.1±0.2% | 0.0±0.0% | 45.1±2.2% | 16.9±0.2% | 188.5±1.7 |
+
+The from-scratch recurrent model fails mainly through low-progress policies and
+timeout.  Its default actor/critic LSTMs contain 608,709 policy parameters,
+about 55 times the 11,077 parameters of Direct PPO, while the current
+observation is already approximately Markov.  The repaired recurrent policy
+uses a 64-unit actor LSTM, a feed-forward critic, Direct-PPO behavior
+initialization on 300 evaluation-isolated training episodes, and 106,496
+low-learning-rate RecurrentPPO fine-tuning interactions.  It exceeds the 50%
+success gate, but it is not an independent from-scratch baseline and does not
+prove that recurrence itself outperforms Direct PPO.
+
+DEGNAV has zero reported simulator collisions in this run, but its 45.1%
+near-collision rate and 16.9% timeout/stuck rate prevent interpreting that
+number as complete safety.  Its current unified-evaluation path also records
+zero correct rejects, so this result does not yet validate terminal rejection
+on false-feasible passages.
+
+Canonical artifacts:
+
+- [complete work report](docs/unified_local_baselines_work_report_20260826.md)
+- [paper-facing comparison table](results/narrow_passage_rl/unified_local_baselines_recurrent_updated_20260824/paper_table_unified_local_baselines.md)
+- [aggregate CSV](results/narrow_passage_rl/unified_local_baselines_recurrent_updated_20260824/summary.csv)
+- [per-seed CSV](results/narrow_passage_rl/unified_local_baselines_recurrent_updated_20260824/summary_by_eval_seed.csv)
+- [7,500 paired episode rows](results/narrow_passage_rl/unified_local_baselines_recurrent_updated_20260824/episodes.csv)
+
 ## What This Directory Adds
 
 ```text
