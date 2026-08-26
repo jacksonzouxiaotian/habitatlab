@@ -74,6 +74,8 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--num-envs", type=int, default=8,
                     help="Parallel envs (only PPO; SAC/TD3 use 1)")
+    ap.add_argument("--vec-env", choices=["dummy", "subproc"], default="dummy",
+                    help="PPO vectorization backend; subproc parallelizes environment stepping")
     ap.add_argument("--ctypes", choices=list(CTYPE_CONFIGS), default="full",
                     help="Corridor type set to train on")
     ap.add_argument("--reward-mode", choices=["fair", "native"], default="fair",
@@ -82,6 +84,14 @@ def main():
                     help="Resume from existing checkpoint")
     ap.add_argument("--eval-episodes", type=int, default=200,
                     help="Quick eval at the end; 0 = skip")
+    ap.add_argument("--n-steps", type=int, default=1024,
+                    help="PPO rollout steps per environment")
+    ap.add_argument("--batch-size", type=int, default=256,
+                    help="PPO minibatch size")
+    ap.add_argument("--n-epochs", type=int, default=10,
+                    help="PPO optimization epochs per rollout")
+    ap.add_argument("--device", default="cpu",
+                    help="SB3 device, e.g. cpu, cuda, or auto")
     args = ap.parse_args()
 
     # Default save dir
@@ -104,26 +114,29 @@ def main():
 
     if args.algo == "ppo":
         from stable_baselines3 import PPO
-        from stable_baselines3.common.vec_env import DummyVecEnv
+        from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
         n = args.num_envs
-        vec_env = DummyVecEnv(
-            [
-                lambda rank=i: make_env(rank, env_cfg, args.seed, args.reward_mode)
-                for i in range(n)
-            ]
+        env_fns = [
+            lambda rank=i: make_env(rank, env_cfg, args.seed, args.reward_mode)
+            for i in range(n)
+        ]
+        vec_env = (
+            SubprocVecEnv(env_fns, start_method="fork")
+            if args.vec_env == "subproc"
+            else DummyVecEnv(env_fns)
         )
 
         if args.load_model:
-            model = PPO.load(str(args.load_model), env=vec_env, device="cpu",
+            model = PPO.load(str(args.load_model), env=vec_env, device=args.device,
                              verbose=1)
         else:
             model = PPO(
                 "MlpPolicy", vec_env,
                 learning_rate=2.5e-4,
-                n_steps=1024,
-                batch_size=256,
-                n_epochs=10,
+                n_steps=args.n_steps,
+                batch_size=args.batch_size,
+                n_epochs=args.n_epochs,
                 gamma=0.99,
                 gae_lambda=0.95,
                 clip_range=0.2,
@@ -131,7 +144,7 @@ def main():
                 verbose=1,
                 tensorboard_log=str(args.save_dir / "tb"),
                 seed=args.seed,
-                device="cpu",
+                device=args.device,
             )
 
     elif args.algo == "sac":
@@ -139,7 +152,7 @@ def main():
 
         single_env = make_env(0, env_cfg, args.seed, args.reward_mode)
         if args.load_model:
-            model = SAC.load(str(args.load_model), env=single_env, device="cpu",
+            model = SAC.load(str(args.load_model), env=single_env, device=args.device,
                              verbose=1)
         else:
             model = SAC(
@@ -154,7 +167,7 @@ def main():
                 verbose=1,
                 tensorboard_log=str(args.save_dir / "tb"),
                 seed=args.seed,
-                device="cpu",
+                device=args.device,
             )
 
     else:  # TD3
@@ -167,7 +180,7 @@ def main():
             sigma=0.10 * np.ones(single_env.action_space.shape[-1]),
         )
         if args.load_model:
-            model = TD3.load(str(args.load_model), env=single_env, device="cpu",
+            model = TD3.load(str(args.load_model), env=single_env, device=args.device,
                              verbose=1)
         else:
             model = TD3(
@@ -184,7 +197,7 @@ def main():
                 verbose=1,
                 tensorboard_log=str(args.save_dir / "tb"),
                 seed=args.seed,
-                device="cpu",
+                device=args.device,
             )
 
     from stable_baselines3.common.callbacks import CheckpointCallback

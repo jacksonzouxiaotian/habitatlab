@@ -1,0 +1,16 @@
+method,paper_method,eval_seed,avg_min_body_margin,avg_steps,collision_rate,correct_reject_rate,episodes,false_reject_rate,near_collision_rate,strict_success_rate,success_rate,timeout_or_stuck_rate
+geometry_rule,Geometry rule,42,1.9036412061898882,58.758,0.692,0.0,500,0.0,0.37,0.244,0.248,0.06
+geometry_rule,Geometry rule,43,1.6924471501491498,63.638,0.684,0.0,500,0.0,0.408,0.244,0.246,0.07
+geometry_rule,Geometry rule,44,1.9284141785612445,57.526,0.734,0.0,500,0.0,0.38,0.204,0.206,0.06
+direct_control_ppo,Direct-control PPO,42,4.03186171656847,68.4,0.164,0.0,500,0.0,0.154,0.836,0.836,0.0
+direct_control_ppo,Direct-control PPO,43,4.08464437058568,68.36,0.154,0.0,500,0.0,0.144,0.846,0.846,0.0
+direct_control_ppo,Direct-control PPO,44,4.0636466688513755,68.604,0.154,0.0,500,0.0,0.148,0.846,0.846,0.0
+recurrent_ppo,Recurrent PPO,42,0.9506649296241448,322.308,0.204,0.0,500,0.0,0.192,0.002,0.002,0.794
+recurrent_ppo,Recurrent PPO,43,0.9474405210333497,324.154,0.206,0.0,500,0.0,0.188,0.0,0.0,0.794
+recurrent_ppo,Recurrent PPO,44,0.9451894618897931,324.84,0.198,0.0,500,0.0,0.194,0.0,0.0,0.802
+recurrent_ppo_direct_init,Recurrent PPO (Direct-init + PPO fine-tune),42,4.068154593914747,68.444,0.158,0.0,500,0.0,0.15,0.842,0.842,0.0
+recurrent_ppo_direct_init,Recurrent PPO (Direct-init + PPO fine-tune),43,4.118871780969203,67.95,0.154,0.0,500,0.0,0.14,0.846,0.846,0.0
+recurrent_ppo_direct_init,Recurrent PPO (Direct-init + PPO fine-tune),44,4.150160672068596,68.45,0.138,0.0,500,0.0,0.134,0.862,0.862,0.0
+degnav_memory,DEGNAV + geometry-guided memory,42,0.0437862899787724,187.392,0.0,0.0,500,0.0,0.456,0.492,0.834,0.166
+degnav_memory,DEGNAV + geometry-guided memory,43,0.04881005362141878,187.22,0.0,0.0,500,0.0,0.422,0.51,0.828,0.172
+degnav_memory,DEGNAV + geometry-guided memory,44,0.04455224678572267,190.814,0.0,0.0,500,0.0,0.474,0.448,0.83,0.17

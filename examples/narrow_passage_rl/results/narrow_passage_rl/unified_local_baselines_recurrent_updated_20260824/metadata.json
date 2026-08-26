@@ -1,0 +1,78 @@
+{
+  "artifacts": {
+    "episodes": "examples/narrow_passage_rl/results/narrow_passage_rl/unified_local_baselines_recurrent_updated_20260824/episodes.csv",
+    "summary": "examples/narrow_passage_rl/results/narrow_passage_rl/unified_local_baselines_recurrent_updated_20260824/summary.csv",
+    "summary_by_eval_seed": "examples/narrow_passage_rl/results/narrow_passage_rl/unified_local_baselines_recurrent_updated_20260824/summary_by_eval_seed.csv",
+    "table": "examples/narrow_passage_rl/results/narrow_passage_rl/unified_local_baselines_recurrent_updated_20260824/paper_table_unified_local_baselines.md"
+  },
+  "checkpoints": {
+    "direct_control_ppo": {
+      "num_timesteps": 3006464,
+      "path": "/home/xiaotian/navigation/habitat-lab/examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/unified_direct_ppo_seed0_3m_current/ppo_narrow_passage_v2.zip",
+      "sha256": "c823a235f34b07447f184d5ac5b8c9a7b9c82da637f1a9346af0013aadd1dd48"
+    },
+    "recurrent_ppo": {
+      "num_timesteps": 3006464,
+      "path": "/home/xiaotian/navigation/habitat-lab/examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/unified_recurrent_ppo_seed0_3m_cuda_current/recurrent_ppo_narrow_passage_v2.zip",
+      "sha256": "4af8284084b11629000b4703ae72556d0ee777eaa08c1dd4d038719075f1f792"
+    },
+    "recurrent_ppo_direct_init": {
+      "num_timesteps": 606496,
+      "path": "/home/xiaotian/navigation/habitat-lab/examples/narrow_passage_rl/results/narrow_passage_rl/checkpoints/recurrent_ppo_seed0_lstm64_direct_init_finetune100k/recurrent_ppo_narrow_passage_v2.zip",
+      "sha256": "e375573bd9b9550f2f3a37527dfeefc554e3680b80f3a93d5b2a54f5bec952d0"
+    }
+  },
+  "corridor_types": [
+    "straight",
+    "l_shaped",
+    "s_shaped",
+    "narrow_exit",
+    "narrow_entry",
+    "asymmetric",
+    "false_feasible"
+  ],
+  "episode_start_index": 0,
+  "episodes_per_eval_seed": 500,
+  "eval_seeds": [
+    42,
+    43,
+    44
+  ],
+  "git_commit": "e14f31a340987201facbd6354b33288b334c5d1b",
+  "git_status": "M README.md\n M README_NARROW_PASSAGE.md\n M examples/narrow_passage_rl/README.md\n M examples/narrow_passage_rl/cross_episode_memory.py\n M examples/narrow_passage_rl/docs/reproducibility.md\n M examples/narrow_passage_rl/eval_habitat_stress_validation.py\n M examples/narrow_passage_rl/eval_harder_benchmark.py\n M examples/narrow_passage_rl/make_paper_tables.py\n M examples/narrow_passage_rl/plot_margin_phase.py\n M examples/narrow_passage_rl/procedural_env_v2.py\n M examples/narrow_passage_rl/results/narrow_passage_rl/figures/margin_phase_near_boundary_zoom.pdf\n M examples/narrow_passage_rl/results/narrow_passage_rl/figures/margin_phase_near_boundary_zoom.png\n M examples/narrow_passage_rl/results/narrow_passage_rl/figures/margin_phase_rule_vs_degnav_rule.pdf\n M examples/narrow_passage_rl/results/narrow_passage_rl/figures/margin_phase_rule_vs_degnav_rule.png\n M examples/narrow_passage_rl/results/narrow_passage_rl/paper_ready_results.md\n M examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_procedural_v2_main.md\n M examples/narrow_passage_rl/results/narrow_passage_rl/results_manifest.yaml\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/margin_phase_rule_vs_degnav_rule.csv\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.md\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_false_feasible_outcomes.tex\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.md\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.tex\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_margin_phase_summary.md\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_margin_phase_summary.tex\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_core_ablation.md\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_core_ablation.tex\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_v2_ablation_core.md\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_v2_ablation_core.tex\n M examples/narrow_passage_rl/results/narrow_passage_rl/tables/procedural_ablation_core_summary.csv\n M examples/narrow_passage_rl/train_recurrent_ppo_v2.py\n M examples/narrow_passage_rl/train_sb3_v2.py\n M habitat-lab/habitat/config/default_structured_configs.py\n M habitat-lab/habitat/config/habitat/task/narrow_passage.yaml\n M habitat-lab/habitat/tasks/narrow_passage/geometry.py\n M habitat-lab/habitat/tasks/narrow_passage/narrow_passage_task.py\n M habitat-lab/habitat/tasks/narrow_passage/sensors.py\n?? configs/\n?? eagor_outputs/\n?? eagor_repro/\n?? examples/narrow_passage_rl/analyze_belief_confidence.py\n?? examples/narrow_passage_rl/analyze_feasibility_ablation.py\n?? examples/narrow_passage_rl/audit_habitat_protocol.py\n?? examples/narrow_passage_rl/audit_structural_iteration.py\n?? examples/narrow_passage_rl/classify_feasibility_failures.py\n?? examples/narrow_passage_rl/configs/ablation_feasibility/\n?? examples/narrow_passage_rl/diagnose_habitat_clearance_proxy.py\n?? examples/narrow_passage_rl/diagnose_low_success.py\n?? examples/narrow_passage_rl/distill_direct_to_recurrent.py\n?? examples/narrow_passage_rl/docs/belief_filter_ablation.md\n?? examples/narrow_passage_rl/docs/degnav_current_architecture_caption.md\n?? examples/narrow_passage_rl/docs/failure_aware_memory_method.md\n?? examples/narrow_passage_rl/docs/feasibility_ablation.md\n?? examples/narrow_passage_rl/docs/feishu_quadruped_vln_project_report.md\n?? examples/narrow_passage_rl/docs/feishu_report.md\n?? examples/narrow_passage_rl/docs/navila_model_real_robot_deployment.md\n?? examples/narrow_passage_rl/docs/opennav_install_status.md\n?? examples/narrow_passage_rl/docs/quadruped_rl_reward_design.md\n?? examples/narrow_passage_rl/docs/vln_integration_status.md\n?? examples/narrow_passage_rl/eval_feasibility_ablation.py\n?? examples/narrow_passage_rl/eval_feasibility_stress.py\n?? examples/narrow_passage_rl/eval_habitat_feasibility_ablations.py\n?? examples/narrow_passage_rl/eval_morphology_generalization.py\n?? examples/narrow_passage_rl/eval_structural_feasibility.py\n?? examples/narrow_passage_rl/eval_unified_local_baselines.py\n?? examples/narrow_passage_rl/eval_vln_safety_adapter.py\n?? examples/narrow_passage_rl/finalize_structural_evaluation.py\n?? examples/narrow_passage_rl/merge_structural_feasibility.py\n?? examples/narrow_passage_rl/narrow_passage/models/dynamic_feasibility.py\n?? examples/narrow_passage_rl/narrow_passage/models/feasibility_ablation.py\n?? examples/narrow_passage_rl/narrow_passage/models/robot_morphology.py\n?? examples/narrow_passage_rl/narrow_passage/models/vln_safety_adapter.py\n?? examples/narrow_passage_rl/opennav_preflight.py\n?? examples/narrow_passage_rl/plot_current_degnav_architecture.py\n?? examples/narrow_passage_rl/plot_degnav_framework_assets.py\n?? examples/narrow_passage_rl/plot_formal_margin_phase.py\n?? examples/narrow_passage_rl/plot_memory_transfer_interference.py\n?? examples/narrow_passage_rl/plot_yaw_required_width.py\n?? examples/narrow_passage_rl/results/ablation_feasibility/\n?? examples/narrow_passage_rl/results/narrow_passage_rl/audits/\n?? examples/narrow_passage_rl/results/narrow_passage_rl/diagnostic/\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/degnav_current_architecture_20260822.meta.json\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/degnav_current_architecture_20260822.pdf\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/degnav_current_architecture_20260822.png\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/degnav_current_architecture_20260822.svg\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/fig_yaw_required_width.meta.json\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/fig_yaw_required_width.pdf\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/fig_yaw_required_width.png\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/framework_assets_20260822/\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/memory_transfer_interference.meta.json\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/memory_transfer_interference.pdf\n?? examples/narrow_passage_rl/results/narrow_passage_rl/figures/memory_transfer_interference.png\n?? examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_procedural_v2_main.tex\n?? examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_formal_finetune100k_parts/\n?? examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_gate_lstm64_500k/\n?? examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_gate_lstm64_distilled/\n?? examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_gate_lstm64_finetune100k/\n?? examples/narrow_passage_rl/results/narrow_passage_rl/tables/false_feasible_outcomes_summary.csv\n?? examples/narrow_passage_rl/results/narrow_passage_rl/tables/margin_phase_input_audit.md\n?? examples/narrow_passage_rl/results/narrow_passage_rl/tables/memory_transfer_interference_figure_data.csv\n?? examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_v2_main.md\n?? examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_v2_main.tex\n?? examples/narrow_passage_rl/results/narrow_passage_rl/tables/procedural_v2_ablation_core_summary.csv\n?? examples/narrow_passage_rl/results/narrow_passage_rl/tables/procedural_v2_main_summary.csv\n?? examples/narrow_passage_rl/results/narrow_passage_rl/tables/report_table_all_experiments.md\n?? examples/narrow_passage_rl/results/narrow_passage_rl/tables/report_table_habitat_general_navigation.md\n?? examples/narrow_passage_rl/results/narrow_passage_rl/unified_local_baselines_20260824/\n?? examples/narrow_passage_rl/results/narrow_passage_rl/unified_local_baselines_20260824_parts/\n?? examples/narrow_passage_rl/results/narrow_passage_rl/unified_local_baselines_recurrent_updated_20260824/\n?? examples/narrow_passage_rl/results/opennav_preflight/\n?? examples/narrow_passage_rl/results/vln_batch_diagnostic/\n?? examples/narrow_passage_rl/results/vln_dataset_free/\n?? examples/narrow_passage_rl/results/vln_r2r_eval_preflight/\n?? examples/narrow_passage_rl/results/vln_r2r_text_analysis/\n?? examples/narrow_passage_rl/results/vln_safety_adapter_smoke/\n?? examples/narrow_passage_rl/summarize_repaired_smoke.py\n?? examples/narrow_passage_rl/sweep_kappa_tau.py\n?? examples/narrow_passage_rl/tests/test_feasibility_ablation.py\n?? examples/narrow_passage_rl/tests/test_repaired_feasibility.py\n?? examples/narrow_passage_rl/tests/test_strict_obb_geometry.py\n?? examples/narrow_passage_rl/tests/test_structural_evaluation_protocol.py\n?? examples/narrow_passage_rl/tests/test_vln_safety_adapter.py\n?? examples/narrow_passage_rl/validate_structural_feasibility.py\n?? examples/narrow_passage_rl/vln_batch_diagnostic.py\n?? examples/narrow_passage_rl/vln_dataset_free_smoke.py\n?? examples/narrow_passage_rl/vln_r2r_preflight.py\n?? examples/narrow_passage_rl/vln_r2r_text_analysis.py\n?? test/test_narrow_passage_geometry.py",
+  "inference_device": "cpu",
+  "max_steps": 400,
+  "merged_episode_inputs": [
+    "examples/narrow_passage_rl/results/narrow_passage_rl/unified_local_baselines_20260824/episodes.csv",
+    "examples/narrow_passage_rl/results/narrow_passage_rl/recurrent_formal_finetune100k_parts/recurrent_direct_init_episodes.csv"
+  ],
+  "methods": [
+    "geometry_rule",
+    "direct_control_ppo",
+    "recurrent_ppo",
+    "recurrent_ppo_direct_init",
+    "degnav_memory"
+  ],
+  "protocol": "paired_procedural_v2_local_baselines",
+  "rl_training_protocol": {
+    "batch_size": 256,
+    "corridor_types": "full",
+    "devices": {
+      "direct_control_ppo": "cpu",
+      "recurrent_ppo": "cuda"
+    },
+    "n_epochs": 3,
+    "n_steps": 1024,
+    "num_envs": 8,
+    "recurrent_training_note": "Direct PPO behavior distillation on 300 evaluation-isolated training episodes (seed 1701), followed by 106,496 RecurrentPPO interactions at learning rate 1e-5; cumulative counter 606,496.",
+    "reward_mode": "fair"
+  },
+  "rl_training_seeds": {
+    "direct_control_ppo": 0,
+    "recurrent_ppo": 0
+  },
+  "width_range": [
+    0.45,
+    0.9
+  ]
+}
