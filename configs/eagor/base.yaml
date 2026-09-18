@@ -1,0 +1,89 @@
+seed: 0
+
+panorama:
+  height: 256
+  width: 512
+  sensor_mode: native_equirectangular
+  sensor_height: 0.88
+
+likelihood:
+  backend: oracle_semantic
+  epsilon: 1.0e-6
+  gaussian_sigma_azimuth_deg: 8.0
+  gaussian_sigma_elevation_deg: 8.0
+  recorded_sources: []
+  qwen:
+    enabled: false
+    model_name_or_path: null
+    timeout_s: 30.0
+    max_new_tokens: 256
+    fail_open: true
+
+sh_belief:
+  bandlimit: 7
+  basis: real_scipy_orthonormal_condon_shortley
+  update_mode: paper
+  belief_decay: 1.0
+  observation_weight: 1.0
+  missing_observation_mode: propagate_only
+  decode_mode: paper
+  max_belief_age: 50
+
+grid_baseline:
+  decay: 1.0
+  interpolation_order: 1
+  horizontal_padding: circular
+
+controller:
+  turn_threshold_deg: 15.0
+  confidence_move_threshold: 0.25
+  forward_step_m: 0.25
+  turn_step_deg: 15.0
+  low_confidence_action: turn_left
+  exploration_turn_steps: 6
+  stop_likelihood_area_threshold: 0.08
+  # The default preserves the original controller baseline exactly.
+  stop_mode: area
+  stop_distance_m: 1.0
+  min_target_pixels: 20
+  min_valid_depth_pixels: 5
+
+planning:
+  mode: direct
+  candidate_offsets_deg: [0, -15, 15, -30, 30, -45, 45, -60, 60]
+  sector_width_deg: 10.0
+  clearance_percentile: 25.0
+  vertical_band_deg: 35.0
+  obstacle_distance_m: 0.5
+  safety_distance_m: 0.7
+  goal_weight: 1.0
+  clearance_weight: 0.7
+  obstacle_weight: 2.0
+  turn_weight: 0.15
+
+habitat:
+  dataset_name: hm3d
+  benchmark_config: benchmark/nav/objectnav/objectnav_hm3d.yaml
+  dataset_version: v2
+  split: val
+  scenes_dir: data/scene_datasets
+  dataset_path: data/datasets/objectnav/hm3d/v2/{split}/{split}.json.gz
+  gpu_device_id: 0
+
+evaluation:
+  policy_method: eagor
+  num_episodes: 10
+  max_episode_steps: 500
+  save_video: true
+  unique_scenes: false
+  save_likelihood: false
+  seam_threshold_deg: 30.0
+  success_distance_m: 0.1
+  video_fps: 10
+  log_failure_attribution: true
+  direction_failure_threshold_deg: 45.0
+  blocked_step_threshold: 10
+  oscillation_threshold: 8
+
+output:
+  root: data/eagor_results

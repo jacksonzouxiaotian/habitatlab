@@ -1,0 +1,66 @@
+# Shared protocol manifest. The runnable source of truth is
+# eval_feasibility_ablation.py; these YAML files document the controlled diff.
+experiment: strict_structural_feasibility_obb_v3
+runner: examples/narrow_passage_rl/eval_structural_feasibility.py
+seeds: [0, 1, 2]
+paired_scenarios_per_margin_scene_seed: 5
+corridor_types:
+  - straight
+  - l_shaped
+  - s_shaped
+  - narrow_entry
+  - narrow_exit
+  - asymmetric
+  - false_feasible
+
+environment:
+  max_steps: 200
+  collision_geometry: oriented_rectangle
+  morphology:
+    width_m: 0.36
+    length_m: 0.60
+    safety_margin_each_side_m: 0.03
+  structural_margin_bins_m:
+    - [-0.15, -0.10]
+    - [-0.10, -0.05]
+    - [-0.05, 0.00]
+    - [0.00, 0.05]
+    - [0.05, 0.10]
+    - [0.10, 0.15]
+  yaw_deg: [0, 15, 30, 45, 60]
+  noise: [clean, mild, severe]
+  lateral_offset_m: [0.0, 0.10, 0.20]
+  factor_design: balanced
+
+belief:
+  body_width_m: 0.36
+  body_length_m: 0.60
+  safety_margin_each_side_m: 0.03
+  current_variance_model: scene_dependent
+  uncertainty_inputs:
+    - depth_sector_ray_dispersion
+    - valid_depth_and_dropout_ratio
+    - boundary_fitting_residual
+    - temporal_width_variation
+    - yaw_and_pose_uncertainty
+  fixed_uncertainty_sigma_m: 0.05
+  online_required_width_posterior: false
+
+selector:
+  kappa: 1.645
+  tau_commit_m: 0.02
+  tau_reject_m: 0.02
+  commit_rule: LCB_struct > tau_commit and LCB_pose > tau_commit
+  reject_rule: UCB_struct < -tau_reject or repeated_failure_memory or explicit_blocker
+  explore_rule: structural_interval_overlap_or_pose_not_ready
+  recover_rule: prior_commitment_failed_or_collision_or_stuck
+
+controlled_components:
+  memory: geometry_indexed_cross_episode
+  heading_alignment: true
+  recovery: true
+  turn_commitment: true
+  low_level_velocity_controller: shared
+  episode_seed_and_id: paired
+
+output_parent: examples/narrow_passage_rl/results/ablation_feasibility

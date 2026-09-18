@@ -1,5 +1,5 @@
-version: 1
-updated: "2026-07-17"
+version: 2
+updated: "2026-09-05"
 scope: "AAAI narrow-passage paper result registry"
 
 registry_rules:
@@ -15,6 +15,93 @@ registry_rules:
   - "Entries with split_policy: mixed must set canonical: false and paper_safe: false unless they are only raw-data provenance with table_status: missing."
 
 results:
+  official_pointnav_mp3d_v1:
+    role: canonical_official_reference
+    status: canonical
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: true
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/official_pointnav_mp3d_v1_20260904/paper_table_official_pointnav.md"
+    table_status: available
+    split: "official MP3D PointNav v1 val"
+    split_policy: same
+    source_csvs:
+      - "examples/narrow_passage_rl/results/official_pointnav_mp3d_v1_20260904/summary_all_methods.csv"
+    table_md: "examples/narrow_passage_rl/results/official_pointnav_mp3d_v1_20260904/paper_table_official_pointnav.md"
+    domain: "Habitat official PointNav v1 / MP3D"
+    eval_split: "val, 495 fixed official episodes"
+    train_domain: "released MP3D checkpoint for PointNav PPO; released Gibson-2+ checkpoint for DD-PPO; not applicable to simple agents"
+    methods:
+      - "ForwardOnly"
+      - "Random Agent"
+      - "RandomForward"
+      - "GoalFollower"
+      - "PointNav PPO"
+      - "DD-PPO"
+      - "ShortestPathFollower"
+    seeds: "3 for stochastic/sampled agents; 1 for deterministic agents"
+    episodes: "495 per method and evaluation seed"
+    metrics:
+      - "success"
+      - "spl"
+      - "distance_to_goal"
+      - "episodes_with_contact"
+      - "steps"
+    notes:
+      - "All available seeds were audited against the same 495 unique (scene_id, episode_id) keys."
+      - "DD-PPO is a Gibson-2+-to-MP3D transfer result and must retain that label."
+      - "ShortestPathFollower is a privileged NavMesh oracle."
+      - "Do not rank these values directly against the custom MP3D-derived narrow-passage protocol."
+
+  mp3d_derived_narrow_validation_20260905:
+    role: scoped_formal_validation
+    status: diagnostic
+    allowed_in_main_paper: true
+    paper_safe: true
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/formal_mp3d_summary_20260905/final_method_status.md"
+    table_status: available
+    split: "MP3D-derived narrow-passage train/val with official scene partition"
+    split_policy: scene_disjoint_validation
+    source_csvs:
+      - "examples/narrow_passage_rl/results/degnav_e2e_mp3d_narrow_v1_20260904/geometry_19d_episodes.csv"
+      - "examples/narrow_passage_rl/results/degnav_e2e_mp3d_narrow_v1_20260904/knn_memory_19d_episodes.csv"
+      - "examples/narrow_passage_rl/results/degnav_e2e_mp3d_narrow_v1_20260904/degnav_memory_19d_episodes.csv"
+      - "examples/narrow_passage_rl/results/degnav_e2e_mp3d_narrow_v1_20260904/summary_by_seed.csv"
+    table_md: "examples/narrow_passage_rl/results/formal_mp3d_summary_20260905/final_method_status.md"
+    domain: "Custom narrow-passage episodes mined from official MP3D scans"
+    eval_split: "80 MP3D-val-derived episodes, 64 feasible and 16 candidate-infeasible"
+    train_domain: "400 MP3D-train-derived teacher episodes for DEGNAV-E2E; no training for deterministic 19D rows"
+    methods:
+      - "Geometry-19D / no-memory"
+      - "episodic kNN memory-19D"
+      - "DEGNAV memory-19D"
+      - "DEGNAV-E2E (Depth, offline BC)"
+    seeds:
+      deterministic_19d: [1701]
+      degnav_e2e: [1701, 1702, 1703]
+    episodes: "80 fixed validation episodes per method/seed"
+    metrics:
+      - "all_success"
+      - "feasible_success"
+      - "candidate_infeasible_traversal"
+      - "decision_accuracy"
+      - "correct_reject"
+      - "false_reject"
+      - "collision"
+      - "timeout"
+      - "steps"
+    notes:
+      - "This is not the official Habitat PointNav benchmark."
+      - "DEGNAV-E2E is offline behavior cloning and outputs high-level modes to a fixed low-level controller."
+      - "E2E checkpoint selection uses teacher labels from the same scene-disjoint validation corpus; describe this as validation rather than an independent test."
+      - "Candidate-infeasible is a generator label, not a collision-certified impossibility proof."
+      - "Recover appears in only one of 240 E2E seed-episodes, so reliable recovery is not established."
+
   procedural_v2_main:
     role: canonical_main
     status: canonical
@@ -247,10 +334,13 @@ results:
     split_policy: stress_grid
     source_csvs:
       - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/habitat_stress_all.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/audits/habitat_rq1_20260821_110829/summary.csv"
     table_md: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.md"
     table_tex: "examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_nominal.tex"
     raw_csv:
       - "examples/narrow_passage_rl/results/narrow_passage_rl/raw/habitat_stress_all.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/audits/habitat_rq1_20260821_110829/episodes.csv"
+      - "examples/narrow_passage_rl/results/narrow_passage_rl/audits/habitat_rq1_20260821_110829/steps.csv"
     domain: "Habitat HM3D NarrowPassageNav-v0 stress validation"
     eval_split: "HM3D val mined anchors with yaw, lateral offset, dropout, noise, and extreme-narrow filters"
     train_domain: "none for rule-controller variants; APF+Gap has no learning"
@@ -260,6 +350,9 @@ results:
       - "FSM w/o recovery"
       - "FSM w/o lateral alignment"
       - "APF+Gap"
+      - "Full dynamic uncertainty (new nominal RQ1 block)"
+      - "Point estimate / no uncertainty (behaviorally equivalent aliases)"
+      - "No yaw prior (new nominal RQ1 block)"
     paper_method_names:
       Full Geometry-FSM: "DEGNAV-Rule"
       FSM w/o heading alignment: "DEGNAV-Rule w/o heading alignment"
@@ -273,6 +366,8 @@ results:
       - "collision_rate"
       - "avg_steps"
       - "timeout_rate"
+      - "strict_success_rate (metric-depth RQ1 block only)"
+      - "false_reject_rate (RQ1 block only)"
     metric_definitions:
       success_rate: "Nominal Habitat task success."
       collision_rate: "Habitat collision flag."
@@ -282,6 +377,8 @@ results:
       - "Primary Habitat robustness evidence beyond nominal anchors."
       - "Use this table to discuss module sensitivity under Habitat perturbations."
       - "Clearance-aware strict success, near-collision, and min-clearance metrics are split into habitat_stress_clearance_diagnostic."
+      - "The appended RQ1 block is a new belief-gated nominal run and is not merged row-wise with the historical legacy-FSM stress block."
+      - "Point-estimate and no-uncertainty have identical behavior hashes and must not be counted as independent paper methods."
 
   habitat_stress_clearance_diagnostic:
     role: diagnostic
@@ -1000,6 +1097,297 @@ results:
       - "This table mixes eval splits and must not be used as a canonical ranking."
       - "It is explicitly labeled as a mixed-split Habitat diagnostic comparison."
       - "Use same-split raw CSVs or generate a same-split table before citing formal Habitat comparisons."
+
+  vln_dataset_free_smoke:
+    role: smoke_test
+    status: smoke
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: false
+    diagnostic: false
+    path: "examples/narrow_passage_rl/results/vln_dataset_free/report.md"
+    table_status: available
+    split: "dataset-free repository demo and synthetic fixtures"
+    split_policy: smoke
+    source_csvs:
+      - "examples/narrow_passage_rl/results/vln_dataset_free/predictions.csv"
+    table_md: "examples/narrow_passage_rl/results/vln_dataset_free/report.md"
+    table_tex: null
+    raw_csv:
+      - "examples/narrow_passage_rl/results/vln_dataset_free/predictions.csv"
+    domain: "NaVILA dataset-free runtime diagnostic"
+    eval_split: "no simulator dataset; repository demo frames and synthetic fixtures"
+    train_domain: "pretrained NaVILA checkpoint"
+    methods:
+      - "NaVILA 4-bit inference"
+    paper_method_names:
+      NaVILA 4-bit inference: "NaVILA runtime smoke"
+    seeds: [7]
+    episodes: "7 diagnostic prompts; no simulator episodes"
+    metrics:
+      - "artifact_validation"
+      - "action_parse_rate"
+      - "deterministic_repeat_match"
+      - "latency"
+      - "gpu_memory"
+    metric_definitions:
+      artifact_validation: "Model file and safetensors structural validation."
+      action_parse_rate: "Fraction of responses parsed into stop, move_forward, turn_left, or turn_right."
+      deterministic_repeat_match: "Exact response match for a repeated repository-demo prompt."
+      latency: "Wall-clock generation latency on the local GPU."
+      gpu_memory: "Peak CUDA memory allocated during inference."
+    notes:
+      - "Smoke test only; do not report SR, SPL, NE, nDTW, or scene generalization."
+      - "Confirms the downloaded checkpoint loads locally with NF4 4-bit quantization."
+
+  vln_batch_controlled_diagnostic:
+    role: diagnostic
+    status: diagnostic
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/vln_batch_diagnostic/report.md"
+    table_status: available
+    split: "controlled command, visual perturbation, and unmatched R2R text probes"
+    split_policy: diagnostic_unmatched_visuals
+    source_csvs:
+      - "examples/narrow_passage_rl/results/vln_batch_diagnostic/predictions.csv"
+      - "examples/narrow_passage_rl/results/vln_batch_diagnostic/command_compliance.csv"
+      - "examples/narrow_passage_rl/results/vln_batch_diagnostic/visual_robustness.csv"
+      - "examples/narrow_passage_rl/results/vln_batch_diagnostic/issues_and_improvements.csv"
+    table_md: "examples/narrow_passage_rl/results/vln_batch_diagnostic/report.md"
+    table_tex: null
+    raw_csv:
+      - "examples/narrow_passage_rl/results/vln_batch_diagnostic/predictions.csv"
+      - "examples/narrow_passage_rl/results/vln_batch_diagnostic/command_compliance.csv"
+      - "examples/narrow_passage_rl/results/vln_batch_diagnostic/visual_robustness.csv"
+      - "examples/narrow_passage_rl/results/vln_batch_diagnostic/issues_and_improvements.csv"
+    domain: "NaVILA controlled VLN diagnostic"
+    eval_split: "64 synthetic command probes, 64 demo perturbations, 256 R2R val-unseen text pairs"
+    train_domain: "pretrained NaVILA checkpoint"
+    methods:
+      - "NaVILA direct action proposal"
+    paper_method_names:
+      NaVILA direct action proposal: "NaVILA direct proposal diagnostic"
+    seeds: [17]
+    episodes: "640 inferences; no paired simulator episodes"
+    metrics:
+      - "action_parse_rate"
+      - "controlled_command_match"
+      - "stop_override_compliance"
+      - "action_distribution"
+      - "visual_action_consistency"
+      - "latency"
+    metric_definitions:
+      action_parse_rate: "Fraction of model responses parsed into the local navigation action vocabulary."
+      controlled_command_match: "Exact match to trusted synthetic immediate-control commands."
+      stop_override_compliance: "Fraction of paired explicit stop-update probes producing stop."
+      action_distribution: "Distribution over parsed local actions."
+      visual_action_consistency: "Action consistency between clean and perturbed repository-demo windows."
+      latency: "Wall-clock generation latency on the local GPU."
+    notes:
+      - "R2R instruction text is paired with unmatched repository-demo visual frames because MP3D scenes are unavailable."
+      - "This entry diagnoses language/action priors and runtime behavior only."
+      - "It must not be cited as standard R2R/RxR VLN performance."
+
+  vln_r2r_text_only_corpus_diagnostic:
+    role: diagnostic_text_only
+    status: diagnostic
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/vln_r2r_text_analysis/report.md"
+    table_status: available
+    split: "R2R_VLNCE_v1-3_preprocessed train, val_seen, val_unseen"
+    split_policy: text_only_no_simulator
+    source_csvs:
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/r2r_instruction_episodes.csv"
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/split_summary.csv"
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/language_cue_rates.csv"
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/top_tokens.csv"
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/navila_action_by_language_cue.csv"
+    table_md: "examples/narrow_passage_rl/results/vln_r2r_text_analysis/report.md"
+    table_tex: null
+    raw_csv:
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/r2r_instruction_episodes.csv"
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/split_summary.csv"
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/language_cue_rates.csv"
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/top_tokens.csv"
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/navila_action_by_language_cue.csv"
+    raw_json:
+      - "examples/narrow_passage_rl/results/vln_r2r_text_analysis/metadata.json"
+    domain: "R2R instruction corpus and NaVILA text-probe diagnostic"
+    eval_split: "text-only R2R train/val_seen/val_unseen; optional 256 saved NaVILA val_unseen text probes"
+    train_domain: "pretrained NaVILA checkpoint for optional saved predictions; no training"
+    methods:
+      - "R2R corpus statistics"
+      - "NaVILA text-probe action prior"
+    paper_method_names:
+      R2R corpus statistics: "R2R text-only diagnostic"
+      NaVILA text-probe action prior: "NaVILA language/action prior diagnostic"
+    seeds: [17]
+    episodes: "13436 R2R instruction annotations; 256 saved NaVILA text-probe predictions"
+    metrics:
+      - "instruction_length"
+      - "language_cue_rate"
+      - "scene_count"
+      - "token_frequency"
+      - "action_prior_by_language_cue"
+    metric_definitions:
+      instruction_length: "Token count from regex tokenization of instruction_text."
+      language_cue_rate: "Fraction of episodes containing predefined direction, motion, goal, room, object, or spatial-relation cue words."
+      scene_count: "Unique MP3D scene IDs referenced by each split; no scene files are loaded."
+      token_frequency: "Top lexical tokens in the annotation text."
+      action_prior_by_language_cue: "Saved NaVILA parsed action distribution for unmatched-visual R2R text probes grouped by cue presence."
+    notes:
+      - "Does not require MP3D scene assets."
+      - "Does not run Habitat or compute SR, SPL, NE, nDTW, or SDTW."
+      - "Use only to motivate VLN interface design and language/action prior analysis."
+
+  vln_safety_adapter_smoke:
+    role: diagnostic
+    status: diagnostic
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/vln_safety_adapter_smoke/report.md"
+    table_status: available
+    split: "paired deterministic adapter replay over saved NaVILA outputs"
+    split_policy: paired_replay_diagnostic
+    source_csvs:
+      - "examples/narrow_passage_rl/results/vln_batch_diagnostic/predictions.csv"
+      - "examples/narrow_passage_rl/results/vln_safety_adapter_smoke/adapted_predictions.csv"
+      - "examples/narrow_passage_rl/results/vln_safety_adapter_smoke/comparison_summary.csv"
+      - "examples/narrow_passage_rl/results/vln_safety_adapter_smoke/mode_path_smoke.csv"
+    table_md: "examples/narrow_passage_rl/results/vln_safety_adapter_smoke/report.md"
+    table_tex: null
+    raw_csv:
+      - "examples/narrow_passage_rl/results/vln_batch_diagnostic/predictions.csv"
+      - "examples/narrow_passage_rl/results/vln_safety_adapter_smoke/adapted_predictions.csv"
+      - "examples/narrow_passage_rl/results/vln_safety_adapter_smoke/comparison_summary.csv"
+      - "examples/narrow_passage_rl/results/vln_safety_adapter_smoke/mode_path_smoke.csv"
+    domain: "NaVILA-to-DEGNAV system-interface diagnostic"
+    eval_split: "same 640 saved NaVILA outputs as vln_batch_controlled_diagnostic"
+    train_domain: "none; deterministic adapter over pretrained NaVILA outputs"
+    methods:
+      - "NaVILA direct action proposal"
+      - "NaVILA + DEGNAV safety adapter"
+    paper_method_names:
+      NaVILA direct action proposal: "NaVILA direct proposal diagnostic"
+      NaVILA + DEGNAV safety adapter: "NaVILA + DEGNAV interface smoke"
+    seeds: [17]
+    episodes: "640 paired saved predictions; no simulator episodes"
+    metrics:
+      - "controlled_command_match"
+      - "explicit_stop_compliance"
+      - "blocked_fixture_forward_output"
+      - "proposal_preservation"
+      - "mode_path_smoke"
+    metric_definitions:
+      controlled_command_match: "Exact match to trusted synthetic immediate-control commands after deterministic adaptation."
+      explicit_stop_compliance: "Trusted stop-directive handling; deterministic control-channel behavior, not learned stopping."
+      blocked_fixture_forward_output: "Forward output rate on four controlled blocked-fixture forward-command probes with synthetic geometry measurements."
+      proposal_preservation: "Fraction of original untrusted R2R route proposals left unchanged."
+      mode_path_smoke: "Deterministic Commit/Explore/Recover/Reject code-path checks."
+    notes:
+      - "Adapter gains are interface-level effects, not learned NaVILA improvements."
+      - "Visual robustness is unchanged by this adapter."
+      - "Do not cite as standard R2R/RxR navigation performance."
+
+  vln_r2r_paired_preflight:
+    role: diagnostic_blocked
+    status: blocked_missing_mp3d
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/vln_r2r_eval_preflight/r2r_vlnce_preflight.md"
+    table_status: blocked
+    split: "R2R_VLNCE_v1-3_preprocessed val_unseen"
+    split_policy: paired_simulator_preflight
+    source_csvs: []
+    table_md: "examples/narrow_passage_rl/results/vln_r2r_eval_preflight/r2r_vlnce_preflight.md"
+    table_tex: null
+    raw_csv: []
+    raw_json:
+      - "examples/narrow_passage_rl/results/vln_r2r_eval_preflight/r2r_vlnce_preflight.json"
+    domain: "NaVILA R2R/VLN-CE paired evaluation preflight"
+    eval_split: "R2R val_unseen; 1839 episodes requiring 11 MP3D scenes"
+    train_domain: "pretrained NaVILA checkpoint"
+    methods:
+      - "NaVILA direct"
+    paper_method_names:
+      NaVILA direct: "NaVILA paired R2R evaluation readiness"
+    seeds: []
+    episodes: "1839 R2R val_unseen episodes parsed; no simulator rollout because MP3D scene assets are missing"
+    metrics:
+      - "artifact_ready"
+      - "annotation_ready"
+      - "habitat_stack_ready"
+      - "mp3d_glb_coverage"
+      - "mp3d_navmesh_coverage"
+    metric_definitions:
+      artifact_ready: "NaVILA model directory exists locally."
+      annotation_ready: "R2R split and ground-truth JSON files exist and parse."
+      habitat_stack_ready: "habitat, habitat_sim, and habitat_baselines import in the navila-eval environment."
+      mp3d_glb_coverage: "Fraction of split-required MP3D scene .glb files present."
+      mp3d_navmesh_coverage: "Fraction of split-required MP3D scene .navmesh files present."
+    notes:
+      - "Preflight passes model, R2R annotation, DDPPO, symlink, and Habitat 0.1.7 stack checks."
+      - "Blocked because local MP3D coverage for val_unseen is 0/11 .glb and 0/11 .navmesh."
+      - "Do not cite this as SR, SPL, NE, nDTW, SDTW, or standard VLN performance."
+
+  opennav_install_preflight:
+    role: diagnostic_blocked
+    status: blocked_missing_assets
+    allowed_in_main_paper: false
+    paper_safe: false
+    canonical: false
+    legacy: false
+    diagnostic: true
+    path: "examples/narrow_passage_rl/results/opennav_preflight/opennav_preflight.md"
+    table_status: blocked
+    split: "OpenNav_R2R-CE_100 val_unseen quick set"
+    split_policy: install_preflight_no_rollout
+    source_csvs: []
+    table_md: "examples/narrow_passage_rl/results/opennav_preflight/opennav_preflight.md"
+    table_tex: null
+    raw_csv: []
+    raw_json:
+      - "examples/narrow_passage_rl/results/opennav_preflight/opennav_preflight.json"
+    domain: "Open-Nav installation readiness"
+    eval_split: "100 quick-test R2R-CE annotations parsed; no simulator rollout"
+    train_domain: "Open-Nav zero-shot LLM baseline; no local training"
+    methods:
+      - "Open-Nav"
+    paper_method_names:
+      Open-Nav: "Open-Nav planned zero-shot VLN baseline"
+    seeds: []
+    episodes: "100 quick-test annotations parsed; 0 simulator rollouts"
+    metrics:
+      - "source_ready"
+      - "dataset_ready"
+      - "habitat_stack_ready"
+      - "asset_coverage"
+      - "llm_backend_ready"
+    metric_definitions:
+      source_ready: "Open-Nav repository and entry scripts are present."
+      dataset_ready: "OpenNav_R2R-CE_100 and GT JSON files exist and parse."
+      habitat_stack_ready: "habitat, habitat_sim, and habitat_baselines import through navila-eval."
+      asset_coverage: "Waypoint, RAM, SpatialBot3B, and MP3D scene asset availability."
+      llm_backend_ready: "OPENAI_API_KEY or local OpenAI-compatible LLM endpoint availability."
+    notes:
+      - "Open-Nav source is cloned at /home/xiaotian/vla/Open-Nav."
+      - "Blocked by missing MP3D scene files, waypoint predictor checkpoint, RAM checkpoint, SpatialBot3B gated assets, and LLM backend/API key."
+      - "Do not cite as Open-Nav SR, SPL, NE, nDTW, SDTW, or standard VLN performance."
 
   smoke_baselines:
     role: smoke_test

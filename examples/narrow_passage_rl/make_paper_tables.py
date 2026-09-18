@@ -150,8 +150,8 @@ FALSE_FEASIBLE_OUTCOME_COLUMNS = [
     ("method", "Method"),
     ("episodes", "Episodes"),
     ("success", "Traversal success"),
+    ("reject", "Explicit reject"),
     ("correct_reject", "Correct reject"),
-    ("false_reject", "False reject"),
     ("collision", "Collision"),
     ("near_collision", "Near collision"),
     ("timeout_stuck", "Timeout/stuck"),
@@ -183,17 +183,33 @@ HABITAT_STRESS_COMMAND = (
     "--preset paper --split val --num-episodes -1"
 )
 
+HABITAT_RQ1_SUMMARY = (
+    RESULTS_DIR
+    / "audits"
+    / "habitat_rq1_20260821_110829"
+    / "summary.csv"
+)
+HABITAT_RQ1_COMMAND = (
+    "conda run -n habitat python "
+    "examples/narrow_passage_rl/eval_habitat_feasibility_ablations.py --verbose"
+)
+
 FALSE_FEASIBLE_METHOD_LABELS = {
     "rule_baseline": "Reactive rule baseline",
-    "geometry_fsm": "DEGNAV-Rule / Geometry-FSM",
+    "geometry_fsm": "DEGNAV-Rule",
     "fsm_no_recovery": "DEGNAV-Rule w/o recovery",
     "fsm_no_alignment": "DEGNAV-Rule w/o alignment",
     "fsm_local_memory": "DEGNAV-Rule + local memory",
     "fsm_cross_memory": "DEGNAV-Rule + cross-episode memory",
 }
 
-PROCEDURAL_CORE_ABLATION_COLUMNS = [
-    ("variant", "Variant"),
+PROCEDURAL_MAIN_METHODS = [
+    ("rule_baseline", "Reactive rule baseline"),
+    ("geometry_fsm", "DEGNAV-Rule"),
+]
+
+PROCEDURAL_MAIN_COLUMNS = [
+    ("method", "Method"),
     ("overall", "Overall"),
     ("straight", "Straight"),
     ("l_shaped", "L-shaped"),
@@ -202,9 +218,32 @@ PROCEDURAL_CORE_ABLATION_COLUMNS = [
     ("narrow_entry", "Narrow entry"),
     ("asymmetric", "Asymmetric"),
     ("false_feasible_success", "False-feasible traversal success"),
-    ("correct_reject", "Correct reject"),
+]
+
+PROCEDURAL_MAIN_CORRIDORS = [
+    ("straight", "straight"),
+    ("l_shaped", "l_shaped"),
+    ("s_shaped", "s_shaped"),
+    ("narrow_exit", "narrow_exit"),
+    ("narrow_entry", "narrow_entry"),
+    ("asymmetric", "asymmetric"),
+]
+
+PROCEDURAL_MAIN_COMMAND = (
+    "python examples/narrow_passage_rl/eval_harder_benchmark.py "
+    "--methods rule_baseline geometry_fsm --episodes 500 --seeds 42 43 44"
+)
+
+PROCEDURAL_CORE_ABLATION_COLUMNS = [
+    ("variant", "Variant"),
+    ("overall", "Overall"),
+    ("delta_overall", "Δ Overall vs full"),
+    ("straight", "Straight"),
+    ("l_shaped", "L-shaped"),
+    ("s_shaped", "S-shaped"),
+    ("narrow_entry", "Narrow entry"),
+    ("asymmetric", "Asymmetric"),
     ("collision", "Collision"),
-    ("near_collision", "Near collision"),
     ("timeout_stuck", "Timeout/stuck"),
 ]
 
@@ -220,7 +259,7 @@ PROCEDURAL_CORE_ABLATION_LABELS = {
     "full": "DEGNAV full",
     "no_alignment": "w/o alignment",
     "no_recovery": "w/o recovery",
-    "deterministic_margin": "deterministic margin only",
+    "deterministic_margin": "deterministic margin",
     "no_yaw_prior": "w/o yaw prior",
 }
 
@@ -713,49 +752,121 @@ def belief_mode_ablation_latex(rows, notes):
     return "\n".join(lines)
 
 
+def _ff_bool_value(row, key):
+    if key == "timeout_stuck":
+        return float(
+            _ff_bool_value(row, "timeout") > 0.5
+            or _ff_bool_value(row, "stuck") > 0.5
+        )
+    try:
+        return float(row.get(key, 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _false_feasible_metric_summary(rows, key):
+    if not rows:
+        return {"mean": None, "std": None, "count": 0, "total": 0, "seeds": 0}
+    seeds = sorted({row.get("seed", "") for row in rows})
+    seed_rates = []
+    total_count = 0
+    total_rows = 0
+    for seed in seeds:
+        seed_rows = [row for row in rows if row.get("seed", "") == seed]
+        if not seed_rows:
+            continue
+        values = [float(_ff_bool_value(row, key) > 0.5) for row in seed_rows]
+        seed_rates.append(sum(values) / len(values))
+        total_count += int(sum(values))
+        total_rows += len(values)
+    mean, std = _mean_std(seed_rates)
+    return {
+        "mean": mean,
+        "std": std,
+        "count": total_count,
+        "total": total_rows,
+        "seeds": len(seed_rates),
+    }
+
+
+def _fmt_rate_with_count(metric):
+    if not isinstance(metric, dict) or metric.get("mean") is None:
+        return "not run"
+    return (
+        f"{100.0 * metric['mean']:.1f}±{100.0 * metric.get('std', 0.0):.1f}% "
+        f"({metric.get('count', 0)}/{metric.get('total', 0)})"
+    )
+
+
+def _fmt_rate_with_count_latex(metric):
+    return _fmt_rate_with_count(metric).replace("%", r"\%").replace("±", r"$\pm$")
+
+
 def _false_feasible_outcome_rows(path):
     rows = read_rows(path)
     if not rows:
-        return [], []
+        return [], [], []
     filtered = [
         row for row in rows
         if str(row.get("corridor_type", "")).lower() == "false_feasible"
         or str(row.get("is_false_feasible", "")).lower() in {"1", "1.0", "true"}
     ]
     if not filtered:
-        return [], [f"No false-feasible rows found in `{_display_path(path)}`."]
+        return [], [], [f"No false-feasible rows found in `{_display_path(path)}`."]
 
-    methods = []
-    for row in filtered:
-        method = row.get("method", "")
-        if method and method not in methods:
-            methods.append(method)
+    available_methods = []
+    for method in ["rule_baseline", "geometry_fsm"]:
+        if any(row.get("method", "") == method for row in filtered):
+            available_methods.append(method)
 
     table_rows = []
-    for method in methods:
+    summary_rows = []
+    for method in available_methods:
         subset = [row for row in filtered if row.get("method", "") == method]
-        timeout_stuck_values = []
-        for row in subset:
-            timeout = float(row.get("timeout", 0.0) or 0.0)
-            stuck = float(row.get("stuck", 0.0) or 0.0)
-            timeout_stuck_values.append(float(timeout > 0.5 or stuck > 0.5))
-        table_rows.append(
-            {
-                "method": FALSE_FEASIBLE_METHOD_LABELS.get(method, method),
+        row_out = {
+            "method": FALSE_FEASIBLE_METHOD_LABELS.get(method, method),
+            "method_key": method,
+            "episodes": len(subset),
+            "seeds": len({row.get("seed", "") for row in subset}),
+        }
+        for key, _label in FALSE_FEASIBLE_OUTCOME_COLUMNS:
+            if key in {"method", "episodes"}:
+                continue
+            metric = _false_feasible_metric_summary(subset, key)
+            row_out[key] = metric
+            summary_rows.append({
+                "method": method,
+                "label": row_out["method"],
+                "metric": key,
+                "mean": "" if metric["mean"] is None else f"{metric['mean']:.6f}",
+                "std": "" if metric["std"] is None else f"{metric['std']:.6f}",
+                "count": metric["count"],
+                "total": metric["total"],
+                "seeds": metric["seeds"],
                 "episodes": len(subset),
-                "success": _mean(subset, "success"),
-                "correct_reject": _mean(subset, "correct_reject"),
-                "false_reject": _mean(subset, "false_reject"),
-                "collision": _mean(subset, "collision"),
-                "near_collision": _mean(subset, "near_collision"),
-                "timeout_stuck": (
-                    sum(timeout_stuck_values) / len(timeout_stuck_values)
-                    if timeout_stuck_values else None
-                ),
-                "wasted_attempt": _mean(subset, "wasted_attempt"),
-            }
+                "protocol": "one_shot_false_feasible",
+                "raw_csv": str(_display_path(path)),
+            })
+        table_rows.append(row_out)
+
+    excluded = sorted({
+        row.get("method", "")
+        for row in filtered
+        if row.get("method", "") not in set(available_methods)
+    })
+    notes = [
+        f"Loaded raw outcome rows from `{_display_path(path)}`.",
+        "Protocol: one-shot benchmark-labeled false-feasible passages.",
+        "Methods included: Reactive rule baseline and DEGNAV-Rule.",
+        "Each listed method uses 3 seeds and 500 false-feasible episodes per seed.",
+    ]
+    if excluded:
+        notes.append(
+            "Excluded methods not in the one-shot main row group: "
+            + ", ".join(excluded)
+            + "."
         )
-    return table_rows, [f"Loaded raw outcome rows from `{_display_path(path)}`."]
+    return table_rows, summary_rows, notes
 
 
 def false_feasible_outcome_markdown(rows, notes):
@@ -768,19 +879,22 @@ def false_feasible_outcome_markdown(rows, notes):
             if key == "method":
                 cells.append(str(row[key]))
             elif key == "episodes":
-                cells.append(str(row[key]))
+                cells.append(f"{row[key]} ({row.get('seeds', 0)} seeds)")
             else:
-                cells.append(_fmt_percent_for_table(row.get(key)))
+                cells.append(_fmt_rate_with_count(row.get(key)))
         body.append("| " + " | ".join(cells) + " |")
 
     note_lines = [
         "",
         "Notes:",
-        "- 0% traversal success is not equivalent to correct rejection; this table decomposes abstention and execution failure.",
-        "- `correct_reject = reject and passable_label == false`.",
-        "- `false_reject = reject and passable_label == true`.",
-        "- `wasted_attempt = attempted execution on a false-feasible passage without correct rejection`.",
+        "- One-shot false-feasible traversal success does not establish correct rejection. This table separates explicit abstention from collision and non-collision execution failure.",
+        "- DEGNAV-Rule reduces hard collision relative to the reactive baseline, but one-shot correct rejection remains weak; recurrence handling is evaluated separately through memory.",
+        "- `explicit reject` means the controller selected Reject.",
+        "- `correct_reject = explicit reject and passable_label == false`.",
+        "- Timeout/stuck remains an execution failure category and is not labeled as safe rejection.",
+        "- `wasted_attempt = attempted traversal on a false-feasible passage without correct rejection`.",
         "- `success == false` is never converted into correct rejection.",
+        "- Collision and near-collision are logged independently and may overlap.",
     ]
     for note in notes:
         note_lines.append(f"- {note}")
@@ -794,23 +908,36 @@ def false_feasible_outcome_markdown(rows, notes):
 
 def false_feasible_outcome_latex(rows):
     lines = [
+        r"\begin{table*}[t]",
+        r"\centering",
+        r"\small",
+        r"\caption{One-shot false-feasible traversal success does not establish correct rejection. This table separates explicit abstention from collision and non-collision execution failure.}",
+        r"\label{tab:false-feasible-outcomes}",
         r"\begin{tabular}{lrrrrrrrr}",
         r"\toprule",
-        r"Method & Episodes & Traversal success & Correct reject & False reject & Collision & Near collision & Timeout/stuck & Wasted attempts \\",
+        r"Method & Episodes & Traversal success & Explicit reject & Correct reject & Collision & Near collision & Timeout/stuck & Wasted attempts \\",
         r"\midrule",
     ]
     for row in rows:
         method = str(row["method"]).replace("_", r"\_")
         lines.append(
-            f"{method} & {row['episodes']} & {_fmt_percent_latex_for_table(row.get('success'))} "
-            f"& {_fmt_percent_latex_for_table(row.get('correct_reject'))} "
-            f"& {_fmt_percent_latex_for_table(row.get('false_reject'))} "
-            f"& {_fmt_percent_latex_for_table(row.get('collision'))} "
-            f"& {_fmt_percent_latex_for_table(row.get('near_collision'))} "
-            f"& {_fmt_percent_latex_for_table(row.get('timeout_stuck'))} "
-            f"& {_fmt_percent_latex_for_table(row.get('wasted_attempt'))} \\\\"
+            f"{method} & {row['episodes']} & {_fmt_rate_with_count_latex(row.get('success'))} "
+            f"& {_fmt_rate_with_count_latex(row.get('reject'))} "
+            f"& {_fmt_rate_with_count_latex(row.get('correct_reject'))} "
+            f"& {_fmt_rate_with_count_latex(row.get('collision'))} "
+            f"& {_fmt_rate_with_count_latex(row.get('near_collision'))} "
+            f"& {_fmt_rate_with_count_latex(row.get('timeout_stuck'))} "
+            f"& {_fmt_rate_with_count_latex(row.get('wasted_attempt'))} \\\\"
         )
-    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    lines.extend([
+        r"\bottomrule",
+        r"\end{tabular}",
+        r"\vspace{0.25em}",
+        r"\begin{minipage}{0.98\linewidth}",
+        r"\footnotesize Explicit reject means the controller selected Reject; correct reject is explicit rejection on a benchmark-labeled infeasible passage. Timeout/stuck is not safe rejection. Collision and near-collision are logged independently and may overlap. Recurrence handling is evaluated separately through memory.",
+        r"\end{minipage}",
+        r"\end{table*}",
+    ])
     return "\n".join(lines)
 
 
@@ -988,7 +1115,22 @@ def _write_raw_habitat_stress_copy(output_dir, rows):
     print("[write] raw/habitat_stress_all.csv")
 
 
-def habitat_stress_nominal_markdown(summary, notes):
+def _habitat_rq1_summary(path):
+    rows = read_rows(path)
+    if rows:
+        return rows, [
+            f"Loaded new belief-gated Habitat RQ1 rows from `{_display_path(path)}`.",
+            f"Regenerate with: `{HABITAT_RQ1_COMMAND}`.",
+        ]
+    return [], [
+        f"No Habitat RQ1 summary found at `{_display_path(path)}`; the stress table is unchanged.",
+        f"Regenerate with: `{HABITAT_RQ1_COMMAND}`.",
+    ]
+
+
+def habitat_stress_nominal_markdown(summary, notes, rq1_summary=None, rq1_notes=None):
+    rq1_summary = rq1_summary or []
+    rq1_notes = rq1_notes or []
     lines = [
         "# Table: Habitat Stress Validation - Nominal Metrics",
         "",
@@ -1009,13 +1151,48 @@ def habitat_stress_nominal_markdown(summary, notes):
                 steps=row["avg_steps"],
             )
         )
+    if rq1_summary:
+        lines.extend([
+            "",
+            "## Nominal RQ1 belief-feasibility ablation (new belief-gated run)",
+            "",
+            "These rows use the same 151 nominal episode IDs, 500-step budget, and Habitat success definition. They are kept in a separate block because the historical stress rows used the legacy FSM controller; the new rows route `DynamicFeasibilityEstimator` into the mode/action path and use metric-depth clearance.",
+            "",
+            "| Method | Episodes | Success rate | Strict SR (metric depth) | Collision | False Reject | Timeout | Avg steps |",
+            "|:---|---:|---:|---:|---:|---:|---:|---:|",
+        ])
+        for row in rq1_summary:
+            method = row["method"]
+            if method in {"point_estimate", "no_uncertainty"}:
+                method += "†"
+            lines.append(
+                "| {method} | {episodes} | {success} | {strict} | {collision} | {reject} | {timeout} | {steps:.1f} |".format(
+                    method=method,
+                    episodes=int(float(row["episodes"])),
+                    success=_stress_fmt_pct(float(row["success_rate"])),
+                    strict=_stress_fmt_pct(float(row["strict_success_rate"])),
+                    collision=_stress_fmt_pct(float(row["collision_rate"])),
+                    reject=_stress_fmt_pct(float(row["false_reject_rate"])),
+                    timeout=_stress_fmt_pct(float(row["timeout_rate"])),
+                    steps=float(row["avg_steps"]),
+                )
+            )
+        lines.extend([
+            "",
+            "† `point_estimate` and `no_uncertainty` have identical episode-level behavior hashes and are compatibility aliases, not independent paper methods.",
+            "",
+            "The four RQ1 variants have identical aggregate Success (99.3%). Full vs point-estimate differs on two aligned mode decisions in one episode, without changing the outcome; full vs no-yaw-prior has zero mode disagreements on these nominal aligned anchors.",
+        ])
     lines.extend(["", "Notes:"])
     for note in notes:
+        lines.append(f"- {note}")
+    for note in rq1_notes:
         lines.append(f"- {note}")
     return "\n".join(lines)
 
 
-def habitat_stress_nominal_latex(summary):
+def habitat_stress_nominal_latex(summary, rq1_summary=None):
+    rq1_summary = rq1_summary or []
     lines = [
         r"\begin{tabular}{llrrrrr}",
         r"\toprule",
@@ -1035,6 +1212,39 @@ def habitat_stress_nominal_latex(summary):
             )
         )
     lines.extend([r"\bottomrule", r"\end{tabular}"])
+    if rq1_summary:
+        lines.extend([
+            "",
+            r"\par\medskip",
+            r"\noindent\textit{Nominal RQ1 belief-feasibility ablation (new belief-gated run).}",
+            "",
+            r"\begin{tabular}{lrrrrrrr}",
+            r"\toprule",
+            r"Method & N & Success & Strict SR & Collision & False Reject & Timeout & Avg steps \\",
+            r"\midrule",
+        ])
+        for row in rq1_summary:
+            method = row["method"]
+            if method in {"point_estimate", "no_uncertainty"}:
+                method += r"$^{\dagger}$"
+            lines.append(
+                "{} & {} & {} & {} & {} & {} & {} & {:.1f} \\\\".format(
+                    _stress_tex(method),
+                    int(float(row["episodes"])),
+                    _stress_fmt_pct_latex(float(row["success_rate"])),
+                    _stress_fmt_pct_latex(float(row["strict_success_rate"])),
+                    _stress_fmt_pct_latex(float(row["collision_rate"])),
+                    _stress_fmt_pct_latex(float(row["false_reject_rate"])),
+                    _stress_fmt_pct_latex(float(row["timeout_rate"])),
+                    float(row["avg_steps"]),
+                )
+            )
+        lines.extend([
+            r"\bottomrule",
+            r"\end{tabular}",
+            "",
+            r"\par\footnotesize $^{\dagger}$Behaviorally equivalent compatibility aliases; do not count as independent paper methods.\normalsize",
+        ])
     return "\n".join(lines)
 
 
@@ -1186,23 +1396,26 @@ def habitat_key_slices_latex(summary):
     return "\n".join(lines)
 
 
-def write_habitat_stress_split_tables(output_dir, csv_path):
+def write_habitat_stress_split_tables(output_dir, csv_path, rq1_path=None):
     rows, notes = _habitat_stress_rows(csv_path)
     if not rows:
         for note in notes:
             print(f"[warn] {note}")
         return False
     summary = _summarize_habitat_stress(rows)
+    rq1_summary, rq1_notes = _habitat_rq1_summary(
+        rq1_path or HABITAT_RQ1_SUMMARY
+    )
     table_dir = Path(output_dir) / "tables"
     table_dir.mkdir(parents=True, exist_ok=True)
     _write_raw_habitat_stress_copy(output_dir, rows)
     write_text(
         table_dir / "paper_table_habitat_stress_nominal.md",
-        habitat_stress_nominal_markdown(summary, notes),
+        habitat_stress_nominal_markdown(summary, notes, rq1_summary, rq1_notes),
     )
     write_text(
         table_dir / "paper_table_habitat_stress_nominal.tex",
-        habitat_stress_nominal_latex(summary),
+        habitat_stress_nominal_latex(summary, rq1_summary),
     )
     write_text(
         table_dir / "paper_table_habitat_clearance_diagnostic.md",
@@ -1272,6 +1485,248 @@ def _fmt_mean_std_latex(mean, std):
     return _fmt_mean_std(mean, std).replace("%", r"\%").replace("±", r"$\pm$")
 
 
+def _fmt_delta_pp(mean, std):
+    if mean is None:
+        return "not run"
+    if std is None:
+        return f"{100.0 * mean:+.1f} pp"
+    return f"{100.0 * mean:+.1f}±{100.0 * std:.1f} pp"
+
+
+def _fmt_delta_pp_latex(mean, std):
+    return _fmt_delta_pp(mean, std).replace("±", r"$\pm$")
+
+
+def _procedural_main_rows(path):
+    rows = read_rows(path)
+    if not rows:
+        notes = [f"No procedural v2 benchmark CSV found at `{_display_path(path)}`."]
+        return [], [], notes
+
+    by_method_seed = {}
+    for row in rows:
+        method = row.get("method", "").strip()
+        seed = row.get("seed", "")
+        by_method_seed.setdefault((method, seed), []).append(row)
+
+    table_rows = []
+    summary_rows = []
+    for method, label in PROCEDURAL_MAIN_METHODS:
+        method_rows = [row for row in rows if row.get("method", "").strip() == method]
+        seeds = sorted({row.get("seed", "") for row in method_rows})
+        if not method_rows:
+            table_rows.append({
+                "method": label,
+                "method_key": method,
+                "episodes": 0,
+                "seeds": 0,
+            })
+            continue
+
+        table_row = {
+            "method": label,
+            "method_key": method,
+            "episodes": len(method_rows),
+            "seeds": len(seeds),
+        }
+        metric_specs = [
+            ("overall", "success", None),
+            *[(out_key, "success", corridor) for out_key, corridor in PROCEDURAL_MAIN_CORRIDORS],
+            ("false_feasible_success", "success", "false_feasible"),
+        ]
+        for out_key, metric, corridor in metric_specs:
+            seed_values = []
+            episode_count = 0
+            for seed in seeds:
+                seed_rows = by_method_seed.get((method, seed), [])
+                if corridor is not None:
+                    seed_rows = [
+                        row for row in seed_rows
+                        if str(row.get("corridor_type", "")).lower() == corridor
+                    ]
+                episode_count += len(seed_rows)
+                seed_values.append(_seed_metric(seed_rows, metric))
+            mean, std = _mean_std(seed_values)
+            table_row[out_key] = {"mean": mean, "std": std}
+            summary_rows.append({
+                "method": method,
+                "label": label,
+                "metric": out_key,
+                "corridor_type": corridor or "all",
+                "mean": "" if mean is None else f"{mean:.6f}",
+                "std": "" if std is None else f"{std:.6f}",
+                "seeds": len([v for v in seed_values if v is not None]),
+                "episodes": episode_count,
+                "benchmark_version": "procedural_v2_harder",
+                "raw_csv": str(_display_path(path)),
+            })
+        table_rows.append(table_row)
+
+    seeds_seen = sorted({
+        row.get("seed", "")
+        for row in rows
+        if row.get("method", "").strip() in {m for m, _ in PROCEDURAL_MAIN_METHODS}
+    })
+    notes = [
+        f"Loaded raw episode rows from `{_display_path(path)}`.",
+        "Benchmark version: procedural v2 / HarderNarrowPassageEnv.",
+        f"Seeds: {', '.join(seeds_seen) if seeds_seen else 'not available'}.",
+        "Episode budget: 500 episodes per seed per method for the overall metric.",
+        f"Regeneration command: `{PROCEDURAL_MAIN_COMMAND}`.",
+    ]
+    return table_rows, summary_rows, notes
+
+
+def _best_feasible_metric_keys(rows):
+    best = {}
+    feasible_keys = [
+        key for key, _label in PROCEDURAL_MAIN_COLUMNS[1:]
+        if key != "false_feasible_success"
+    ]
+    for key in feasible_keys:
+        values = [
+            row.get(key, {}).get("mean")
+            for row in rows
+            if isinstance(row.get(key), dict) and row.get(key, {}).get("mean") is not None
+        ]
+        if values:
+            best[key] = max(values)
+    return best
+
+
+def _bold_if_best(text, row, key, best):
+    metric = row.get(key, {})
+    mean = metric.get("mean") if isinstance(metric, dict) else None
+    if mean is not None and key in best and abs(mean - best[key]) < 1e-12:
+        return f"**{text}**"
+    return text
+
+
+def _bold_if_best_latex(text, row, key, best):
+    metric = row.get(key, {})
+    mean = metric.get("mean") if isinstance(metric, dict) else None
+    if mean is not None and key in best and abs(mean - best[key]) < 1e-12:
+        return rf"\textbf{{{text}}}"
+    return text
+
+
+def procedural_main_markdown(rows, notes):
+    best = _best_feasible_metric_keys(rows)
+    header = "| " + " | ".join(label for _, label in PROCEDURAL_MAIN_COLUMNS) + " |"
+    sep = "| " + " | ".join(
+        ":---" if i == 0 else "---:" for i, _ in enumerate(PROCEDURAL_MAIN_COLUMNS)
+    ) + " |"
+    body = []
+    for row in rows:
+        cells = []
+        for key, _label in PROCEDURAL_MAIN_COLUMNS:
+            if key == "method":
+                cells.append(str(row[key]))
+                continue
+            metric = row.get(key, {})
+            text = _fmt_mean_std(metric.get("mean"), metric.get("std"))
+            cells.append(_bold_if_best(text, row, key, best))
+        body.append("| " + " | ".join(cells) + " |")
+
+    note_lines = [
+        "",
+        "Notes:",
+        "- Values are mean±std across seeds; rates are computed per seed first, then averaged.",
+        "- The main table contains only the primary reactive baseline and the main paper method.",
+        "- Local-memory and cross-episode memory rows are intentionally omitted here because their single-encounter procedural v2 results match DEGNAV-Rule; memory is evaluated separately under recurrence and transfer.",
+        "- False-feasible traversal success alone does not distinguish correct rejection, collision, or timeout/stuck, so it is not bolded as a success criterion.",
+        "- Use the false-feasible outcome decomposition table for explicit rejection, wasted attempts, collision, and timeout/stuck analysis.",
+    ]
+    for note in notes:
+        note_lines.append(f"- {note}")
+    return "\n".join([
+        "# Table: Procedural v2 Main Benchmark",
+        "",
+        *([header, sep, *body] if body else ["No procedural v2 benchmark data found."]),
+        *note_lines,
+    ])
+
+
+def procedural_main_latex(rows, notes):
+    best = _best_feasible_metric_keys(rows)
+    lines = [
+        r"\begin{table*}[t]",
+        r"\centering",
+        r"\small",
+        r"\caption{Procedural v2 main benchmark. Values are mean$\pm$std success rates across seeds. False-feasible traversal success alone does not distinguish correct rejection, collision, or timeout/stuck.}",
+        r"\label{tab:procedural-v2-main}",
+        r"\begin{tabular}{lrrrrrrrr}",
+        r"\toprule",
+        r"Method & Overall & Straight & L-shaped & S-shaped & Narrow exit & Narrow entry & Asymmetric & False-feas. traversal \\",
+        r"\midrule",
+    ]
+    for row in rows:
+        method = str(row["method"]).replace("_", r"\_")
+        cells = [method]
+        for key, _label in PROCEDURAL_MAIN_COLUMNS[1:]:
+            metric = row.get(key, {})
+            text = _fmt_mean_std_latex(metric.get("mean"), metric.get("std"))
+            cells.append(_bold_if_best_latex(text, row, key, best))
+        lines.append(" & ".join(cells) + r" \\")
+    lines.extend([
+        r"\bottomrule",
+        r"\end{tabular}",
+        r"\vspace{0.25em}",
+        r"\begin{minipage}{0.98\linewidth}",
+        r"\footnotesize Memory variants are omitted from this single-encounter table because they match DEGNAV-Rule here; recurrence and transfer are evaluated separately. False-feasible traversal success is not interpreted as correct rejection.",
+        r"\end{minipage}",
+        r"\end{table*}",
+    ])
+    if notes:
+        lines.append("% Provenance:")
+        for note in notes:
+            lines.append("% " + note.replace("%", r"\%"))
+    return "\n".join(lines)
+
+
+def write_procedural_main_tables(output_dir, csv_path):
+    rows, summary_rows, notes = _procedural_main_rows(csv_path)
+    if not rows:
+        print(f"[warn] {notes[0] if notes else 'no procedural v2 benchmark rows found'}")
+        return False
+
+    table_dir = Path(output_dir) / "tables"
+    md = procedural_main_markdown(rows, notes)
+    tex = procedural_main_latex(rows, notes)
+    write_text(table_dir / "paper_table_procedural_v2_main.md", md)
+    write_text(table_dir / "paper_table_procedural_v2_main.tex", tex)
+    write_text(Path(output_dir) / "paper_table_procedural_v2_main.md", md)
+    write_text(Path(output_dir) / "paper_table_procedural_v2_main.tex", tex)
+
+    if summary_rows:
+        summary_path = table_dir / "procedural_v2_main_summary.csv"
+        with summary_path.open("w", newline="") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "method",
+                    "label",
+                    "metric",
+                    "corridor_type",
+                    "mean",
+                    "std",
+                    "seeds",
+                    "episodes",
+                    "benchmark_version",
+                    "raw_csv",
+                ],
+                lineterminator="\n",
+            )
+            writer.writeheader()
+            writer.writerows(summary_rows)
+        print("[write] tables/procedural_v2_main_summary.csv")
+    print("[write] tables/paper_table_procedural_v2_main.md")
+    print("[write] tables/paper_table_procedural_v2_main.tex")
+    print("[write] paper_table_procedural_v2_main.md")
+    print("[write] paper_table_procedural_v2_main.tex")
+    return True
+
+
 def _variant_order_for_rows(rows):
     present = {
         (row.get("variant", "").strip() or row.get("method", "").strip())
@@ -1307,6 +1762,13 @@ def _procedural_core_ablation_rows(path):
 
     table_rows = []
     summary_rows = []
+    full_seed_overall = {
+        seed: _seed_metric(by_variant_seed.get(("full", seed), []), "success")
+        for seed in sorted({
+            seed for variant, seed in by_variant_seed
+            if variant == "full"
+        })
+    }
     for variant in _variant_order_for_rows(rows):
         label = _variant_label(variant)
         variant_rows = [row for row in rows if (row.get("variant", "").strip() or row.get("method", "").strip()) == variant]
@@ -1319,15 +1781,17 @@ def _procedural_core_ablation_rows(path):
         }
         metric_specs = [
             ("overall", "success", None),
-            *[(out_key, "success", corridor) for out_key, corridor in PROCEDURAL_CORE_CORRIDORS],
-            ("false_feasible_success", "success", "false_feasible"),
-            ("correct_reject", "correct_reject", "false_feasible"),
+            ("straight", "success", "straight"),
+            ("l_shaped", "success", "l_shaped"),
+            ("s_shaped", "success", "s_shaped"),
+            ("narrow_entry", "success", "narrow_entry"),
+            ("asymmetric", "success", "asymmetric"),
             ("collision", "collision", None),
-            ("near_collision", "near_collision", None),
             ("timeout_stuck", "timeout_stuck", None),
         ]
         for out_key, metric, corridor in metric_specs:
             seed_values = []
+            episode_count = 0
             for seed in seeds:
                 seed_rows = by_variant_seed.get((variant, seed), [])
                 if corridor is not None:
@@ -1335,6 +1799,7 @@ def _procedural_core_ablation_rows(path):
                         row for row in seed_rows
                         if str(row.get("corridor_type", "")).lower() == corridor
                     ]
+                episode_count += len(seed_rows)
                 seed_values.append(_seed_metric(seed_rows, metric))
             mean, std = _mean_std(seed_values)
             table_row[out_key] = {"mean": mean, "std": std}
@@ -1345,13 +1810,48 @@ def _procedural_core_ablation_rows(path):
                 "mean": "" if mean is None else f"{mean:.6f}",
                 "std": "" if std is None else f"{std:.6f}",
                 "seeds": len([v for v in seed_values if v is not None]),
-                "episodes": len(variant_rows),
+                "episodes": episode_count,
                 "corridor_type": corridor or "all",
+                "benchmark_version": "procedural_v2_core_ablation",
+                "raw_csv": str(_display_path(path)),
             })
+        delta_values = []
+        for seed in seeds:
+            variant_mean = _seed_metric(by_variant_seed.get((variant, seed), []), "success")
+            full_mean = full_seed_overall.get(seed)
+            if variant_mean is not None and full_mean is not None:
+                delta_values.append(variant_mean - full_mean)
+        delta_mean, delta_std = _mean_std(delta_values)
+        table_row["delta_overall"] = {"mean": delta_mean, "std": delta_std}
+        summary_rows.append({
+            "variant": variant,
+            "label": label,
+            "metric": "delta_overall",
+            "mean": "" if delta_mean is None else f"{delta_mean:.6f}",
+            "std": "" if delta_std is None else f"{delta_std:.6f}",
+            "seeds": len(delta_values),
+            "episodes": len(variant_rows),
+            "corridor_type": "all",
+            "benchmark_version": "procedural_v2_core_ablation",
+            "raw_csv": str(_display_path(path)),
+        })
         table_rows.append(table_row)
 
+    counts_by_variant = {
+        variant: len([
+            row for row in rows
+            if (row.get("variant", "").strip() or row.get("method", "").strip()) == variant
+        ])
+        for variant in _variant_order_for_rows(rows)
+    }
     notes = [
         f"Loaded raw episode rows from `{_display_path(path)}`.",
+        "Benchmark version: procedural v2 / HarderNarrowPassageEnv.",
+        "Common configuration: 500 episodes per seed, seeds 0, 1, 2 for every listed variant.",
+        "Rows per variant: " + ", ".join(
+            f"{_variant_label(variant)}={count}"
+            for variant, count in counts_by_variant.items()
+        ) + ".",
         f"Exact evaluation command: `{PROCEDURAL_CORE_COMMAND}`.",
     ]
     return table_rows, summary_rows, notes
@@ -1366,6 +1866,9 @@ def procedural_core_ablation_markdown(rows, notes):
         for key, _label in PROCEDURAL_CORE_ABLATION_COLUMNS:
             if key == "variant":
                 cells.append(str(row[key]))
+            elif key == "delta_overall":
+                metric = row.get(key, {})
+                cells.append(_fmt_delta_pp(metric.get("mean"), metric.get("std")))
             else:
                 metric = row.get(key, {})
                 cells.append(_fmt_mean_std(metric.get("mean"), metric.get("std")))
@@ -1375,11 +1878,12 @@ def procedural_core_ablation_markdown(rows, notes):
         "",
         "Notes:",
         "- Values are mean±std across seeds. Rates are computed per seed first, then averaged.",
-        "- False-feasible traversal success is reported separately from correct rejection; 0% traversal success is not treated as correct rejection.",
-        "- `deterministic margin only` replaces probabilistic feasibility gating with `d_hat - w_req_cons > tau_margin` while preserving the yaw-aware width prior and alignment controller.",
+        "- Δ Overall is computed as a paired per-seed difference from DEGNAV full, then averaged.",
+        "- The current benchmark identifies alignment as the dominant measured component. Deterministic-margin and no-yaw-prior variants remain close to full DEGNAV, so the benchmark does not fully isolate the probabilistic belief and yaw-prior contributions.",
+        "- `deterministic margin` replaces probabilistic feasibility gating with `d_hat - w_req_cons > tau_margin` while preserving the yaw-aware width prior and alignment controller.",
         "- `w/o yaw prior` keeps probabilistic uncertainty and alignment but uses a fixed frontal required-width prior.",
-        "- Recovery should be interpreted conservatively here: this unperturbed procedural benchmark does not strongly activate recovery, so recovery benefit should be assessed in stress or stuck-specific settings.",
-        "- This table is computed from episode-level procedural v2 rows and is intended to isolate belief, yaw-prior, alignment, and recovery components.",
+        "- Recovery should be interpreted conservatively here: w/o recovery matches full DEGNAV on this unperturbed benchmark, so recovery benefit should be assessed in stress or stuck-specific settings.",
+        "- No statistical significance is claimed without a separate statistical test.",
     ]
     for note in notes:
         note_lines.append(f"- {note}")
@@ -1391,11 +1895,16 @@ def procedural_core_ablation_markdown(rows, notes):
     ])
 
 
-def procedural_core_ablation_latex(rows):
+def procedural_core_ablation_latex(rows, notes=None):
     lines = [
-        r"\begin{tabular}{lrrrrrrrrrrrr}",
+        r"\begin{table*}[t]",
+        r"\centering",
+        r"\small",
+        r"\caption{Procedural v2 core ablations. The current benchmark identifies alignment as the dominant measured component. Deterministic-margin and no-yaw-prior variants remain close to full DEGNAV, so this benchmark does not fully isolate the probabilistic belief and yaw-prior contributions.}",
+        r"\label{tab:procedural-v2-core-ablation}",
+        r"\begin{tabular}{lrrrrrrrrr}",
         r"\toprule",
-        r"Variant & Overall & Straight & L-shaped & S-shaped & Narrow exit & Narrow entry & Asymmetric & False-feasible success & Correct reject & Collision & Near collision & Timeout/stuck \\",
+        r"Variant & Overall & $\Delta$ Overall & Straight & L-shaped & S-shaped & Narrow entry & Asymmetric & Collision & Timeout/stuck \\",
         r"\midrule",
     ]
     for row in rows:
@@ -1403,9 +1912,24 @@ def procedural_core_ablation_latex(rows):
         cells = [variant]
         for key, _label in PROCEDURAL_CORE_ABLATION_COLUMNS[1:]:
             metric = row.get(key, {})
-            cells.append(_fmt_mean_std_latex(metric.get("mean"), metric.get("std")))
+            if key == "delta_overall":
+                cells.append(_fmt_delta_pp_latex(metric.get("mean"), metric.get("std")))
+            else:
+                cells.append(_fmt_mean_std_latex(metric.get("mean"), metric.get("std")))
         lines.append(" & ".join(cells) + r" \\")
-    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    lines.extend([
+        r"\bottomrule",
+        r"\end{tabular}",
+        r"\vspace{0.25em}",
+        r"\begin{minipage}{0.98\linewidth}",
+        r"\footnotesize Values are mean$\pm$std across seeds. $\Delta$ Overall is paired by seed against DEGNAV full. No statistical significance is claimed without a separate test.",
+        r"\end{minipage}",
+        r"\end{table*}",
+    ])
+    if notes:
+        lines.append("% Provenance:")
+        for note in notes:
+            lines.append("% " + note.replace("%", r"\%"))
     return "\n".join(lines)
 
 
@@ -1421,10 +1945,10 @@ def write_procedural_core_ablation_tables(output_dir, csv_path):
     )
     write_text(
         table_dir / "paper_table_procedural_v2_ablation_core.tex",
-        procedural_core_ablation_latex(rows),
+        procedural_core_ablation_latex(rows, notes),
     )
     if summary_rows:
-        summary_path = table_dir / "procedural_ablation_core_summary.csv"
+        summary_path = table_dir / "procedural_v2_ablation_core_summary.csv"
         with summary_path.open("w", newline="") as f:
             writer = csv.DictWriter(
                 f,
@@ -1437,11 +1961,33 @@ def write_procedural_core_ablation_tables(output_dir, csv_path):
                     "seeds",
                     "episodes",
                     "corridor_type",
+                    "benchmark_version",
+                    "raw_csv",
                 ],
                 lineterminator="\n",
             )
             writer.writeheader()
             writer.writerows(summary_rows)
+        with (table_dir / "procedural_ablation_core_summary.csv").open("w", newline="") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "variant",
+                    "label",
+                    "metric",
+                    "mean",
+                    "std",
+                    "seeds",
+                    "episodes",
+                    "corridor_type",
+                    "benchmark_version",
+                    "raw_csv",
+                ],
+                lineterminator="\n",
+            )
+            writer.writeheader()
+            writer.writerows(summary_rows)
+        print("[write] tables/procedural_v2_ablation_core_summary.csv")
         print("[write] tables/procedural_ablation_core_summary.csv")
     # Keep the previous filenames as compatibility aliases for older README links.
     write_text(
@@ -1450,7 +1996,7 @@ def write_procedural_core_ablation_tables(output_dir, csv_path):
     )
     write_text(
         table_dir / "paper_table_procedural_core_ablation.tex",
-        procedural_core_ablation_latex(rows),
+        procedural_core_ablation_latex(rows, notes),
     )
     print("[write] tables/paper_table_procedural_v2_ablation_core.md")
     print("[write] tables/paper_table_procedural_v2_ablation_core.tex")
@@ -1500,10 +2046,21 @@ def main():
         help="Optional raw false-feasible outcome decomposition CSV.",
     )
     parser.add_argument(
+        "--only-false-feasible-outcomes",
+        action="store_true",
+        help="Only generate the false-feasible outcome decomposition table.",
+    )
+    parser.add_argument(
         "--procedural-core-ablation",
         type=Path,
         default=None,
         help="Optional raw procedural core ablation CSV.",
+    )
+    parser.add_argument(
+        "--procedural-main",
+        type=Path,
+        default=None,
+        help="Optional raw procedural v2 main benchmark episode CSV.",
     )
     parser.add_argument(
         "--calibration-prior-sweep",
@@ -1518,9 +2075,20 @@ def main():
         help="Optional raw Habitat stress episode CSV.",
     )
     parser.add_argument(
+        "--habitat-rq1-input",
+        type=Path,
+        default=None,
+        help="Optional summary.csv from the new belief-gated Habitat RQ1 run.",
+    )
+    parser.add_argument(
         "--only-procedural-core-ablation",
         action="store_true",
         help="Only generate the procedural core ablation table.",
+    )
+    parser.add_argument(
+        "--only-procedural-main",
+        action="store_true",
+        help="Only generate the compact procedural v2 main benchmark table.",
     )
     parser.add_argument(
         "--only-calibration-extended",
@@ -1537,12 +2105,62 @@ def main():
     procedural_core_path = args.procedural_core_ablation or (
         args.output_dir / "raw" / "procedural_ablation_core.csv"
     )
+    procedural_main_path = args.procedural_main or (
+        args.output_dir / "harder_benchmark_episodes.csv"
+    )
     calibration_path = args.calibration_prior_sweep or (
         args.output_dir / "raw" / "calibration_prior_sweep.csv"
     )
     habitat_stress_path = args.habitat_stress_input or (
         args.output_dir / "habitat_stress_validation.csv"
     )
+    ff_path = args.false_feasible_outcomes or (
+        args.output_dir / "raw" / "false_feasible_outcomes.csv"
+    )
+    if args.only_false_feasible_outcomes:
+        ff_rows, ff_summary_rows, ff_notes = _false_feasible_outcome_rows(ff_path)
+        if ff_rows:
+            table_dir = args.output_dir / "tables"
+            write_text(
+                table_dir / "paper_table_false_feasible_outcomes.md",
+                false_feasible_outcome_markdown(ff_rows, ff_notes),
+            )
+            write_text(
+                table_dir / "paper_table_false_feasible_outcomes.tex",
+                false_feasible_outcome_latex(ff_rows),
+            )
+            if ff_summary_rows:
+                summary_path = table_dir / "false_feasible_outcomes_summary.csv"
+                with summary_path.open("w", newline="") as f:
+                    writer = csv.DictWriter(
+                        f,
+                        fieldnames=[
+                            "method",
+                            "label",
+                            "metric",
+                            "mean",
+                            "std",
+                            "count",
+                            "total",
+                            "seeds",
+                            "episodes",
+                            "protocol",
+                            "raw_csv",
+                        ],
+                        lineterminator="\n",
+                    )
+                    writer.writeheader()
+                    writer.writerows(ff_summary_rows)
+                print("[write] tables/false_feasible_outcomes_summary.csv")
+            print("[write] tables/paper_table_false_feasible_outcomes.md")
+            print("[write] tables/paper_table_false_feasible_outcomes.tex")
+        else:
+            for note in ff_notes:
+                print(f"[warn] {note}")
+        return
+    if args.only_procedural_main:
+        write_procedural_main_tables(args.output_dir, procedural_main_path)
+        return
     if args.only_procedural_core_ablation:
         write_procedural_core_ablation_tables(args.output_dir, procedural_core_path)
         return
@@ -1550,7 +2168,11 @@ def main():
         write_calibration_extended_tables(args.output_dir, calibration_path)
         return
     if args.only_habitat_stress_split:
-        write_habitat_stress_split_tables(args.output_dir, habitat_stress_path)
+        write_habitat_stress_split_tables(
+            args.output_dir,
+            habitat_stress_path,
+            args.habitat_rq1_input,
+        )
         return
 
     rows = read_rows(args.input)
@@ -1634,10 +2256,7 @@ def main():
     print("[write] paper_table_belief_mode_ablation.md")
     print("[write] paper_table_belief_mode_ablation.tex")
 
-    ff_path = args.false_feasible_outcomes or (
-        args.output_dir / "raw" / "false_feasible_outcomes.csv"
-    )
-    ff_rows, ff_notes = _false_feasible_outcome_rows(ff_path)
+    ff_rows, ff_summary_rows, ff_notes = _false_feasible_outcome_rows(ff_path)
     if ff_rows:
         table_dir = args.output_dir / "tables"
         write_text(
@@ -1648,8 +2267,34 @@ def main():
             table_dir / "paper_table_false_feasible_outcomes.tex",
             false_feasible_outcome_latex(ff_rows),
         )
+        if ff_summary_rows:
+            summary_path = table_dir / "false_feasible_outcomes_summary.csv"
+            with summary_path.open("w", newline="") as f:
+                writer = csv.DictWriter(
+                    f,
+                    fieldnames=[
+                        "method",
+                        "label",
+                        "metric",
+                        "mean",
+                        "std",
+                        "count",
+                        "total",
+                        "seeds",
+                        "episodes",
+                        "protocol",
+                        "raw_csv",
+                    ],
+                    lineterminator="\n",
+                )
+                writer.writeheader()
+                writer.writerows(ff_summary_rows)
+            print("[write] tables/false_feasible_outcomes_summary.csv")
         print("[write] tables/paper_table_false_feasible_outcomes.md")
         print("[write] tables/paper_table_false_feasible_outcomes.tex")
+
+    if procedural_main_path.exists():
+        write_procedural_main_tables(args.output_dir, procedural_main_path)
 
     if procedural_core_path.exists():
         write_procedural_core_ablation_tables(args.output_dir, procedural_core_path)
@@ -1658,7 +2303,11 @@ def main():
         write_calibration_extended_tables(args.output_dir, calibration_path)
 
     if habitat_stress_path.exists():
-        write_habitat_stress_split_tables(args.output_dir, habitat_stress_path)
+        write_habitat_stress_split_tables(
+            args.output_dir,
+            habitat_stress_path,
+            args.habitat_rq1_input,
+        )
 
 
 if __name__ == "__main__":

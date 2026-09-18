@@ -57,6 +57,11 @@ D_HAT_KEYS = ("d_hat", "D_hat")
 W_REQ_KEYS = ("w_req_cons", "W_req_cons")
 P_FEAS_KEYS = ("p_feas", "P_feas")
 
+PAPER_METHOD_LABELS = {
+    "rule_baseline": "Reactive rule",
+    "geometry_fsm": "DEGNAV-Rule",
+}
+
 
 def _split_cli_values(values: list[str] | None) -> list[str] | None:
     if values is None:
@@ -133,10 +138,15 @@ def _mode_counts(row: dict[str, str]) -> dict[str, float]:
     return {}
 
 
-def _validate_required_columns(path: Path, fieldnames: list[str] | None) -> None:
+def _validate_required_columns(
+    path: Path,
+    fieldnames: list[str] | None,
+    *,
+    require_method: bool,
+) -> None:
     fields = set(fieldnames or [])
     missing: list[str] = []
-    if "method" not in fields:
+    if require_method and "method" not in fields:
         missing.append("method")
     if not any(key in fields for key in DELTA_DIRECT_KEYS):
         if not any(key in fields for key in D_HAT_KEYS):
@@ -158,6 +168,8 @@ def load_records(
     inputs: list[Path],
     labels: list[str] | None,
     methods: list[str] | None,
+    *,
+    require_method: bool = True,
 ) -> tuple[list[dict[str, object]], dict[str, int]]:
     records: list[dict[str, object]] = []
     stats = {
@@ -174,18 +186,25 @@ def load_records(
             raise ValueError("--labels must match --methods when --methods is provided")
         method_labels = dict(zip(methods, labels))
     elif labels is not None:
-        if len(labels) != len(inputs):
+        if len(labels) == 1:
+            file_labels = {idx: labels[0] for idx, _ in enumerate(inputs)}
+        elif len(labels) != len(inputs):
             raise ValueError("--labels must match --inputs when --methods is omitted")
-        file_labels = {idx: label for idx, label in enumerate(labels)}
+        else:
+            file_labels = {idx: label for idx, label in enumerate(labels)}
 
     for idx, path in enumerate(inputs):
         file_label = file_labels.get(idx)
         with Path(path).open(newline="") as f:
             reader = csv.DictReader(f)
-            _validate_required_columns(Path(path), reader.fieldnames)
+            _validate_required_columns(
+                Path(path),
+                reader.fieldnames,
+                require_method=require_method,
+            )
             for row_idx, row in enumerate(reader):
                 stats["total_rows"] += 1
-                raw_method = str(row.get("method") or Path(path).stem)
+                raw_method = str(row.get("method") or row.get("ablation") or Path(path).stem)
                 if method_filter and raw_method not in method_filter:
                     stats["filtered_by_method"] += 1
                     continue
@@ -193,7 +212,10 @@ def load_records(
                 if delta is None:
                     stats["dropped_missing_margin"] += 1
                     continue
-                method = method_labels.get(raw_method, file_label or raw_method)
+                method = method_labels.get(
+                    raw_method,
+                    file_label or PAPER_METHOD_LABELS.get(raw_method, raw_method),
+                )
                 mode_counts = _mode_counts(row)
                 timeout = _metric(row, "timeout")
                 stuck = _metric(row, "stuck")
@@ -203,7 +225,15 @@ def load_records(
                         "row_idx": row_idx,
                         "raw_method": raw_method,
                         "method": str(method),
+                        "seed": str(row.get("seed") or ""),
+                        "scenario_id": str(
+                            row.get("scenario_id")
+                            or row.get("episode_id")
+                            or row.get("episode")
+                            or row_idx
+                        ),
                         "delta": float(delta),
+                        "delta_logged": _get_first_float(row, DELTA_DIRECT_KEYS),
                         "success": _metric(row, "success"),
                         "strict_success": _metric(row, "strict_success"),
                         "collision": _metric(row, "collision"),
@@ -225,6 +255,304 @@ def load_records(
                     }
                 )
     return records, stats
+
+
+def _raw_audit(
+    path: Path,
+    *,
+    bin_width: float,
+    margin_min: float,
+    margin_max: float,
+    label_override: str | None = None,
+) -> dict[str, object]:
+    rows = 0
+    finite = 0
+    methods: dict[str, int] = defaultdict(int)
+    raw_methods: dict[str, int] = defaultdict(int)
+    seeds: dict[str, int] = defaultdict(int)
+    deltas: list[float] = []
+    bin_counts: dict[str, int] = defaultdict(int)
+    fields: list[str] = []
+    edges = np.arange(margin_min, margin_max + bin_width * 0.5, bin_width)
+    if len(edges) < 2 or edges[-1] < margin_max:
+        edges = np.append(edges, margin_max)
+
+    if not path.exists():
+        return {
+            "path": str(path),
+            "exists": False,
+            "rows": 0,
+            "methods": {},
+            "raw_methods": {},
+            "rows_per_seed": {},
+            "finite_delta_coverage": 0.0,
+            "delta_min": None,
+            "delta_median": None,
+            "delta_max": None,
+            "bin_counts": {},
+            "has_rule_and_degnav": False,
+        }
+
+    with path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fields = list(reader.fieldnames or [])
+        for idx, row in enumerate(reader):
+            rows += 1
+            raw_method = str(row.get("method") or row.get("ablation") or path.stem)
+            method = label_override or raw_method
+            raw_methods[raw_method] += 1
+            methods[method] += 1
+            seeds[str(row.get("seed") or "")] += 1
+            delta = _delta(row)
+            if delta is None:
+                continue
+            finite += 1
+            deltas.append(float(delta))
+            bin_idx = _bin_index(float(delta), edges)
+            if bin_idx is not None:
+                key = f"[{edges[bin_idx]:.2f}, {edges[bin_idx + 1]:.2f})"
+                if bin_idx == len(edges) - 2:
+                    key = f"[{edges[bin_idx]:.2f}, {edges[bin_idx + 1]:.2f}]"
+                bin_counts[key] += 1
+
+    method_keys = set(raw_methods) | set(methods)
+    return {
+        "path": str(path),
+        "exists": True,
+        "fields": fields,
+        "rows": rows,
+        "methods": dict(methods),
+        "raw_methods": dict(raw_methods),
+        "rows_per_seed": dict(seeds),
+        "finite_delta_coverage": (finite / rows) if rows else 0.0,
+        "finite_delta_count": finite,
+        "delta_min": min(deltas) if deltas else None,
+        "delta_median": float(np.median(deltas)) if deltas else None,
+        "delta_max": max(deltas) if deltas else None,
+        "bin_counts": dict(sorted(bin_counts.items())),
+        "has_rule_and_degnav": {"rule_baseline", "geometry_fsm"}.issubset(method_keys),
+    }
+
+
+def _fmt_float(value: object, digits: int = 4) -> str:
+    if value is None:
+        return "n/a"
+    try:
+        value_f = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    if not math.isfinite(value_f):
+        return "n/a"
+    return f"{value_f:.{digits}f}"
+
+
+def _format_mapping(mapping: dict[str, int], max_items: int = 12) -> str:
+    if not mapping:
+        return "none"
+    items = sorted(mapping.items())
+    shown = ", ".join(f"{key}: {value}" for key, value in items[:max_items])
+    if len(items) > max_items:
+        shown += f", ... ({len(items) - max_items} more)"
+    return shown
+
+
+def write_input_audit(
+    *,
+    table_dir: Path,
+    inputs: list[Path],
+    bin_width: float,
+    margin_min: float,
+    margin_max: float,
+) -> None:
+    table_dir.mkdir(parents=True, exist_ok=True)
+    result_root = Path(__file__).parent / "results" / "narrow_passage_rl"
+    current_figure = result_root / "figures" / "margin_phase_all_methods.pdf"
+    current_summary = result_root / "tables" / "margin_phase_summary.csv"
+    inferred_current_input = result_root / "belief_mode_full_seed0_eval.csv"
+    audits = [
+        (
+            "Current DEGNAV-RL-only phase plot source",
+            _raw_audit(
+                inferred_current_input,
+                bin_width=bin_width,
+                margin_min=margin_min,
+                margin_max=margin_max,
+                label_override="DEGNAV-RL",
+            ),
+        )
+    ]
+    for path in inputs:
+        audits.append(
+            (
+                f"Requested input: {path}",
+                _raw_audit(
+                    path,
+                    bin_width=bin_width,
+                    margin_min=margin_min,
+                    margin_max=margin_max,
+                ),
+            )
+        )
+
+    lines = [
+        "# Margin-Phase Input Audit",
+        "",
+        "This audit records which data sources are suitable for the paper-facing "
+        "Rule-vs-DEGNAV margin-phase plot.",
+        "",
+        "## Current Four-Panel Figure",
+        "",
+        f"- Figure: `{current_figure}`",
+        f"- Existing summary: `{current_summary}`",
+        f"- Identified raw input: `{inferred_current_input}`",
+        "- Provenance note: the figure itself does not store its command.  The "
+        "co-located summary table contains only `DEGNAV-RL` rows, and its bin "
+        "support matches the identified seed-0 DEGNAV-RL evaluation CSV.",
+        "",
+    ]
+    for title, audit in audits:
+        lines.extend(
+            [
+                f"## {title}",
+                "",
+                f"- input path: `{audit['path']}`",
+                f"- exists: {audit['exists']}",
+                f"- methods: {_format_mapping(audit.get('methods', {}))}",
+                f"- raw method values: {_format_mapping(audit.get('raw_methods', {}))}",
+                f"- rows per seed: {_format_mapping(audit.get('rows_per_seed', {}))}",
+                f"- finite delta_mean coverage: {100.0 * float(audit.get('finite_delta_coverage', 0.0)):.1f}% "
+                f"({audit.get('finite_delta_count', 0)}/{audit.get('rows', 0)})",
+                f"- delta min / median / max: {_fmt_float(audit.get('delta_min'))} / "
+                f"{_fmt_float(audit.get('delta_median'))} / {_fmt_float(audit.get('delta_max'))}",
+                f"- contains both rule_baseline and geometry_fsm: {audit.get('has_rule_and_degnav')}",
+                "",
+                "Bin counts:",
+                "",
+            ]
+        )
+        if audit.get("bin_counts"):
+            lines.append("| Bin | Count |")
+            lines.append("| :--- | ---: |")
+            for bin_name, count in audit["bin_counts"].items():
+                lines.append(f"| `{bin_name}` | {count} |")
+        else:
+            lines.append("No finite-margin rows inside the requested range.")
+        lines.append("")
+
+    path = table_dir / "margin_phase_input_audit.md"
+    path.write_text("\n".join(lines) + "\n")
+    print(f"[write] {path}")
+
+
+def write_main_missing_data_report(table_dir: Path, inputs: list[Path]) -> None:
+    table_dir.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Missing Rule-vs-DEGNAV Margin-Phase Data",
+        "",
+        "The requested main-paper figure was not generated because the input did "
+        "not contain paired `rule_baseline` and `geometry_fsm` rows.",
+        "",
+        "Inputs:",
+    ]
+    lines.extend(f"- `{path}`" for path in inputs)
+    lines.extend(
+        [
+            "",
+            "Regenerate the required raw CSV with:",
+            "",
+            "```bash",
+            "python examples/narrow_passage_rl/eval_harder_benchmark.py \\",
+            "  --methods rule_baseline geometry_fsm \\",
+            "  --episodes 500 \\",
+            "  --seeds 0 1 2 \\",
+            "  --log-belief-diagnostics \\",
+            "  --log-outcome-decomposition \\",
+            "  --output-csv examples/narrow_passage_rl/results/narrow_passage_rl/raw/margin_phase_rule_vs_degnav_episodes.csv",
+            "```",
+        ]
+    )
+    path = table_dir / "margin_phase_main_missing_data.md"
+    path.write_text("\n".join(lines) + "\n")
+    print(f"[write] {path}")
+
+
+def validate_main_records(
+    records: list[dict[str, object]],
+    summary: list[dict[str, object]],
+    *,
+    methods_filter: list[str] | None,
+    min_bin_count: int,
+) -> None:
+    raw_methods = {str(rec.get("raw_method")) for rec in records}
+    if raw_methods == {"DEGNAV-RL"} or raw_methods == {"full"}:
+        raise RuntimeError(
+            "Main plot input appears to contain only DEGNAV-RL diagnostic data; "
+            "use --plot-mode rl-diagnostic instead."
+        )
+    required = {"rule_baseline", "geometry_fsm"}
+    missing = sorted(required - raw_methods)
+    if missing:
+        raise RuntimeError(f"Main plot requires paired methods {sorted(required)}; missing {missing}")
+    if methods_filter and set(methods_filter) != required:
+        raise RuntimeError("--plot-mode main must be run with --methods rule_baseline geometry_fsm")
+
+    seen: set[tuple[str, str, str]] = set()
+    duplicates: list[tuple[str, str, str]] = []
+    scenario_sets: dict[tuple[str, str], set[str]] = defaultdict(set)
+    consistency_failures = 0
+    finite_consistency_checks = 0
+    for rec in records:
+        raw_method = str(rec.get("raw_method"))
+        if raw_method not in required:
+            continue
+        seed = str(rec.get("seed") or "")
+        scenario_id = str(rec.get("scenario_id") or "")
+        key = (raw_method, seed, scenario_id)
+        if key in seen:
+            duplicates.append(key)
+        seen.add(key)
+        scenario_sets[(raw_method, seed)].add(scenario_id)
+        delta_logged = rec.get("delta_logged")
+        d_hat = rec.get("d_hat")
+        w_req = rec.get("w_req_cons")
+        if delta_logged is None or d_hat is None or w_req is None:
+            continue
+        finite_consistency_checks += 1
+        if abs(float(delta_logged) - (float(d_hat) - float(w_req))) > 1e-6:
+            consistency_failures += 1
+
+    if duplicates:
+        raise RuntimeError(f"Duplicate method+seed+scenario_id rows found, first duplicate: {duplicates[0]}")
+    if consistency_failures:
+        raise RuntimeError(
+            f"delta_mean consistency failed for {consistency_failures}/"
+            f"{finite_consistency_checks} finite rows"
+        )
+    seeds = sorted({seed for _, seed in scenario_sets})
+    for seed in seeds:
+        rule_set = scenario_sets.get(("rule_baseline", seed), set())
+        degnav_set = scenario_sets.get(("geometry_fsm", seed), set())
+        if rule_set != degnav_set:
+            raise RuntimeError(
+                f"Unpaired scenario_id sets for seed {seed}: "
+                f"rule={len(rule_set)} geometry_fsm={len(degnav_set)} "
+                f"intersection={len(rule_set & degnav_set)}"
+            )
+    total_bin_support: dict[float, int] = defaultdict(int)
+    for row in summary:
+        total_bin_support[float(row["bin_center"])] += int(row.get("episode_count", 0))
+    sufficient_bins = [
+        center for center, count in total_bin_support.items()
+        if count >= int(min_bin_count)
+    ]
+    if len(sufficient_bins) < 3:
+        raise RuntimeError(
+            f"Need at least three bins with >= {min_bin_count} total episodes; "
+            f"found {len(sufficient_bins)}"
+        )
+    print("[validate] main input has paired rule_baseline and geometry_fsm scenarios")
+    print(f"[validate] delta consistency checks passed: {finite_consistency_checks}")
+    print(f"[validate] bins with >={min_bin_count} episodes: {len(sufficient_bins)}")
 
 
 def _bin_index(delta: float, edges: np.ndarray) -> int | None:
@@ -446,20 +774,26 @@ def _plot_metric_lines(
     metric_keys: list[tuple[str, str]],
     title: str,
     min_bin_count: int,
+    *,
+    show_xlabel: bool = True,
+    show_legend: bool = True,
 ) -> None:
     any_line = False
     colors = plt.rcParams["axes.prop_cycle"].by_key().get("color", [])
     markers = ["o", "s", "^", "D"]
-    used_low_marker = False
+    linestyles = ["-", "--", ":", "-."]
     for method_idx, method in enumerate(methods):
-        color = colors[method_idx % len(colors)] if colors else None
         for metric_idx, (key, label) in enumerate(metric_keys):
+            color_idx = method_idx if len(metric_keys) == 1 else metric_idx
+            color = colors[color_idx % len(colors)] if colors else None
+            linestyle = linestyles[method_idx % len(linestyles)]
             x, y, low, ci_low, ci_high = _series_with_support(rows, method, key)
             if len(x) == 0:
                 continue
             any_line = True
             marker = markers[method_idx % len(markers)]
             high = ~low
+            label_text = method if len(metric_keys) == 1 else f"{method}: {label}"
             if np.any(high):
                 first_segment = True
                 start = None
@@ -478,41 +812,48 @@ def _plot_metric_lines(
                             x[seg],
                             y[seg],
                             yerr=yerr,
-                            linestyle="-",
+                            linestyle=linestyle,
                             linewidth=1.8,
                             marker=marker,
                             markersize=4.5,
                             capsize=2.5,
                             alpha=0.85,
                             color=color,
-                            label=f"{method}: {label}" if first_segment else None,
+                            label=label_text if first_segment else None,
                         )
                         first_segment = False
                         start = None
             if np.any(low):
-                ax.scatter(
+                yerr_low = np.vstack([
+                    np.maximum(0.0, y[low] - ci_low[low]),
+                    np.maximum(0.0, ci_high[low] - y[low]),
+                ])
+                ax.errorbar(
                     x[low],
                     y[low],
+                    yerr=yerr_low,
+                    linestyle="none",
                     marker=marker,
-                    s=42,
-                    facecolors="none",
-                    edgecolors=color,
-                    linewidths=1.4,
-                    label=(
-                        f"low support (<{min_bin_count} eps/bin)"
-                        if not used_low_marker
-                        else None
-                    ),
+                    markersize=5.0,
+                    markerfacecolor="white",
+                    markeredgecolor=color,
+                    markeredgewidth=1.4,
+                    ecolor=color,
+                    elinewidth=0.9,
+                    capsize=2.0,
+                    label=None,
                 )
-                used_low_marker = True
     ax.axvspan(-0.05, 0.05, color="0.8", alpha=0.22, zorder=0)
     ax.axvline(0.0, color="0.4", linestyle="--", linewidth=1.0)
     ax.set_title(title)
-    ax.set_xlabel(r"Estimated margin $\hat{D} - W_{\mathrm{req,cons}}$ (m)")
+    if show_xlabel:
+        ax.set_xlabel(r"Estimated margin $\hat{D} - W_{\mathrm{req,cons}}$ (m)")
+    ax.set_ylabel("Rate")
     ax.set_ylim(0.0, 1.0)
     ax.grid(True, alpha=0.25)
     if any_line:
-        ax.legend(fontsize=7)
+        if show_legend:
+            ax.legend(fontsize=7, loc="upper left", frameon=False, handlelength=2.2)
     else:
         ax.text(0.5, 0.5, "No available data", ha="center", va="center", transform=ax.transAxes)
 
@@ -529,47 +870,150 @@ def plot_summary(
     write_png: bool = True,
     write_pdf: bool = True,
 ) -> None:
-    fig, axes = plt.subplots(3, 1, figsize=(9.0, 8.2), sharex=True, constrained_layout=True)
+    plt.rcParams.update(
+        {
+            "font.size": 8.0,
+            "axes.labelsize": 8.5,
+            "axes.titlesize": 9.0,
+            "xtick.labelsize": 7.5,
+            "ytick.labelsize": 7.5,
+            "legend.fontsize": 7.0,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        }
+    )
+    fig, axes = plt.subplots(2, 1, figsize=(3.55, 3.35), sharex=True, constrained_layout=True)
 
     _plot_metric_lines(
         axes[0],
         rows,
         methods,
         [("success_rate", "success")],
-        "Success rate",
+        "A. Success rate",
         min_bin_count,
+        show_xlabel=False,
+        show_legend=True,
     )
     _plot_metric_lines(
         axes[1],
         rows,
         methods,
         [("collision_rate", "collision")],
-        "Collision rate",
+        "B. Collision rate",
         min_bin_count,
-    )
-    _plot_metric_lines(
-        axes[2],
-        rows,
-        methods,
-        [("reject_rate", "explicit reject")],
-        "Explicit reject rate",
-        min_bin_count,
+        show_xlabel=True,
+        show_legend=False,
     )
     if xlim is not None:
         for ax in axes:
             ax.set_xlim(*xlim)
+            ax.locator_params(axis="x", nbins=5)
 
     figures_dir.mkdir(parents=True, exist_ok=True)
-    fig.suptitle(title, fontsize=14)
     if write_png:
         png_path = figures_dir / f"{stem}.png"
-        fig.savefig(png_path, dpi=300)
+        fig.savefig(png_path, dpi=450)
         print(f"[write] {png_path}")
     if write_pdf:
         pdf_path = figures_dir / f"{stem}.pdf"
         fig.savefig(pdf_path)
         print(f"[write] {pdf_path}")
     plt.close(fig)
+
+
+def _available_metric_keys(
+    rows: list[dict[str, object]],
+    candidates: list[tuple[str, str]],
+    *,
+    show_zero_metrics: bool,
+) -> list[tuple[str, str]]:
+    available: list[tuple[str, str]] = []
+    for key, label in candidates:
+        values = [
+            float(row[key])
+            for row in rows
+            if row.get(key) is not None and math.isfinite(float(row[key]))
+        ]
+        if not values:
+            continue
+        if not show_zero_metrics and all(abs(value) < 1e-12 for value in values):
+            continue
+        available.append((key, label))
+    return available
+
+
+def plot_rl_diagnostic(
+    rows: list[dict[str, object]],
+    figures_dir: Path,
+    methods: list[str],
+    *,
+    min_bin_count: int,
+    xlim: tuple[float, float] | None,
+    show_zero_metrics: bool,
+) -> None:
+    diagnostic_dir = (
+        figures_dir.parent / "diagnostic"
+        if figures_dir.name == "figures"
+        else figures_dir / "diagnostic"
+    )
+    diagnostic_dir.mkdir(parents=True, exist_ok=True)
+    metric_keys = _available_metric_keys(
+        rows,
+        [
+            ("success_rate", "success"),
+            ("collision_rate", "collision"),
+            ("near_collision_rate", "near collision"),
+        ],
+        show_zero_metrics=show_zero_metrics,
+    )
+    mode_keys = _available_metric_keys(
+        rows,
+        [
+            ("commit_freq", "Commit"),
+            ("explore_freq", "Explore"),
+            ("recover_freq", "Recover"),
+            ("reject_freq", "Reject"),
+        ],
+        show_zero_metrics=show_zero_metrics,
+    )
+
+    fig, axes = plt.subplots(2, 1, figsize=(9.0, 6.5), sharex=True, constrained_layout=True)
+    _plot_metric_lines(
+        axes[0],
+        rows,
+        methods,
+        metric_keys,
+        "Outcome diagnostics",
+        min_bin_count,
+    )
+    _plot_metric_lines(
+        axes[1],
+        rows,
+        methods,
+        mode_keys,
+        "Mode usage",
+        min_bin_count,
+    )
+    for ax in axes:
+        if xlim is not None:
+            ax.set_xlim(*xlim)
+    fig.suptitle("Diagnostic Behavior of DEGNAV-RL Across Feasibility Margins", fontsize=14)
+    fig.text(
+        0.5,
+        0.01,
+        "Appendix diagnostic: current DEGNAV-RL collapses to Commit/Explore and does not "
+        "demonstrate meaningful Recover or Reject behavior.",
+        ha="center",
+        va="bottom",
+        fontsize=8,
+    )
+    png_path = diagnostic_dir / "degnav_rl_margin_diagnostic.png"
+    pdf_path = diagnostic_dir / "degnav_rl_margin_diagnostic.pdf"
+    fig.savefig(png_path, dpi=300)
+    fig.savefig(pdf_path)
+    plt.close(fig)
+    print(f"[write] {png_path}")
+    print(f"[write] {pdf_path}")
 
 
 def _rate(records: list[dict[str, object]], key: str) -> float | None:
@@ -603,9 +1047,9 @@ def _paper_table_rows(
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     regimes = [
-        ("Infeasible-side", lambda d: d < -0.05),
+        ("Negative margin", lambda d: d < -0.05),
         ("Near-boundary", lambda d: -0.05 <= d <= 0.05),
-        ("Feasible-side", lambda d: d > 0.05),
+        ("Positive margin", lambda d: d > 0.05),
     ]
     for method in methods:
         for regime_name, predicate in regimes:
@@ -625,6 +1069,7 @@ def _paper_table_rows(
                     "near_collision": _rate(method_records, "near_collision"),
                     "reject": _rate(method_records, "reject"),
                     "correct_reject": _rate(method_records, "correct_reject"),
+                    "false_reject": _rate(method_records, "false_reject"),
                     "timeout_stuck": _rate(method_records, "timeout_or_stuck"),
                 }
             )
@@ -650,13 +1095,13 @@ def write_paper_tables(
         "Regime summary by `delta_mean = d_hat - w_req_cons`. Episode counts are rows inside "
         f"the plotted margin range [{margin_min:.2f}, {margin_max:.2f}] m.",
         "",
-        "| Method | Regime | Episodes | Success | Collision | Near collision | Reject | Correct reject | Timeout/stuck |",
-        "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Method | Regime | Episodes | Success | Collision | Near collision | Reject | Correct reject | False reject | Timeout/stuck |",
+        "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         md_lines.append(
             "| {method} | {regime} | {episodes} | {success} | {collision} | {near_collision} | "
-            "{reject} | {correct_reject} | {timeout_stuck} |".format(
+            "{reject} | {correct_reject} | {false_reject} | {timeout_stuck} |".format(
                 method=row["method"],
                 regime=row["regime"],
                 episodes=row["episodes"],
@@ -665,6 +1110,7 @@ def write_paper_tables(
                 near_collision=_fmt_rate(row["near_collision"]),
                 reject=_fmt_rate(row["reject"]),
                 correct_reject=_fmt_rate(row["correct_reject"]),
+                false_reject=_fmt_rate(row["false_reject"]),
                 timeout_stuck=_fmt_rate(row["timeout_stuck"]),
             )
         )
@@ -674,6 +1120,7 @@ def write_paper_tables(
         "- Margin is computed at the shared pre-divergence decision snapshot.",
         "- Belief diagnostics for the rule baseline are used only for stratification and do not influence its actions.",
         f"- Bins with fewer than {min_bin_count} episodes are marked low support.",
+        "- Low-support bins are marked and not interpreted as reliable trends.",
         "- Reject denotes an explicit Reject mode, not generic failure.",
     ])
     md_path = table_dir / "paper_table_margin_phase_summary.md"
@@ -681,9 +1128,9 @@ def write_paper_tables(
     print(f"[write] {md_path}")
 
     tex_lines = [
-        r"\begin{tabular}{llrrrrrrr}",
+        r"\begin{tabular}{llrrrrrrrr}",
         r"\toprule",
-        r"Method & Regime & Episodes & Success & Collision & Near collision & Reject & Correct reject & Timeout/stuck \\",
+        r"Method & Regime & Episodes & Success & Collision & Near collision & Reject & Correct reject & False reject & Timeout/stuck \\",
         r"\midrule",
     ]
     for row in rows:
@@ -694,6 +1141,7 @@ def write_paper_tables(
             f"& {_fmt_tex_rate(row['near_collision'])} "
             f"& {_fmt_tex_rate(row['reject'])} "
             f"& {_fmt_tex_rate(row['correct_reject'])} "
+            f"& {_fmt_tex_rate(row['false_reject'])} "
             f"& {_fmt_tex_rate(row['timeout_stuck'])} \\\\"
         )
     tex_lines.extend([r"\bottomrule", r"\end{tabular}"])
@@ -705,6 +1153,12 @@ def write_paper_tables(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate width-margin phase diagram from evaluation CSVs."
+    )
+    parser.add_argument(
+        "--plot-mode",
+        choices=("main", "rl-diagnostic"),
+        default="main",
+        help="main requires paired rule_baseline/geometry_fsm; rl-diagnostic is appendix-only.",
     )
     parser.add_argument("--inputs", nargs="+", type=Path, required=True)
     parser.add_argument(
@@ -718,8 +1172,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--table-dir", type=Path, default=None)
     parser.add_argument("--bin-width", type=float, default=0.02)
     parser.add_argument("--margin-min", type=float, default=-0.10)
-    parser.add_argument("--margin-max", type=float, default=0.10)
+    parser.add_argument("--margin-max", type=float, default=0.30)
     parser.add_argument("--min-bin-count", type=int, default=1)
+    parser.add_argument(
+        "--show-zero-metrics",
+        action="store_true",
+        help="In rl-diagnostic mode, include all-zero diagnostic curves.",
+    )
     return parser.parse_args()
 
 
@@ -734,7 +1193,31 @@ def main() -> None:
 
     labels = _split_cli_values(args.labels)
     methods_filter = _split_cli_values(args.methods)
-    records, load_stats = load_records(args.inputs, labels, methods_filter)
+
+    output_dir = Path(args.output_dir)
+    if args.table_dir is None:
+        figures_dir = output_dir / "figures"
+        table_dir = output_dir / "tables"
+        summary_name = "margin_phase_summary.csv"
+    else:
+        figures_dir = output_dir
+        table_dir = Path(args.table_dir)
+        summary_name = "margin_phase_rule_vs_degnav_rule.csv"
+
+    write_input_audit(
+        table_dir=table_dir,
+        inputs=list(args.inputs),
+        bin_width=float(args.bin_width),
+        margin_min=float(args.margin_min),
+        margin_max=float(args.margin_max),
+    )
+
+    records, load_stats = load_records(
+        args.inputs,
+        labels,
+        methods_filter,
+        require_method=args.plot_mode == "main",
+    )
     if not records:
         raise RuntimeError(
             "No rows with usable margin data found. Expected delta_mean, "
@@ -797,15 +1280,49 @@ def main() -> None:
             f"found {len(sufficient_bins)}"
         )
 
-    output_dir = Path(args.output_dir)
-    if args.table_dir is None:
-        figures_dir = output_dir / "figures"
-        table_dir = output_dir / "tables"
-        summary_name = "margin_phase_summary.csv"
+    if args.plot_mode == "main":
+        try:
+            validate_main_records(
+                records,
+                summary,
+                methods_filter=methods_filter,
+                min_bin_count=int(args.min_bin_count),
+            )
+        except RuntimeError:
+            write_main_missing_data_report(table_dir, list(args.inputs))
+            raw_methods = {str(rec.get("raw_method")) for rec in records}
+            if not {"rule_baseline", "geometry_fsm"}.issubset(raw_methods):
+                diagnostic_dir = (
+                    figures_dir.parent / "diagnostic"
+                    if figures_dir.name == "figures"
+                    else figures_dir / "diagnostic"
+                )
+                write_summary_csv(summary, diagnostic_dir / "degnav_rl_margin_summary.csv")
+                plot_rl_diagnostic(
+                    summary,
+                    figures_dir,
+                    methods,
+                    min_bin_count=int(args.min_bin_count),
+                    xlim=(float(args.margin_min), float(args.margin_max)),
+                    show_zero_metrics=bool(args.show_zero_metrics),
+                )
+            raise
     else:
-        figures_dir = output_dir
-        table_dir = Path(args.table_dir)
-        summary_name = "margin_phase_rule_vs_degnav_rule.csv"
+        diagnostic_dir = (
+            figures_dir.parent / "diagnostic"
+            if figures_dir.name == "figures"
+            else figures_dir / "diagnostic"
+        )
+        write_summary_csv(summary, diagnostic_dir / "degnav_rl_margin_summary.csv")
+        plot_rl_diagnostic(
+            summary,
+            figures_dir,
+            methods,
+            min_bin_count=int(args.min_bin_count),
+            xlim=(float(args.margin_min), float(args.margin_max)),
+            show_zero_metrics=bool(args.show_zero_metrics),
+        )
+        return
 
     write_summary_csv(summary, table_dir / summary_name)
     write_paper_tables(
@@ -823,7 +1340,7 @@ def main() -> None:
         methods,
         min_bin_count=int(args.min_bin_count),
         stem="margin_phase_rule_vs_degnav_rule",
-        title="Margin-Phase: Reactive Rule Baseline vs DEGNAV-Rule",
+        title="",
         xlim=(float(args.margin_min), float(args.margin_max)),
         write_png=True,
         write_pdf=True,
@@ -832,16 +1349,19 @@ def main() -> None:
     zoom_rows = [
         row for row in summary
         if -0.10 <= float(row["bin_center"]) <= 0.10
-        and int(row.get("episode_count", 0)) >= int(args.min_bin_count)
     ]
-    if zoom_rows:
+    zoom_supported_rows = [
+        row for row in zoom_rows
+        if int(row.get("episode_count", 0)) >= int(args.min_bin_count)
+    ]
+    if zoom_supported_rows:
         plot_summary(
-            summary,
+            zoom_rows,
             figures_dir,
             methods,
             min_bin_count=int(args.min_bin_count),
             stem="margin_phase_near_boundary_zoom",
-            title="Near-Boundary Margin Phase",
+            title="",
             xlim=(-0.10, 0.10),
             write_png=True,
             write_pdf=True,

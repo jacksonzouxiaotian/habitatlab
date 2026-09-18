@@ -21,6 +21,38 @@ Paper-facing naming:
 - `Diagnostic/smoke baselines`: code-path checks or metric diagnostics, not the
   main method ranking.
 
+## Latest formal MP3D result status (2026-09-05)
+
+The official Habitat PointNav v1 MP3D-val queue is complete on the same 495
+episode IDs for every available seed. PointNav PPO reaches `78.52±0.34%`
+Success and `0.64±0.01` SPL; DD-PPO reaches `93.87±0.42%` Success and
+`0.85±0.00` SPL, with the required Gibson-2+→MP3D transfer label. The random,
+reactive, and NavMesh-oracle rows are complete as well.
+
+The separate MP3D-derived narrow-passage validation uses 80 scene-disjoint
+episodes, a 0.36 m body, continuous velocity control, and no sliding.
+Geometry-19D/no-memory, kNN-memory-19D, and DEGNAV-memory-19D are identical:
+`82.50%` all-episode Success, `98.44%` feasible Success, and `0%` Correct
+Reject. This is a negative memory result. The corrected-history raw-Depth
+DEGNAV-E2E three-seed run is complete: `83.33±0.59%` all-episode Success,
+`99.48±0.74%` feasible Success, `95.42±1.18%` decision accuracy, and
+`79.17±2.95%` Correct Reject, with `2.08±0.74%` False Reject and zero feasible
+collisions. It uses offline BC and a fixed low-level controller, not PPO. No
+earlier invalid E2E number is admissible.
+
+Current evidence and reproduction details:
+
+- `examples/narrow_passage_rl/results/formal_mp3d_summary_20260905/final_method_status.md`
+- `examples/narrow_passage_rl/results/formal_mp3d_summary_20260905/formal_experiment_work_report.md`
+- `examples/narrow_passage_rl/results/formal_mp3d_summary_20260905/environment_snapshot.md`
+- `examples/narrow_passage_rl/results/official_pointnav_mp3d_v1_20260904/`
+- `examples/narrow_passage_rl/results/degnav_e2e_mp3d_narrow_v1_20260904/`
+
+The official PointNav and derived narrow-passage numbers are intentionally kept
+in separate tables because their agent radius, actions, sliding, Success
+definition, and episode set differ. Neither new paper-facing table includes a
+strict-success column.
+
 ## Where The Code Lives
 
 ```text
@@ -40,6 +72,9 @@ examples/narrow_passage_rl/
   train_recurrent_ppo_v2.py             # RecurrentPPO smoke baseline
   train_bc_dagger_v2.py                 # BC/DAgger smoke baselines
   train_replay_memory_policy_v2.py      # Generic replay-memory smoke baseline
+  vln_dataset_free_smoke.py             # NaVILA artifact/runtime smoke test
+  vln_batch_diagnostic.py               # Controlled 640-case VLN diagnostic
+  eval_vln_safety_adapter.py            # Paired system-interface smoke test
   plot_margin_phase.py                  # Rule-vs-DEGNAV width-margin phase diagram
   record_habitat_video.py               # Habitat video/keyframe generation
   narrow_passage/models/belief_state.py # Compact feasibility-belief state
@@ -52,6 +87,40 @@ The Habitat task and sensors used by these scripts live in:
 
 ```text
 habitat-lab/habitat/tasks/narrow_passage/
+```
+
+## VLN/VLA Integration Status
+
+The current NaVILA checkpoint has been evaluated in 640 controlled inferences:
+64 immediate-command probes, 64 visual-perturbation cases, and 256 paired R2R
+val-unseen instruction/stop-override probes.  It returns parseable actions in
+100% of cases, but explicit stop-override compliance is only 1.6%, controlled
+left/right/stop command match is 0%, and non-clean visual action consistency is
+75%.
+
+The added deterministic safety adapter treats NaVILA as a semantic proposal
+model and places trusted runtime directives plus measured geometry risk below
+it.  On the same saved outputs, controlled command match changes from 25.0% to
+81.3%, trusted stop compliance from 1.5% to 100.0%, and forward output on four
+controlled blocked-fixture cases from 100.0% to 0.0%.  Original untrusted R2R
+route proposals are preserved in all 256 pairs.  These are smoke-test interface
+effects, not trained VLN improvements or formal R2R metrics.
+They should not be described as learned VLN gains, standard R2R performance, or
+evidence that NaVILA itself learned safe stopping/rejection.
+
+A paired R2R/VLN-CE preflight is now available.  It confirms the NaVILA
+checkpoint, R2R `val_unseen` annotations, DDPPO depth encoder, data symlinks,
+and Habitat 0.1.7 imports, but reports that the local MP3D scene directory has
+0/11 required `val_unseen` `.glb` files and 0/11 `.navmesh` files.  The
+standard SR/SPL/NE/nDTW evaluation is therefore still blocked by licensed MP3D
+assets rather than code setup.
+
+See the detailed architecture, complete data, limitations, commands, and
+priority roadmap in:
+
+```text
+examples/narrow_passage_rl/README.md
+  -> VLN/VLA Integration: Current Evidence And Improvement Plan
 ```
 
 ## Result Registry
@@ -76,6 +145,7 @@ The current procedural v2 main table is:
 
 ```text
 examples/narrow_passage_rl/results/narrow_passage_rl/paper_table_procedural_v2_main.md
+examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_procedural_v2_main.md
 ```
 
 False-feasible outcome decomposition is tracked separately:
@@ -166,6 +236,109 @@ examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_
 examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_clearance_diagnostic.md
 examples/narrow_passage_rl/results/narrow_passage_rl/tables/paper_table_habitat_stress_key_slices.md
 ```
+
+## Habitat Experimental Analysis
+
+The analysis below is restricted to the canonical same-split HM3D Val set A
+comparison (157 shared episode IDs) and the controlled Habitat stress protocol.
+The mixed-split diagnostic table is not used for method ranking.  For the
+requested memory ablation, **Ours** denotes DEGNAV-Rule with failure memory and
+**Ours w/o Memory** denotes the same Geometry-FSM controller without that
+memory.
+
+### Overall Performance
+
+On the shared nominal anchors, Ours and Ours w/o Memory both reach 100.0%
+Success, compared with 93.6% for APF+Gap and 10.2% for the PPO direct-control
+baseline.  Their mean episode length is also identical at 54.0 steps, whereas
+APF+Gap requires 111.5 steps and PPO averages 498.0 steps.  The improvement over
+PPO is not explained by a larger learned policy: DEGNAV explicitly decomposes
+the problem into entrance alignment, feasibility-aware mode selection, and
+mode-conditioned velocity realization.  This inductive structure prevents a
+single continuous policy from having to rediscover the coupling among heading,
+lateral centering, clearance, and forward progress after a
+synthetic-to-Habitat domain shift.  PPO instead maps the 19-D geometry vector
+directly to velocity, so errors in entry alignment can compound over a long
+rollout.
+
+SPL is not available in the four canonical same-split CSVs because geodesic
+shortest distance and executed path length were not logged consistently.
+Average steps suggests a large difference in control-time efficiency, but it is
+not a substitute for SPL: the methods use continuous actions and may execute
+different linear/angular velocities.  A quantitative path-efficiency claim
+therefore remains pending a same-split rerun with `path_length`,
+`shortest_path_length`, and `spl` recorded for every method.
+
+### Failure Analysis
+
+**Collision.** Ours and Ours w/o Memory record zero simulator collision flags on
+the 157 nominal anchors, while the canonical PPO/APF CSVs do not contain a
+comparable collision field.  The stress evaluator also reports zero collision
+for the listed methods, but near-collision is 100% and the average depth-derived
+minimum margin is negative.  The apparent zero-collision result is therefore
+best explained by the current boundary-stopping/collision interface and cannot
+be interpreted as calibrated physical safety.
+
+**Timeout.** Full DEGNAV has 0% timeout on nominal, yaw-60, and
+extreme-yaw-60 stress slices.  Removing heading alignment raises timeout to
+16.6% at yaw 60 degrees and 12.5% on extreme-narrow plus yaw 60 degrees.  The
+full controller avoids these failures because it corrects orientation before
+committing, whereas an unaligned controller can spend the episode making little
+longitudinal progress.  PPO's 498/500 mean steps is consistent with frequent
+budget exhaustion, but its canonical CSV has no explicit timeout flag, so an
+exact PPO timeout rate is not claimed.
+
+**Oscillation.** The canonical Habitat files do not log an episode-level
+oscillation count or signed angular-velocity switching frequency.  Long PPO
+rollouts and rotating failure videos are useful qualitative diagnostics, but
+they are not quantitative oscillation evidence.  A formal claim requires all
+methods to log angular sign changes, heading-error reversals, and dwell time
+near the entrance under the same protocol.
+
+**Wrong decision.** Wrong decisions are only well defined for controllers with
+an explicit mode interface.  Neither Ours variant rejects any nominal passable
+anchor, but the nominal set does not contain the repeated false-feasible
+encounters needed to evaluate Reject.  PPO has no discrete Commit/Reject mode,
+so its failures cannot be relabeled as wrong high-level decisions.  Likewise,
+failure or timeout must not be counted as correct rejection.
+
+### Ablation Analysis
+
+| Variant | Success | Mean steps | Collision | Stuck | Memory writes |
+|---|---:|---:|---:|---:|---:|
+| Ours (DEGNAV-Rule + failure memory) | 100.0% | 54.0 | 0.0% | 0.0% | 0 |
+| Ours w/o Memory (DEGNAV-Rule / Geometry-FSM) | 100.0% | 54.0 | 0.0% | 0.0% | 0 |
+| PPO direct-control baseline | 10.2% | 498.0 | not logged | not logged | N/A |
+
+The equality between the two Ours rows is itself informative.  These are
+one-shot, mostly passable nominal anchors; neither controller triggers recovery
+or writes a failure memory item.  The table therefore isolates the contribution
+of the geometry controller but does not test the claimed purpose of memory.
+Memory must be judged in the separate recurrence/transfer protocol, where prior
+failures are available and false rejection on similar feasible passages is also
+measured.  PPO is a learning baseline rather than a strict component ablation;
+its low transfer Success shows that direct velocity learning does not inherit
+the geometry controller's alignment and mode priors.
+
+### Generalization Analysis
+
+The nominal experiment transfers the controller from procedural development to
+scanned HM3D geometry, while the stress protocol changes initial yaw, lateral
+offset, passage margin, depth-sector availability, and feature noise.  Full
+DEGNAV retains 100.0% Success at yaw 60 degrees and on the
+extreme-narrow-plus-yaw-60 slice, and reaches 98.0% at a 0.20 m lateral offset.
+Its relative geometry features and explicit alignment stage explain this
+stability: decisions depend on passage-centered quantities rather than scene
+texture, and orientation error is corrected before forward commitment.  The
+drop to 76.8% for the no-heading-alignment variant at yaw 60 degrees supports
+this mechanism rather than a generic robustness claim.
+
+These results remain bounded to mined HM3D validation anchors and the tested
+perturbations.  The nominal anchors are mostly well aligned, the clearance
+metric is a depth-derived proxy, and no calibrated hardware contact or unseen
+HM3D test-split result is implied.  Generalization should therefore be described
+as **module sensitivity and scene-based validation under controlled Habitat
+perturbations**, not universal narrow-passage robustness.
 
 ## Diagnostic Baselines
 
@@ -425,3 +598,97 @@ Core documents:
 - `examples/narrow_passage_rl/docs/baseline_taxonomy.md`
 - `examples/narrow_passage_rl/docs/experiment_protocol.md`
 - `examples/narrow_passage_rl/docs/reproducibility.md`
+
+## Strict Feasibility Ablation v2 Mechanism Validation
+
+The strict ablation has been repaired after auditing the identical v1 results.
+The previous estimator fixed `var_delta=0.0025`; its high-uncertainty branch
+tested a strict `>` against exactly that value, while `no_uncertainty` still
+read variance indirectly through `p_feas`. Those three variants were therefore
+mathematically equivalent, not empirically proven equivalent.
+
+The v2 controller uses a scene-dependent sigma estimated from ray dispersion,
+valid/dropout ratio, boundary-fit residual, temporal width variation, and
+yaw/pose uncertainty. The temporal history resets at the simulator's 10 m
+open-space sentinel boundary. `full` uses LCB/UCB gating; `point_estimate` and
+`no_uncertainty` use only the mean for decisions; `fixed_uncertainty` uses a
+global sigma; and `no_yaw_prior` removes only the yaw-dependent required-width
+mean. Every step logs the belief, interval, counterfactual yaw decision, final
+four-mode selection, and linear/angular action.
+
+The 45-episode paired mechanism validation passed every launch gate:
+
+| Gate | Result |
+|:---|---:|
+| Dynamic sigma | 132 distinct values (0.0157–0.0974 m) |
+| Uncertainty branch | 33/180 full steps (18.33%) |
+| Full vs point final-mode disagreement | 33/180 (18.33%) |
+| Yaw prior changed decision | 106/180 (58.89%) |
+| Paired non-ablated inputs/random draws | passed |
+
+Current artifacts and complete audit:
+
+```text
+examples/narrow_passage_rl/results/ablation_feasibility/mechanism_20260818_170356/
+examples/narrow_passage_rl/docs/feasibility_ablation.md
+```
+
+The new 3-seed, five-variant evaluation was run only after these checks passed.
+It completed with 10,500 episode rows and 528,873 step rows in
+`paper_dynamic_20260818_170356/`:
+
+| Method | Success | Collision | False reject |
+|:---|---:|---:|---:|
+| full | 0.2 ± 0.2% | 11.2 ± 1.4% | 63.5 ± 4.3% |
+| point_estimate | 0.3 ± 0.4% | 10.8 ± 1.4% | 64.4 ± 4.1% |
+| no_uncertainty | 0.3 ± 0.4% | 10.8 ± 1.4% | 64.4 ± 4.1% |
+| fixed_uncertainty | 0.2 ± 0.2% | 11.1 ± 1.4% | 63.6 ± 4.4% |
+| no_yaw_prior | 0.2 ± 0.2% | 11.6 ± 1.4% | 62.5 ± 3.9% |
+
+Mechanisms now differ even though success is saturated at only 4–6 successes
+per method: formal full uncertainty gating triggers on 2.32% of steps, full vs
+point changes 30 episode outcomes, and full vs no-yaw changes 29. The result is
+auditable but not a performance gain; no thresholds were retuned.
+
+## Strict Feasibility Ablation v1 Result (Archived Diagnostic)
+
+The paired four-way procedural ablation is complete at 3 seeds × 7 scene types
+× 100 episodes per scene × 4 methods (8,400 rows total):
+
+| Method | Success | Collision | Correct reject | False reject | Timeout/stuck |
+|:---|---:|---:|---:|---:|---:|
+| DEGNav full | 17.8 ± 1.9% | 15.1 ± 3.1% | 11.6 ± 1.4% | 52.2 ± 3.5% | 3.3 ± 1.2% |
+| DEGNav point estimate | 17.8 ± 1.9% | 15.1 ± 3.1% | 11.6 ± 1.4% | 52.2 ± 3.5% | 3.3 ± 1.2% |
+| DEGNav w/o uncertainty-aware gating | 17.8 ± 1.9% | 15.1 ± 3.1% | 11.6 ± 1.4% | 52.2 ± 3.5% | 3.3 ± 1.2% |
+| DEGNav w/o yaw prior | 17.8 ± 1.9% | 15.3 ± 3.0% | 11.6 ± 1.4% | 51.9 ± 3.7% | 3.4 ± 1.1% |
+
+`full`, `point_estimate`, and `no_uncertainty` are identical episode by episode.
+The current estimator fixes `var_delta` at 0.0025, so probability gating is a
+monotone reparameterization of mean margin and the explicit high-uncertainty
+rule never fires. The paired `full - no_yaw_prior` success difference is -0.05
+percentage points with 95% CI `[-0.25, 0.16]`. Thus the current data support
+neither a probabilistic/uncertainty advantage nor a success benefit from the
+existing secant yaw prior. This is reported as a paper-code limitation rather
+than being hidden or retuned.
+
+Full audit, commands, calibration, plots, and exact artifact paths:
+
+```text
+examples/narrow_passage_rl/docs/feasibility_ablation.md
+examples/narrow_passage_rl/results/ablation_feasibility/paper_20260818/
+```
+
+## Recurrent 19-D four-mode selector
+
+An auditable GRU actor-critic, episode-grouped BC collector/trainer, recurrent
+PPO runner, fixed-set evaluator, and automatic metric table are now available.
+The staged experiment was intentionally stopped after the 100k gate: pure
+BC+PPO produced 0/78 correct deterministic rejections, while a training-only
+auxiliary diagnostic produced 60/78 correct rejections but 38/122 false
+rejections. These are procedural geometry results, not Habitat contact safety
+or Lite3 validation.
+
+```text
+examples/narrow_passage_rl/docs/mode_selector_ppo_audit.md
+examples/narrow_passage_rl/results/mode_selector/EXPERIMENT_REPORT.md
+```

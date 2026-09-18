@@ -25,6 +25,8 @@ class NarrowPassageNavTask(NavigationTask):
         self._prev_position: Optional[np.ndarray] = None
         self._prev_distance: Optional[float] = None
         self._stuck_steps = 0
+        self._translation_stuck_steps = 0
+        self._rotation_stuck_steps = 0
         self._last_action_vx = 0.0
         self._last_action_wz = 0.0
         self._failure_memory = defaultdict(int)
@@ -39,6 +41,8 @@ class NarrowPassageNavTask(NavigationTask):
         self._prev_position = np.array(agent_state.position, dtype=np.float32)
         self._prev_distance = self._distance_to_goal(episode)
         self._stuck_steps = 0
+        self._translation_stuck_steps = 0
+        self._rotation_stuck_steps = 0
         self._last_action_vx = 0.0
         self._last_action_wz = 0.0
         self._failure_memory.clear()
@@ -150,10 +154,22 @@ class NarrowPassageNavTask(NavigationTask):
         if distance is not None and self._prev_distance is not None:
             progress = self._prev_distance - distance
 
-        if moved < 1e-3 and progress < 1e-3:
-            self._stuck_steps += 1
+        translation_expected = abs(self._last_action_vx) > 0.02
+        rotation_expected = abs(self._last_action_wz) > 0.05
+        if translation_expected and moved < 1e-3 and progress < 1e-3:
+            self._translation_stuck_steps += 1
         else:
-            self._stuck_steps = 0
+            self._translation_stuck_steps = max(
+                0, self._translation_stuck_steps - 1
+            )
+        # Habitat exposes contact motion but not a stable per-step yaw delta in
+        # this task wrapper.  Keep a separate diagnostic counter and never let
+        # commanded in-place rotation contaminate translation stuck.
+        if rotation_expected and moved < 1e-3:
+            self._rotation_stuck_steps += 1
+        else:
+            self._rotation_stuck_steps = max(0, self._rotation_stuck_steps - 1)
+        self._stuck_steps = self._translation_stuck_steps
 
         collided = 0.0
         prev_obs = getattr(self._sim, "_prev_sim_obs", {})

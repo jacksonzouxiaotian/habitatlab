@@ -1,0 +1,11 @@
+{
+  "captured_date": "2026-09-18",
+  "note": "Model repo revisions only, not weights or proof of inference. Restore original assets/*/revision.json before using fetch_assets.py.",
+  "assets": {
+    "navid": {"repo": "Jzzhang/NaVid", "revision": "1f96dbdc5c24594220395beeb447cbee728a84a9"},
+    "uninavid": {"repo": "Jzzhang/Uni-NaVid", "revision": "0437222534b2a19abeb20710bfd53c44c5bf3dd4"},
+    "awarevln": {"repo": "gwx22/AwareVLN-ck", "revision": "59149329064237529deb66862a11d21c139f4827"},
+    "samples": {"repo": "Jzzhang/Uni-NaVid", "revision": "0437222534b2a19abeb20710bfd53c44c5bf3dd4"},
+    "train_sample": {"repo": "Jzzhang/Uni-NaVid", "revision": "0437222534b2a19abeb20710bfd53c44c5bf3dd4"}
+  }
+}

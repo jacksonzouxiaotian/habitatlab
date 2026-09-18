@@ -1,0 +1,9 @@
+defaults: [base]
+ablation: fixed_uncertainty
+decision:
+  gate: structural_and_pose_fixed_sigma_interval
+  reads_p_feas: false
+  reads_sigma_delta: true
+  fixed_sigma_delta_m: 0.05
+  yaw_aware_readiness: true
+  failure_memory: true

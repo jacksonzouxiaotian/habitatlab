@@ -1,0 +1,4 @@
+# transformers==4.31.0 requires tokenizers<0.14; constrain before pip tries
+# building a latest incompatible Rust tokenizer on Python 3.8.
+tokenizers==0.13.3
+setuptools<70

@@ -1,0 +1,17 @@
+seed: 1703
+total_steps: 1000000
+num_envs: 16
+rollout_steps: 128
+learning_rate: 0.00025
+gamma: 0.99
+gae_lambda: 0.95
+clip_param: 0.2
+entropy_coef: 0.01
+value_loss_coef: 0.5
+max_grad_norm: 0.5
+ppo_epochs: 4
+num_mini_batch: 4
+hidden_size: 128
+max_episode_steps: 160
+with_memory: false
+device: cpu

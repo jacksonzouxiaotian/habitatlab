@@ -1,0 +1,28 @@
+# @package _global_
+
+# PointNav PPO transfer evaluation on the scene-disjoint MP3D narrow-passage
+# episode set.  The checkpoint architecture stays identical to the standard
+# PointNav example; collisions and step count are added only for reporting.
+defaults:
+  - ppo_pointnav_example
+  - /habitat/task/measurements@habitat.task.measurements.collisions: collisions
+  - /habitat/task/measurements@habitat.task.measurements.num_steps: num_steps
+  - _self_
+
+habitat:
+  environment:
+    max_episode_steps: 500
+  simulator:
+    habitat_sim_v0:
+      allow_sliding: False
+    agents:
+      main_agent:
+        radius: 0.18
+
+habitat_baselines:
+  load_resume_state_config: False
+  test_episode_count: -1
+  num_environments: 1
+  eval:
+    split: val
+    video_option: []

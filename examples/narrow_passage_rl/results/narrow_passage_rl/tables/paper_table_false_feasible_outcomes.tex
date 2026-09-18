@@ -1,8 +1,18 @@
+\begin{table*}[t]
+\centering
+\small
+\caption{One-shot false-feasible traversal success does not establish correct rejection. This table separates explicit abstention from collision and non-collision execution failure.}
+\label{tab:false-feasible-outcomes}
 \begin{tabular}{lrrrrrrrr}
 \toprule
-Method & Episodes & Traversal success & Correct reject & False reject & Collision & Near collision & Timeout/stuck & Wasted attempts \\
+Method & Episodes & Traversal success & Explicit reject & Correct reject & Collision & Near collision & Timeout/stuck & Wasted attempts \\
 \midrule
-Reactive rule baseline & 1500 & 0.0\% & 0.0\% & 0.0\% & 100.0\% & 57.6\% & 0.0\% & 100.0\% \\
-DEGNAV-Rule / Geometry-FSM & 1500 & 0.0\% & 0.0\% & 0.0\% & 2.8\% & 14.5\% & 97.2\% & 100.0\% \\
+Reactive rule baseline & 1500 & 0.0$\pm$0.0\% (0/1500) & 0.0$\pm$0.0\% (0/1500) & 0.0$\pm$0.0\% (0/1500) & 100.0$\pm$0.0\% (1500/1500) & 57.6$\pm$2.6\% (864/1500) & 0.0$\pm$0.0\% (0/1500) & 100.0$\pm$0.0\% (1500/1500) \\
+DEGNAV-Rule & 1500 & 0.0$\pm$0.0\% (0/1500) & 0.0$\pm$0.0\% (0/1500) & 0.0$\pm$0.0\% (0/1500) & 2.8$\pm$0.7\% (42/1500) & 14.5$\pm$1.0\% (218/1500) & 97.2$\pm$0.7\% (1458/1500) & 100.0$\pm$0.0\% (1500/1500) \\
 \bottomrule
 \end{tabular}
+\vspace{0.25em}
+\begin{minipage}{0.98\linewidth}
+\footnotesize Explicit reject means the controller selected Reject; correct reject is explicit rejection on a benchmark-labeled infeasible passage. Timeout/stuck is not safe rejection. Collision and near-collision are logged independently and may overlap. Recurrence handling is evaluated separately through memory.
+\end{minipage}
+\end{table*}

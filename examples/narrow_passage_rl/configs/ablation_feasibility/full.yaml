@@ -1,0 +1,8 @@
+defaults: [base]
+ablation: full_dynamic_uncertainty
+decision:
+  gate: dynamic_structural_and_pose_interval
+  reads_p_feas: false
+  reads_sigma_delta: true
+  yaw_required_width_prior: true
+  failure_memory: true

@@ -1,0 +1,39 @@
+defaults_note: "Merge after base.yaml; Phase 1-4 failure-attribution matrix"
+
+panorama:
+  height: 256
+  width: 512
+
+likelihood:
+  # Oracle semantics isolates navigation from open-vocabulary perception.
+  backend: oracle_semantic
+
+controller:
+  low_confidence_action: explore_forward
+  exploration_turn_steps: 6
+  stop_mode: area
+  stop_distance_m: 1.0
+  min_target_pixels: 20
+  min_valid_depth_pixels: 5
+
+planning:
+  mode: direct
+
+habitat:
+  dataset_name: mp3d
+  benchmark_config: benchmark/nav/objectnav/objectnav_mp3d.yaml
+  dataset_version: v1
+  split: val
+  scenes_dir: /media/xiaotian/ACD525D1B7A093D9/robot_nav_data/vln/data/scene_datasets
+  dataset_path: /media/xiaotian/ACD525D1B7A093D9/robot_nav_data/vln/data/datasets/objectnav/mp3d/v1/{split}/{split}.json.gz
+
+evaluation:
+  num_episodes: 3
+  max_episode_steps: 300
+  save_video: true
+  unique_scenes: true
+  video_fps: 10
+  log_failure_attribution: true
+
+output:
+  root: eagor_outputs/failure_attribution

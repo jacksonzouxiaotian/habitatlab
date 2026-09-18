@@ -1,0 +1,40 @@
+# narrow_memory_nav configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# fsm_nav_node: main narrow-passage FSM controller (TurnCommitFSM)
+# Tune robot_half_width to match your specific platform.
+
+fsm_nav_node:
+  ros__parameters:
+    control_rate: 10.0            # Hz — matches Habitat sim step rate
+    robot_half_width: 0.21        # m  — Go2 body half-width (0.42m / 2)
+    variant: "full"               # full | no_recovery | no_alignment
+    enabled: true
+    goal_topic: "/goal_pose"      # remap if your nav stack uses a different topic
+    cmd_vel_topic: "/cmd_vel"     # remap to e.g. /go1_controller/cmd_vel
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Legacy nodes (kept for backward compatibility, not used in main deployment)
+
+memory_decision_node:
+  ros__parameters:
+    control_rate: 10.0
+    memory_trigger_count: 1
+    memory_reject_count: 3
+    clearance_low: 0.06
+    clearance_high: 0.13
+    lateral_low: 0.24
+    lateral_high: 0.34
+    heading_low: 0.45
+    heading_high: 0.75
+    high_risk_threshold: 0.75
+    medium_risk_threshold: 0.50
+    memory_recovery_risk: 0.45
+    align_linear_limit: 0.10
+    commit_linear_limit: 0.25
+    recover_linear_x: -0.08
+    recover_angular_z: 0.40
+    reject_angular_z: 0.30
+
+safety_fusion_node:
+  ros__parameters:
+    enabled: false

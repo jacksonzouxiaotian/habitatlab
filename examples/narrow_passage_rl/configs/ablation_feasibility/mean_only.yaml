@@ -1,0 +1,9 @@
+defaults: [base]
+ablation: mean_only
+decision:
+  gate: structural_and_pose_mean_only
+  uncertainty_estimator_and_logging_enabled: true
+  reads_p_feas: false
+  reads_sigma_delta: false
+  yaw_aware_readiness: true
+  failure_memory: true

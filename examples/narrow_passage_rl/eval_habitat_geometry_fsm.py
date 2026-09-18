@@ -34,6 +34,7 @@ import argparse
 import math
 import sys
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -56,6 +57,60 @@ import habitat  # noqa: E402  (import after sys.path setup)
 # ---------------------------------------------------------------------------
 _LIN_MIN, _LIN_MAX = -0.15, 0.35   # m/s
 _ANG_MIN, _ANG_MAX = -45.0, 45.0   # deg/s
+
+
+@dataclass
+class _KNNRecord:
+    feature: np.ndarray
+    success: bool
+
+
+class KNNFailureMemory:
+    """Episode-level kNN failure baseline over hand geometry features."""
+
+    def __init__(
+        self,
+        k: int = 5,
+        min_neighbors: int = 2,
+        reject_threshold: float = 0.80,
+        robot_diameter: float = 0.36,
+    ) -> None:
+        self.k = int(k)
+        self.min_neighbors = int(min_neighbors)
+        self.reject_threshold = float(reject_threshold)
+        self.robot_diameter = float(robot_diameter)
+        self.records: list[_KNNRecord] = []
+
+    def _feature(self, obs: np.ndarray) -> np.ndarray:
+        width = float(obs[8])
+        left = float(obs[6])
+        right = float(obs[7])
+        return np.asarray(
+            [
+                width / max(self.robot_diameter, 1e-6),
+                abs(float(obs[10])),
+                abs(float(obs[11])),
+                min(left, right),
+                (left - right) / max(abs(left) + abs(right), 1e-3),
+            ],
+            dtype=np.float32,
+        )
+
+    def should_reject(self, obs: np.ndarray) -> bool:
+        if len(self.records) < self.min_neighbors:
+            return False
+        query = self._feature(obs)
+        nearest = sorted(
+            self.records,
+            key=lambda record: float(np.linalg.norm(query - record.feature)),
+        )[: self.k]
+        if len(nearest) < self.min_neighbors:
+            return False
+        failure_rate = 1.0 - float(np.mean([r.success for r in nearest]))
+        return failure_rate >= self.reject_threshold
+
+    def record(self, obs: np.ndarray, success: bool) -> None:
+        self.records.append(_KNNRecord(self._feature(obs), bool(success)))
 
 
 def _mode_bucket(mode: str) -> str:
@@ -228,6 +283,12 @@ def main() -> None:
     parser.add_argument("--max-recover-steps", type=int, default=30)
     parser.add_argument("--use-memory", type=int, default=0,
                         help="1 = enable cross-episode failure-memory gating")
+    parser.add_argument(
+        "--memory-backend",
+        choices=["degnav", "knn"],
+        default="degnav",
+        help="Failure-memory implementation used when --use-memory=1.",
+    )
     # Mode thresholds: task-state based (depth-based clearance not used for mode decisions)
     parser.add_argument("--high-risk-threshold", type=float, default=0.80,
                         help="stuck_score above this → RECOVER")
@@ -237,27 +298,47 @@ def main() -> None:
     # Memory config
     parser.add_argument("--memory-trigger-count", type=int, default=1)
     parser.add_argument("--memory-reject-count", type=int, default=3)
+    parser.add_argument("--knn-k", type=int, default=5)
+    parser.add_argument("--knn-min-neighbors", type=int, default=2)
+    parser.add_argument("--knn-reject-threshold", type=float, default=0.80)
     # Output
     parser.add_argument("--output-csv", type=Path, default=None,
                         help="Write per-episode CSV to this path")
     parser.add_argument("--allow-sliding", type=int, default=0,
                         help="0 = allow_sliding=False (matches PPO training); 1 = True")
+    parser.add_argument(
+        "--agent-radius",
+        type=float,
+        default=None,
+        help="Optional simulator body radius in metres.",
+    )
     args = parser.parse_args()
 
     use_memory = bool(args.use_memory)
-    label = "habitat_ours_memory" if use_memory else "habitat_geometry_fsm"
+    label = (
+        "habitat_knn_failure_memory"
+        if use_memory and args.memory_backend == "knn"
+        else "habitat_ours_memory"
+        if use_memory
+        else "habitat_geometry_fsm"
+    )
 
     data_path = args.data_path.format(split=args.split)
     allow_sliding_str = "True" if args.allow_sliding else "False"
+    overrides = [
+        "habitat/task=narrow_passage",
+        f"habitat.dataset.data_path={data_path}",
+        f"habitat.dataset.split={args.split}",
+        "habitat.dataset.type=PointNav-v1",
+        f"habitat.simulator.habitat_sim_v0.allow_sliding={allow_sliding_str}",
+    ]
+    if args.agent_radius is not None:
+        overrides.append(
+            f"habitat.simulator.agents.main_agent.radius={args.agent_radius}"
+        )
     config = habitat.get_config(
         config_path="benchmark/nav/pointnav/pointnav_habitat_test.yaml",
-        overrides=[
-            "habitat/task=narrow_passage",
-            f"habitat.dataset.data_path={data_path}",
-            f"habitat.dataset.split={args.split}",
-            "habitat.dataset.type=PointNav-v1",
-            f"habitat.simulator.habitat_sim_v0.allow_sliding={allow_sliding_str}",
-        ],
+        overrides=overrides,
     )
 
     mem_cfg = FailureMemoryConfig(
@@ -266,7 +347,21 @@ def main() -> None:
     )
 
     # Cross-episode memory persists across all episodes to generalise failure avoidance.
-    cross_memory = PassageFailureMemory(mem_cfg) if use_memory else None
+    cross_memory = (
+        PassageFailureMemory(mem_cfg)
+        if use_memory and args.memory_backend == "degnav"
+        else None
+    )
+    knn_memory = (
+        KNNFailureMemory(
+            k=args.knn_k,
+            min_neighbors=args.knn_min_neighbors,
+            reject_threshold=args.knn_reject_threshold,
+            robot_diameter=2.0 * (args.agent_radius or 0.18),
+        )
+        if use_memory and args.memory_backend == "knn"
+        else None
+    )
 
     all_stats = []
 
@@ -279,10 +374,12 @@ def main() -> None:
         for ep_idx in range(num_episodes):
             observations = env.reset()
             episode = env.current_episode
+            info = getattr(episode, "info", {}) or {}
             features = np.array(
                 observations.get("narrow_passage_features", np.zeros(19, dtype=np.float32)),
                 dtype=np.float32,
             )
+            entry_features = features.copy()
 
             memory = cross_memory  # None when use_memory=False
 
@@ -295,7 +392,16 @@ def main() -> None:
             mode_counts: Counter[str] = Counter()
             last_mode = ""
 
-            done = False
+            # kNN is an episode-level comparator: retrieve once at entry and
+            # never feed censored rejections back as failures.
+            done = bool(
+                knn_memory is not None
+                and knn_memory.should_reject(entry_features)
+            )
+            rejected = done
+            if rejected:
+                last_mode = "REJECT"
+                mode_counts["reject"] += 1
             while not done and steps < args.max_steps:
                 # ---- track clearance and near-collision ----
                 bm = float(features[9])
@@ -417,6 +523,9 @@ def main() -> None:
                 if any_collision or stuck > 0.5:
                     cross_memory.add_failure(_to_risk_obs(features))
                     memory_writes += 1
+            if knn_memory is not None and not rejected:
+                knn_memory.record(entry_features, success > 0.5)
+                memory_writes += 1
 
             if not np.isfinite(min_bm):
                 min_bm = float(features[9])
@@ -433,7 +542,19 @@ def main() -> None:
                 "scene_id": str(episode.scene_id).split("/")[-2],
                 "split": args.split,
                 "seed": "deterministic",
-                "method": "DEGNAV-Rule + failure memory" if use_memory else "DEGNAV-Rule / Geometry-FSM",
+                "method": (
+                    "Episodic kNN failure memory"
+                    if knn_memory is not None
+                    else "DEGNAV-Rule + failure memory"
+                    if use_memory
+                    else "DEGNAV-Rule / Geometry-FSM"
+                ),
+                "agent_radius_m": args.agent_radius,
+                "difficulty": str(info.get("difficulty", "?")),
+                "body_margin_label": float(info.get("body_margin", "nan")),
+                "false_feasible": float(
+                    bool(info.get("false_feasible", False))
+                ),
                 "steps": steps,
                 "success": success,
                 "strict_success": strict_metrics["strict_success"],

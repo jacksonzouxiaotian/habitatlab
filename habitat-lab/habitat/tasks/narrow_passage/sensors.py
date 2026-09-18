@@ -26,6 +26,11 @@ class NarrowPassageGeometrySensor(Sensor):
         self._sim = sim
         self._task = task
         self._max_depth = float(getattr(config, "max_depth", 5.0))
+        self._depth_is_normalized = bool(
+            getattr(config, "depth_is_normalized", True)
+        )
+        self._depth_min = float(getattr(config, "depth_min", 0.0))
+        self._depth_max = float(getattr(config, "depth_max", 10.0))
         super().__init__(config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
@@ -54,7 +59,12 @@ class NarrowPassageGeometrySensor(Sensor):
         if observations is not None:
             depth = observations.get("depth", None)
         return depth_to_passage_features(
-            depth, state=self._state_from_task(), max_depth=self._max_depth
+            depth,
+            state=self._state_from_task(),
+            max_depth=self._max_depth,
+            depth_is_normalized=self._depth_is_normalized,
+            depth_min=self._depth_min,
+            depth_max=self._depth_max,
         )
 
 

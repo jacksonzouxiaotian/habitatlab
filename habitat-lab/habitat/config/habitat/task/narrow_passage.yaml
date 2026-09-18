@@ -36,6 +36,11 @@ lab_sensors:
   narrow_passage_geometry_sensor:
     type: NarrowPassageGeometrySensor
     max_depth: 5.0
+    # pointnav_habitat_test uses HabitatSimDepthSensor's normalized 0--1
+    # output for a physical 0--10 m range.  Geometry/morphology use metres.
+    depth_is_normalized: True
+    depth_min: 0.0
+    depth_max: 10.0
   narrow_passage_memory_sensor:
     type: NarrowPassageMemorySensor
 

@@ -1,0 +1,9 @@
+defaults: [base]
+ablation: no_yaw_aware_readiness
+decision:
+  gate: dynamic_structural_and_pose_interval
+  reads_sigma_delta: true
+  yaw_aware_readiness: false
+  heading_observation: true
+  heading_alignment: true
+  failure_memory: true

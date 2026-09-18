@@ -1,0 +1,76 @@
+{
+  "captured_date": "2026-09-18",
+  "scope": "Tracked source changes only; assets, environments, submodule contents and untracked artifacts migrate separately.",
+  "repositories": [
+    {
+      "name": "NaVILA",
+      "path": "/home/xiaotian/vla/NaVILA",
+      "url": "https://github.com/AnjieCheng/NaVILA.git",
+      "commit": "76b98f233dd0fff05dfcd69435eec6740febff9d",
+      "patch": "patches/NaVILA.patch"
+    },
+    {
+      "name": "Open-Nav",
+      "path": "/home/xiaotian/vla/Open-Nav",
+      "url": "https://github.com/YanyuanQiao/Open-Nav.git",
+      "commit": "3a8dcefe5bfdab5192c3c3bf80b14fb096cb08c7",
+      "patch": null
+    },
+    {
+      "name": "VLN-CE",
+      "path": "/home/xiaotian/vla/VLN-CE",
+      "url": "https://github.com/jacobkrantz/VLN-CE.git",
+      "commit": "729d141b2ee10628061ada74dd3a5b9f70faeba5",
+      "patch": null
+    },
+    {
+      "name": "habitat-lab-v0.1.7",
+      "path": "/home/xiaotian/vla/habitat-lab-v0.1.7",
+      "url": "https://github.com/facebookresearch/habitat-lab.git",
+      "commit": "d6ed1c0a0e786f16f261de2beafe347f4186d0d8",
+      "patch": null
+    },
+    {
+      "name": "habitat-sim-v0.1.7",
+      "path": "/home/xiaotian/vla/habitat-sim-v0.1.7",
+      "url": "https://github.com/facebookresearch/habitat-sim.git",
+      "commit": "856d4b08c1a2632626bf0d205bf46471a99502b7",
+      "patch": null
+    },
+    {
+      "name": "SpatialBot_repo",
+      "path": "/home/xiaotian/vla/Open-Nav/SpatialBot_repo",
+      "url": "https://github.com/BAAI-DCAI/SpatialBot.git",
+      "commit": "2d84503eede300e751f4b007052a0b6a5cd274a3",
+      "patch": null
+    },
+    {
+      "name": "recognize_anything",
+      "path": "/home/xiaotian/vla/Open-Nav/recognize_anything",
+      "url": "https://github.com/xinyu1205/recognize-anything.git",
+      "commit": "7cb804a8609e9f4b1a50b7f31436d2df40bb9481",
+      "patch": null
+    },
+    {
+      "name": "NaVid-VLN-CE",
+      "path": "/media/xiaotian/ACD525D1B7A093D9/robot_nav_data/vln/reproduction/sources/NaVid-VLN-CE",
+      "url": "https://github.com/jzhzhang/NaVid-VLN-CE.git",
+      "commit": "ce2f804a43fb23f1d52431ec24be1acf74c3f4f4",
+      "patch": "patches/NaVid-VLN-CE.patch"
+    },
+    {
+      "name": "Uni-NaVid",
+      "path": "/media/xiaotian/ACD525D1B7A093D9/robot_nav_data/vln/reproduction/sources/Uni-NaVid",
+      "url": "https://github.com/jzhzhang/Uni-NaVid.git",
+      "commit": "79ef5ea3fea14c205342d1ab070563d84c7a966a",
+      "patch": null
+    },
+    {
+      "name": "AwareVLN",
+      "path": "/media/xiaotian/ACD525D1B7A093D9/robot_nav_data/vln/reproduction/sources/AwareVLN",
+      "url": "https://github.com/GWxuan/AwareVLN.git",
+      "commit": "8f14eb8450cdd14ff4e3ba1ea04824255121e6be",
+      "patch": null
+    }
+  ]
+}

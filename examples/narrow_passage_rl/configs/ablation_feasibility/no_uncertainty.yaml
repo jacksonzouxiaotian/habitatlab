@@ -1,0 +1,10 @@
+defaults: [base]
+ablation: no_uncertainty
+compatibility_alias_of: mean_only
+independent_paper_result: false
+decision:
+  gate: dynamic_mu_deterministic_threshold
+  uncertainty_estimator_and_logging_enabled: true
+  reads_p_feas: false
+  reads_sigma_delta: false
+  yaw_required_width_prior: true

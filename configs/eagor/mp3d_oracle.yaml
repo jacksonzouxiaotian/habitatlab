@@ -1,0 +1,32 @@
+defaults_note: "Standalone OmegaConf overlay; merge after base.yaml"
+
+panorama:
+  height: 256
+  width: 512
+
+likelihood:
+  backend: oracle_semantic
+
+controller:
+  # Target-independent engineering fallback for long object-search episodes.
+  # It is shared by every policy and is not claimed as an EAGOR paper method.
+  low_confidence_action: explore_forward
+  exploration_turn_steps: 6
+
+habitat:
+  dataset_name: mp3d
+  benchmark_config: benchmark/nav/objectnav/objectnav_mp3d.yaml
+  dataset_version: v1
+  split: val
+  scenes_dir: /media/xiaotian/ACD525D1B7A093D9/robot_nav_data/vln/data/scene_datasets
+  dataset_path: /media/xiaotian/ACD525D1B7A093D9/robot_nav_data/vln/data/datasets/objectnav/mp3d/v1/{split}/{split}.json.gz
+
+evaluation:
+  num_episodes: 3
+  max_episode_steps: 300
+  save_video: true
+  unique_scenes: true
+  video_fps: 10
+
+output:
+  root: eagor_outputs/mp3d_objectnav_multiscene

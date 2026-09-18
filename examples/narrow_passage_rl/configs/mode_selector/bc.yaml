@@ -1,0 +1,12 @@
+episodes: 400
+max_steps: 160
+seed: 1701
+with_memory: false
+epochs: 20
+batch_size: 1024
+learning_rate: 0.0003
+weight_decay: 0.00001
+early_stop_patience: 3
+hidden_size: 128
+history: 8
+split_unit: episode

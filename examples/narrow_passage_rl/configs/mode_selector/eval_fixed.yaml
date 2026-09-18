@@ -1,0 +1,11 @@
+seed: 90001
+episodes: 200
+max_steps: 160
+device: cpu
+split: fixed_procedural_test_episodes
+methods:
+  - rule_19d
+  - bc_gru
+  - ppo_gru
+  - bc_ppo_gru
+  - bc_ppo_gru_memory

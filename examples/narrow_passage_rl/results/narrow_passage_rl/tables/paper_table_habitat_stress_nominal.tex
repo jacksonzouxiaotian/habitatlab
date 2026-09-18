@@ -59,3 +59,19 @@ yaw60 & fsm\_no\_lateral\_alignment & 151 & 100.0\% & 0.0\% & 0.0\% & 51.5 \\
 yaw60 & fsm\_no\_recovery & 151 & 100.0\% & 0.0\% & 0.0\% & 51.5 \\
 \bottomrule
 \end{tabular}
+
+\par\medskip
+\noindent\textit{Nominal RQ1 belief-feasibility ablation (new belief-gated run).}
+
+\begin{tabular}{lrrrrrrr}
+\toprule
+Method & N & Success & Strict SR & Collision & False Reject & Timeout & Avg steps \\
+\midrule
+full\_dynamic\_uncertainty & 151 & 99.3\% & 98.0\% & 0.0\% & 0.7\% & 0.0\% & 48.0 \\
+point\_estimate$^{\dagger}$ & 151 & 99.3\% & 98.0\% & 0.0\% & 0.7\% & 0.0\% & 48.0 \\
+no\_uncertainty$^{\dagger}$ & 151 & 99.3\% & 98.0\% & 0.0\% & 0.7\% & 0.0\% & 48.0 \\
+no\_yaw\_prior & 151 & 99.3\% & 98.0\% & 0.0\% & 0.7\% & 0.0\% & 48.0 \\
+\bottomrule
+\end{tabular}
+
+\par\footnotesize $^{\dagger}$Behaviorally equivalent compatibility aliases; do not count as independent paper methods.\normalsize

@@ -1,0 +1,277 @@
+diff --git a/evaluation/vlnce_baselines/config/default.py b/evaluation/vlnce_baselines/config/default.py
+index bc10e71..7f5f279 100644
+--- a/evaluation/vlnce_baselines/config/default.py
++++ b/evaluation/vlnce_baselines/config/default.py
+@@ -34,6 +34,15 @@ _C.EVAL.SAVE_RESULTS = True
+ _C.EVAL.EVAL_NONLEARNING = False
+ _C.EVAL.NONLEARNING = CN()
+ _C.EVAL.NONLEARNING.AGENT = "RandomAgent"
++_C.EVAL.DEGNAV_ADAPTER = CN()
++_C.EVAL.DEGNAV_ADAPTER.ENABLED = False
++_C.EVAL.DEGNAV_ADAPTER.ROBOT_RADIUS_M = 0.18
++_C.EVAL.DEGNAV_ADAPTER.DEPTH_MAX_M = 10.0
++_C.EVAL.DEGNAV_ADAPTER.HARD_FRONT_M = 0.35
++_C.EVAL.DEGNAV_ADAPTER.CAUTIOUS_FRONT_M = 0.70
++_C.EVAL.DEGNAV_ADAPTER.REJECT_BODY_MARGIN_M = 0.02
++_C.EVAL.DEGNAV_ADAPTER.COMMIT_BODY_MARGIN_M = 0.12
++_C.EVAL.DEGNAV_ADAPTER.MEMORY_REJECT_COUNT = 3
+ 
+ # ----------------------------------------------------------------------------
+ # INFERENCE CONFIG
+diff --git a/evaluation/vlnce_baselines/navila_trainer.py b/evaluation/vlnce_baselines/navila_trainer.py
+index e17f7b7..beb9ea8 100644
+--- a/evaluation/vlnce_baselines/navila_trainer.py
++++ b/evaluation/vlnce_baselines/navila_trainer.py
+@@ -1,5 +1,6 @@
+ import copy
+ import gc
++import inspect
+ import json
+ import os
+ import random
+@@ -35,6 +36,35 @@ from llava.mm_utils import KeywordsStoppingCriteria, get_model_name_from_path, p
+ from llava.model.builder import load_pretrained_model
+ 
+ 
++def _patch_transformers_4bit_compat():
++    """Bridge NaVILA's quantized loader to the installed Transformers API."""
++    import transformers.integrations as integrations
++
++    original = integrations.set_module_quantized_tensor_to_device
++    if "fp16_statistics" in inspect.signature(original).parameters:
++        return
++
++    def compatible(
++        module,
++        tensor_name,
++        device,
++        value=None,
++        fp16_statistics=None,
++        quantized_stats=None,
++        **_,
++    ):
++        stats = quantized_stats if quantized_stats is not None else fp16_statistics
++        return original(
++            module,
++            tensor_name,
++            device,
++            value=value,
++            quantized_stats=stats,
++        )
++
++    integrations.set_module_quantized_tensor_to_device = compatible
++
++
+ def sample_and_pad_images(images, num_frames=8, width=512, height=512):
+     frames = copy.deepcopy(images)
+ 
+@@ -82,8 +112,14 @@ class NaVILATrainer(BaseVLNCETrainer):
+ 
+         # build model
+         model_name = os.path.basename(os.path.normpath(checkpoint_path))
+-        tokenizer, model, image_processor, context_len = load_pretrained_model(checkpoint_path, model_name)
+-        model = model.cuda()
++        _patch_transformers_4bit_compat()
++        tokenizer, model, image_processor, context_len = load_pretrained_model(
++            checkpoint_path,
++            model_name,
++            load_4bit=True,
++            device_map={"": self.config.TORCH_GPU_ID},
++            torch_dtype=torch.float16,
++        )
+ 
+         config = self.config.clone()
+         split = config.EVAL.SPLIT
+@@ -106,6 +142,11 @@ class NaVILATrainer(BaseVLNCETrainer):
+ 
+         if len(config.VIDEO_OPTION) > 0:
+             config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP_VLNCE")
++        if (
++            config.EVAL.DEGNAV_ADAPTER.ENABLED
++            and "COLLISIONS" not in config.TASK_CONFIG.TASK.MEASUREMENTS
++        ):
++            config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
+ 
+         config.freeze()
+ 
+@@ -145,6 +186,44 @@ class NaVILATrainer(BaseVLNCETrainer):
+         assert envs.num_envs == 1
+ 
+         queue_actions = []
++        degnav_adapter = None
++        if config.EVAL.DEGNAV_ADAPTER.ENABLED:
++            from examples.narrow_passage_rl.narrow_passage.models.vln_depth_safety import (
++                DepthSafetyConfig,
++                OnlineDepthSafetyAdapter,
++            )
++
++            adapter_cfg = config.EVAL.DEGNAV_ADAPTER
++            degnav_adapter = OnlineDepthSafetyAdapter(
++                DepthSafetyConfig(
++                    robot_radius_m=float(adapter_cfg.ROBOT_RADIUS_M),
++                    depth_max_m=float(adapter_cfg.DEPTH_MAX_M),
++                    hard_front_m=float(adapter_cfg.HARD_FRONT_M),
++                    cautious_front_m=float(adapter_cfg.CAUTIOUS_FRONT_M),
++                    reject_body_margin_m=float(
++                        adapter_cfg.REJECT_BODY_MARGIN_M
++                    ),
++                    commit_body_margin_m=float(
++                        adapter_cfg.COMMIT_BODY_MARGIN_M
++                    ),
++                    memory_reject_count=int(
++                        adapter_cfg.MEMORY_REJECT_COUNT
++                    ),
++                )
++            )
++
++        def adapt_action(proposed_action):
++            if degnav_adapter is None:
++                return int(proposed_action), True
++            depth = batch[0]["depth"].detach().cpu().numpy()
++            decision = degnav_adapter.decide(int(proposed_action), depth)
++            if decision.adapted_action != int(proposed_action):
++                print(
++                    "DEGNAV adapter: "
++                    f"{proposed_action}->{decision.adapted_action} "
++                    f"mode={decision.mode} reason={decision.reason}"
++                )
++            return decision.adapted_action, decision.allow_macro_queue
+ 
+         while envs.num_envs > 0 and len(stats_episodes) < num_eps:
+ 
+@@ -152,8 +231,12 @@ class NaVILATrainer(BaseVLNCETrainer):
+ 
+             if len(queue_actions) > 0:
+                 print(f"using queue...{queue_actions[0]}")
+-                outputs = envs.step([queue_actions[0]])
++                proposed_action = queue_actions[0]
+                 queue_actions.pop(0)
++                adapted_action, allow_macro_queue = adapt_action(proposed_action)
++                if not allow_macro_queue or adapted_action != proposed_action:
++                    queue_actions = []
++                outputs = envs.step([adapted_action])
+                 print(f"queue length after using...{len(queue_actions)}")
+ 
+             else:
+@@ -191,7 +274,7 @@ class NaVILATrainer(BaseVLNCETrainer):
+                     input_ids = (
+                         tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt")
+                         .unsqueeze(0)
+-                        .cuda()
++                        .to(model.device)
+                     )
+ 
+                     stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
+@@ -201,7 +284,7 @@ class NaVILATrainer(BaseVLNCETrainer):
+                     with torch.inference_mode():
+                         output_ids = model.generate(
+                             input_ids,
+-                            images=images_tensor.half().cuda(),
++                            images=images_tensor,
+                             do_sample=False,
+                             temperature=0.0,
+                             max_new_tokens=32,
+@@ -237,6 +320,8 @@ class NaVILATrainer(BaseVLNCETrainer):
+                         actions = [map_string_to_action(outputs)]
+                     except:
+                         actions = [1]
++                    if actions[0] not in (0, 1, 2, 3):
++                        actions = [1]
+                     print(actions)
+ 
+                 if actions[0] == 1:
+@@ -247,10 +332,12 @@ class NaVILATrainer(BaseVLNCETrainer):
+                         distance = 25
+                     if (distance % 25) != 0:
+                         distance = min([25, 50, 75], key=lambda x: abs(x - distance))
+-                    outputs = envs.step([1])
++                    adapted_action, allow_macro_queue = adapt_action(1)
++                    outputs = envs.step([adapted_action])
+ 
+-                    for _ in range(int(distance // 25) - 1):
+-                        queue_actions.append(1)
++                    if adapted_action == 1 and allow_macro_queue:
++                        for _ in range(int(distance // 25) - 1):
++                            queue_actions.append(1)
+ 
+                 elif actions[0] == 2:
+                     try:
+@@ -260,10 +347,12 @@ class NaVILATrainer(BaseVLNCETrainer):
+                         degree = 15
+                     if (degree % 15) != 0:
+                         degree = min([15, 30, 45], key=lambda x: abs(x - degree))
+-                    outputs = envs.step([2])
++                    adapted_action, allow_macro_queue = adapt_action(2)
++                    outputs = envs.step([adapted_action])
+ 
+-                    for _ in range(int(degree // 15) - 1):
+-                        queue_actions.append(2)
++                    if adapted_action == 2 and allow_macro_queue:
++                        for _ in range(int(degree // 15) - 1):
++                            queue_actions.append(2)
+                     print(f"queue length: {len(queue_actions)}")
+ 
+                 elif actions[0] == 3:
+@@ -274,15 +363,25 @@ class NaVILATrainer(BaseVLNCETrainer):
+                         degree = 15
+                     if (degree % 15) != 0:
+                         degree = min([15, 30, 45], key=lambda x: abs(x - degree))
+-                    outputs = envs.step([3])
++                    adapted_action, allow_macro_queue = adapt_action(3)
++                    outputs = envs.step([adapted_action])
+ 
+-                    for _ in range(int(degree // 15) - 1):
+-                        queue_actions.append(3)
++                    if adapted_action == 3 and allow_macro_queue:
++                        for _ in range(int(degree // 15) - 1):
++                            queue_actions.append(3)
+ 
+                 else:  # 0, stop
+-                    outputs = envs.step(actions)
++                    adapted_action, _ = adapt_action(actions[0])
++                    outputs = envs.step([adapted_action])
+ 
+             observations, _, dones, infos = [list(x) for x in zip(*outputs)]
++            if degnav_adapter is not None:
++                degnav_adapter.observe_transition(infos[0])
++                collision_info = infos[0].get("collisions", {})
++                if isinstance(collision_info, dict) and collision_info.get(
++                    "is_collision", False
++                ):
++                    queue_actions = []
+ 
+             # reset envs and observations if necessary
+             for i in range(envs.num_envs):
+@@ -297,9 +396,14 @@ class NaVILATrainer(BaseVLNCETrainer):
+                     continue
+ 
+                 ep_id = current_episodes[i].episode_id
++                if degnav_adapter is not None:
++                    infos[i]["degnav_adapter"] = degnav_adapter.episode_stats()
+                 stats_episodes[ep_id] = infos[i]
+                 observations[i] = envs.reset_at(i)[0]
+                 past_rgbs[i] = []
++                queue_actions = []
++                if degnav_adapter is not None:
++                    degnav_adapter.reset_episode()
+ 
+                 if config.use_pbar:
+                     pbar.update()
+diff --git a/evaluation/vlnce_baselines/nonlearning_agents.py b/evaluation/vlnce_baselines/nonlearning_agents.py
+index 5643c6a..e0322c6 100644
+--- a/evaluation/vlnce_baselines/nonlearning_agents.py
++++ b/evaluation/vlnce_baselines/nonlearning_agents.py
+@@ -36,7 +36,12 @@ def evaluate_agent(config: Config) -> None:
+         agent = HandcraftedAgent()
+ 
+     stats = defaultdict(float)
+-    num_episodes = min(config.EVAL.EPISODE_COUNT, len(env.episodes))
++    requested_episodes = int(config.EVAL.EPISODE_COUNT)
++    num_episodes = (
++        len(env.episodes)
++        if requested_episodes <= 0
++        else min(requested_episodes, len(env.episodes))
++    )
+     for _ in trange(num_episodes):
+         obs = env.reset()
+         agent.reset()

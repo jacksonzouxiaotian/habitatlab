@@ -1,0 +1,11 @@
+defaults_note: "Standalone OmegaConf overlay; merge after base.yaml"
+panorama:
+  height: 64
+  width: 128
+evaluation:
+  policy_method: eagor
+  num_episodes: 1
+  max_episode_steps: 32
+  seam_threshold_deg: 30.0
+  save_video: true
+

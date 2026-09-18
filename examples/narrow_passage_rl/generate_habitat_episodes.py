@@ -82,6 +82,13 @@ def build_episode(row, idx, split):
             "difficulty": difficulty,
             "false_feasible": bool(int(row.get("false_feasible", 0))),
             "body_margin": float(row.get("body_margin", passage_width * 0.5 - 0.18)),
+            "robot_radius": float(
+                row.get(
+                    "robot_radius",
+                    passage_width * 0.5
+                    - float(row.get("body_margin", passage_width * 0.5 - 0.18)),
+                )
+            ),
         },
     }
 

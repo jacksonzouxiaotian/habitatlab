@@ -1,0 +1,37 @@
+defaults_note: "Merge over base.yaml and mp3d_failure_attribution.yaml via run_online_navigation"
+planning:
+  mode: online_frontier
+pose_source: simulator_gt_pose
+episode_manifest: eagor_outputs/online_navigation_20260911/episode_manifest.json
+online:
+  map:
+    resolution: 0.075
+    initial_size_m: 18.0
+    max_range_m: 5.0
+    sensor_max_m: 10.0
+    min_depth_m: 0.08
+    sensor_height_m: 0.88
+    robot_radius_m: 0.18
+    robot_height_m: 0.88
+    safety_margin_m: 0.02
+    floor_tolerance_m: 0.07
+    hit: 1.5
+    miss: 0.45
+    occupied_threshold: 0.6
+    row_stride: 3
+    col_stride: 2
+  frontier:
+    direction_weight: 0.8
+    bearing_probes: true
+    min_frontier_cells: 3
+    cooldown_steps: 35
+  stall_steps: 24
+  subgoal_budget: 60
+  observation_budget: 24
+controller:
+  stop_mode: area
+evaluation:
+  num_episodes: 10
+  max_episode_steps: 300
+  save_video: false
+  video_fps: 10

@@ -83,6 +83,31 @@ def _safe_depth(depth: Optional[np.ndarray], max_depth: float) -> np.ndarray:
     return np.clip(arr, 0.0, max_depth)
 
 
+def depth_to_metric_units(
+    depth: Optional[np.ndarray],
+    *,
+    normalized: bool,
+    min_depth: float,
+    max_depth: float,
+) -> Optional[np.ndarray]:
+    """Convert Habitat's normalized depth observation back to metres.
+
+    HabitatSimDepthSensor returns
+    ``d_norm = (d_m - min_depth) / (max_depth - min_depth)`` when
+    ``normalize_depth=True``.  Narrow-passage geometry and ``robot_radius`` are
+    expressed in metres, so mixing the normalized image with metric morphology
+    silently introduces a ten-fold scale error under the default 0--10 m
+    depth range.
+    """
+
+    if depth is None or not normalized:
+        return depth
+    if max_depth <= min_depth:
+        raise ValueError("max_depth must be greater than min_depth")
+    arr = np.asarray(depth, dtype=np.float32)
+    return arr * float(max_depth - min_depth) + float(min_depth)
+
+
 def _roi_min(depth: np.ndarray, row_slice: slice, col_slice: slice) -> float:
     roi = depth[row_slice, col_slice]
     if roi.size == 0:
@@ -97,6 +122,10 @@ def depth_to_passage_features(
     depth: Optional[np.ndarray],
     state: Optional[NarrowPassageState] = None,
     max_depth: float = 5.0,
+    *,
+    depth_is_normalized: bool = False,
+    depth_min: float = 0.0,
+    depth_max: float = 10.0,
 ) -> np.ndarray:
     """Extract a compact, interpretable narrow-passage observation vector.
 
@@ -105,7 +134,13 @@ def depth_to_passage_features(
     """
 
     state = state or NarrowPassageState()
-    depth_arr = _safe_depth(depth, max_depth)
+    metric_depth = depth_to_metric_units(
+        depth,
+        normalized=depth_is_normalized,
+        min_depth=depth_min,
+        max_depth=depth_max,
+    )
+    depth_arr = _safe_depth(metric_depth, max_depth)
     h, w = depth_arr.shape
 
     near = slice(int(0.55 * h), int(0.9 * h))

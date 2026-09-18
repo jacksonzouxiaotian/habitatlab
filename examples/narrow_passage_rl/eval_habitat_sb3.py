@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate a stable-baselines3 policy on the Habitat narrow-passage val set.
+"""Evaluate an SB3 or SB3-Contrib policy on a Habitat narrow-passage set.
 
 The SB3 policy was trained on a 19-dim synthetic narrow-passage env.
 Habitat's NarrowPassageGeometrySensor outputs the same 19-dim feature vector,
@@ -15,6 +15,8 @@ Run:
         --algo ppo --model data/narrow_passage_sb3_hard/ppo_narrow_passage.zip \
         --output-csv results/narrow_passage_rl/habitat_sb3_hard_episodes.csv
 """
+
+from __future__ import annotations
 
 import argparse
 import csv
@@ -52,7 +54,7 @@ def _to_habitat_action(action, action_space: str):
 
 
 def _load_model(algo: str, model_path: Path):
-    """Load PPO/SAC/TD3 from stable-baselines3.
+    """Load PPO/SAC/TD3 or RecurrentPPO.
 
     algo="auto" infers from the model path, which keeps old command lines short.
     """
@@ -61,37 +63,60 @@ def _load_model(algo: str, model_path: Path):
     except ImportError:
         raise ImportError("Install stable-baselines3: pip install stable-baselines3")
 
+    try:
+        from sb3_contrib import RecurrentPPO
+    except ImportError:
+        RecurrentPPO = None
+
     inferred = algo.lower()
     if inferred == "auto":
         name = str(model_path).lower()
-        if "sac" in name:
+        if "recurrent" in name:
+            inferred = "recurrent_ppo"
+        elif "sac" in name:
             inferred = "sac"
         elif "td3" in name:
             inferred = "td3"
         else:
             inferred = "ppo"
 
-    cls = {"ppo": PPO, "sac": SAC, "td3": TD3}[inferred]
+    if inferred == "recurrent_ppo" and RecurrentPPO is None:
+        raise ImportError("Install sb3-contrib to evaluate RecurrentPPO")
+    cls = {
+        "ppo": PPO,
+        "sac": SAC,
+        "td3": TD3,
+        "recurrent_ppo": RecurrentPPO,
+    }[inferred]
     return inferred, cls.load(str(model_path), device="cpu")
 
 
-def make_env(data_path: str, split: str):
+def make_env(data_path: str, split: str, agent_radius: float | None = None):
+    overrides = [
+        "habitat/task=narrow_passage",
+        f"habitat.dataset.data_path={data_path}",
+        f"habitat.dataset.split={split}",
+        "habitat.dataset.type=PointNav-v1",
+        "habitat.simulator.habitat_sim_v0.allow_sliding=False",
+    ]
+    if agent_radius is not None:
+        overrides.append(
+            f"habitat.simulator.agents.main_agent.radius={agent_radius}"
+        )
     config = habitat.get_config(
         config_path="benchmark/nav/pointnav/pointnav_habitat_test.yaml",
-        overrides=[
-            "habitat/task=narrow_passage",
-            f"habitat.dataset.data_path={data_path}",
-            f"habitat.dataset.split={split}",
-            "habitat.dataset.type=PointNav-v1",
-            "habitat.simulator.habitat_sim_v0.allow_sliding=False",
-        ],
+        overrides=overrides,
     )
     return habitat.Env(config=config)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--algo", choices=["auto", "ppo", "sac", "td3"], default="auto")
+    ap.add_argument(
+        "--algo",
+        choices=["auto", "ppo", "sac", "td3", "recurrent_ppo"],
+        default="auto",
+    )
     ap.add_argument("--model", type=Path,
                     default=Path("data/narrow_passage_sb3_hard/ppo_narrow_passage.zip"))
     ap.add_argument("--data-path",
@@ -99,6 +124,12 @@ def main():
     ap.add_argument("--split", default="val")
     ap.add_argument("--num-episodes", type=int, default=-1, help="-1 = all")
     ap.add_argument("--max-steps", type=int, default=500)
+    ap.add_argument(
+        "--agent-radius",
+        type=float,
+        default=None,
+        help="Optional simulator body radius in metres.",
+    )
     ap.add_argument(
         "--strict-clearance-threshold",
         type=float,
@@ -127,7 +158,11 @@ def main():
 
     all_stats = []
 
-    with make_env(args.data_path.format(split=args.split), args.split) as env:
+    with make_env(
+        args.data_path.format(split=args.split),
+        args.split,
+        args.agent_radius,
+    ) as env:
         total = env.number_of_episodes
         num_ep = total if args.num_episodes <= 0 else min(args.num_episodes, total)
         print(f"[habitat_sb3] evaluating {num_ep}/{total} episodes (split={args.split})")
@@ -143,6 +178,8 @@ def main():
             any_collision = False
             min_bm = float("inf")
             done = False
+            recurrent_state = None
+            episode_start = np.ones((1,), dtype=bool)
             last_feats = np.array(
                 obs_dict.get(
                     "narrow_passage_features",
@@ -164,7 +201,16 @@ def main():
                     any_collision = True
 
                 # SB3 model.predict expects flat numpy array
-                action, _ = model.predict(feats, deterministic=True)
+                if algo == "recurrent_ppo":
+                    action, recurrent_state = model.predict(
+                        feats,
+                        state=recurrent_state,
+                        episode_start=episode_start,
+                        deterministic=True,
+                    )
+                    episode_start[...] = False
+                else:
+                    action, _ = model.predict(feats, deterministic=True)
                 lin_norm, ang_norm = _to_habitat_action(
                     action, args.action_space
                 )
@@ -219,6 +265,8 @@ def main():
                 "method": f"SB3-{algo.upper()} direct velocity",
                 "difficulty": difficulty,
                 "body_margin": round(body_margin, 4),
+                "agent_radius_m": args.agent_radius,
+                "false_feasible": float(bool(info.get("false_feasible", False))),
                 "steps": steps,
                 "success": success,
                 "strict_success": strict_metrics["strict_success"],

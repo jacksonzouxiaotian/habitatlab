@@ -393,6 +393,9 @@ class PointGoalSensorConfig(LabSensorConfig):
 class NarrowPassageGeometrySensorConfig(LabSensorConfig):
     type: str = "NarrowPassageGeometrySensor"
     max_depth: float = 5.0
+    depth_is_normalized: bool = True
+    depth_min: float = 0.0
+    depth_max: float = 10.0
 
 
 @dataclass

@@ -1,4 +1,6 @@
+import csv
 import os
+from pathlib import Path
 from collections import defaultdict
 from typing import Any, Dict, List
 
@@ -121,6 +123,9 @@ class HabitatEvaluator(Evaluator):
         ), "You must specify a number of evaluation episodes with test_episode_count"
 
         pbar = tqdm.tqdm(total=number_of_eval_episodes * evals_per_ep)
+        deterministic_eval = os.environ.get(
+            "HABITAT_EVAL_DETERMINISTIC", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         agent.eval()
         while (
             len(stats_episodes) < (number_of_eval_episodes * evals_per_ep)
@@ -141,7 +146,7 @@ class HabitatEvaluator(Evaluator):
                     test_recurrent_hidden_states,
                     prev_actions,
                     not_done_masks,
-                    deterministic=False,
+                    deterministic=deterministic_eval,
                     **space_lengths,
                 )
                 if action_data.should_inserts is None:
@@ -322,6 +327,37 @@ class HabitatEvaluator(Evaluator):
             aggregated_stats[stat_key] = np.mean(
                 [v[stat_key] for v in stats_episodes.values() if stat_key in v]
             )
+
+        # Opt-in, paper-facing per-episode export.  Habitat Baselines normally
+        # keeps only aggregate TensorBoard values, which is insufficient for
+        # paired or subset analysis.  The environment variable leaves default
+        # upstream behavior unchanged.
+        episode_csv = os.environ.get("HABITAT_EVAL_EPISODE_CSV", "").strip()
+        if episode_csv:
+            output_path = Path(episode_csv)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            rows = []
+            for key, episode_stats in stats_episodes.items():
+                (scene_id, episode_id), eval_index = key
+                row = {
+                    "scene_id": str(scene_id),
+                    "episode_id": str(episode_id),
+                    "eval_index": int(eval_index),
+                }
+                row.update(
+                    {
+                        str(metric): float(value)
+                        for metric, value in episode_stats.items()
+                    }
+                )
+                rows.append(row)
+            rows.sort(key=lambda row: (row["scene_id"], row["episode_id"], row["eval_index"]))
+            fieldnames = sorted({key for row in rows for key in row})
+            with output_path.open("w", newline="", encoding="utf-8") as handle:
+                writer_csv = csv.DictWriter(handle, fieldnames=fieldnames)
+                writer_csv.writeheader()
+                writer_csv.writerows(rows)
+            logger.info(f"Wrote per-episode evaluation stats: {output_path}")
 
         for k, v in aggregated_stats.items():
             logger.info(f"Average episode {k}: {v:.4f}")

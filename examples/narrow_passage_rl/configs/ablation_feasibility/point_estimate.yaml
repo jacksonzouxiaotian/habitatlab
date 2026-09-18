@@ -1,0 +1,9 @@
+defaults: [base]
+ablation: point_estimate
+compatibility_alias_of: mean_only
+independent_paper_result: false
+decision:
+  gate: dynamic_mu_deterministic_threshold
+  reads_p_feas: false
+  reads_sigma_delta: false
+  yaw_required_width_prior: true

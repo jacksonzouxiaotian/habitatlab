@@ -1,0 +1,8 @@
+defaults_note: "Standalone OmegaConf overlay; merge after base.yaml"
+likelihood:
+  backend: oracle_semantic
+evaluation:
+  num_episodes: 1
+  max_episode_steps: 100
+  save_video: true
+

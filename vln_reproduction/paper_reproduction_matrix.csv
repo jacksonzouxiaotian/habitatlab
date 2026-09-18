@@ -1,0 +1,21 @@
+method,task,level,status,evidence,blocker,next_command_or_required_input
+NaVid-current-public,official_video,A,受阻,sample_audits/20260916T134420Z/result.json;capacity/20260916T134027Z/result.json,完整权重未下载完且当前单卡可用显存小于权重字节量,先解决 GPU 容量并完成 fetch_assets.py navid --download
+NaVid-RSS2024-original,original_checkpoint,A,受阻,官方 README 标注当前公开权重为后续训练版本,未取得与原论文协议对应的原始权重,需要原始 checkpoint 及明确协议
+NaVid-current-public,R2R-CE-val_unseen,B,受阻,smoke/20260916T133512Z_navid/result.json,模型 A 未通过;run.py 的 GT 距离强制停止须隔离;未运行模型 episode,python vln_reproduction/simulator_smoke.py --method navid
+NaVid-current-public,RxR-CE-val_unseen,B,受阻,audits/20260916T132913Z/audit.json,数据盘已审计根下未找到 RxR episodes/GT;模型 A 未通过,需要合法 RxR episodes 和 GT 并核验语言配置
+NaVid-RSS2024-original,navigation_training,C,受阻,官方当前 release 与原始训练版本不同,原始训练数据及训练入口完整性未满足;资源不足,需要原始训练资产和足够训练 GPU
+NaVid-current-public,Lite3,D,未开始,test_result_contract.py 仅离线通用契约测试,无模型推理通过;未连接实机;未取得运动授权,提供实际 robot_client.py 路径;只做 dry-run
+Uni-NaVid,VLN-and-following-video,A,受阻,sample_audits/20260916T134420Z/result.json,仅样例解码与预处理通过;完整模型未下载加载;单卡容量不足,先解决 GPU 容量再 fetch_assets.py uninavid --download
+Uni-NaVid,R2R-CE-val_unseen,B,受阻,smoke/20260916T133604Z_uninavid/result.json,模型 A 未通过;公开 evaluator 存在 GT 距离强制停止,python vln_reproduction/simulator_smoke.py --method uninavid
+Uni-NaVid,RxR-CE-val_unseen,B,受阻,audits/20260916T132913Z/audit.json,缺 RxR episodes/GT;模型 A 未通过,需要 RxR 数据与语言协议
+Uni-NaVid,HM3D-ObjectNav-and-OVON,B,受阻,论文及官方 README 初审,本次审计数据根缺相应 HM3D/OVON 数据;未找到官方 ObjectNav evaluator;不能替代为 MP3D ObjectNav,补合法数据并核验公开入口或明确 independent_reimplementation
+Uni-NaVid,MP3D-EQA,B,受阻,论文及官方 README 初审,缺 EQA 问答及评估数据;官方 EQA evaluator 未找到,补数据并核验官方 EQA evaluator
+Uni-NaVid,HumanFollowing-original-benchmark,B,受阻,论文与 TrackVLA 入口初审,EVT-Bench 与原论文 HF-HM3D/HSSD/MP3D 不能直接等同;完整对应协议未核验,核验目标人物/轨迹/场景划分/结束条件
+Uni-NaVid,stage1-and-stage2-training,C,受阻,sample_audits/20260916T134420Z/result.json;官方 scripts,500 条公开样本全部 VLN;未下载完整视频子集;未执行梯度更新;训练资源不足,training_reproduction_matrix.csv
+Uni-NaVid,Lite3,D,未开始,test_result_contract.py 仅离线通用契约测试,未连接机器人;未授权运动;未接实际模型缓存,提供实际 robot_client.py 路径;只做 dry-run
+AwareVLN,final-awarevln-checkpoint,A,受阻,assets/awarevln/revision.json;sample_audits/20260916T134420Z/result.json,仅 metadata/tokenizer 已下载;权重约15.82GiB超出当前可用显存,先解决 GPU 容量再 fetch_assets.py awarevln --download
+AwareVLN,R2R-CE-val_unseen,B,受阻,官方 awarevln_trainer.py 静态审计,模型 A 未通过;reason_stuck 强制 STOP 与 invalid 默认前进须隔离,先完成 A 与逐 episode 终止日志
+AwareVLN,RxR-CE-val_unseen,B,受阻,官方 evaluation/scripts/eval/rxr.sh,缺 RxR 数据且模型 A 未通过,补 RxR 数据并核验语言及相机配置
+AwareVLN,supervised_navigation_training,C,受阻,官方 scripts/train/sft_8frames.sh,默认24GPU训练脚本;本机1x16GiB;训练数据及 Human 资产未齐,training_reproduction_matrix.csv
+AwareVLN,data_engine_reproduction,C,受阻,官方 README 与论文初审,已生成数据不等于数据引擎;引擎完整入口与许可/外部生成成本未核验,进一步核验公开生成入口及合法资产
+AwareVLN,Lite3,D,未开始,test_result_contract.py 仅离线 reason-only 无动作测试,无机器人连接与运动授权;未接实际 backend,提供实际 robot_client.py 路径;只做 dry-run

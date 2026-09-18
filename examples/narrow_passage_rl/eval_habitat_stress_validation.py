@@ -6,6 +6,8 @@ script adds controlled perturbations so the table can separate alignment,
 recovery, sensor robustness, and clearance safety.
 """
 
+from __future__ import annotations
+
 import argparse
 import csv
 import hashlib
@@ -43,6 +45,12 @@ CLEARANCE_DIAG_MD = TABLE_DIR / "paper_table_habitat_clearance_diagnostic.md"
 CLEARANCE_DIAG_TEX = TABLE_DIR / "paper_table_habitat_clearance_diagnostic.tex"
 KEY_SLICES_MD = TABLE_DIR / "paper_table_habitat_stress_key_slices.md"
 KEY_SLICES_TEX = TABLE_DIR / "paper_table_habitat_stress_key_slices.tex"
+HABITAT_RQ1_SUMMARY = (
+    RESULTS
+    / "audits"
+    / "habitat_rq1_20260821_110829"
+    / "summary.csv"
+)
 
 FEATURE_DIM = 19
 _LIN_MIN, _LIN_MAX = -0.15, 0.35
@@ -564,6 +572,10 @@ def write_stress_nominal_table(summary: List[Dict], md_path: Path, tex_path: Pat
     """Write stress table with only nominal task metrics, no clearance diagnostics."""
 
     rows = _table_rows(summary)
+    rq1_rows: List[Dict] = []
+    if HABITAT_RQ1_SUMMARY.exists():
+        with HABITAT_RQ1_SUMMARY.open(newline="") as f:
+            rq1_rows = list(csv.DictReader(f))
     md_lines = [
         "# Table: Habitat Stress Validation - Nominal Metrics",
         "",
@@ -584,6 +596,38 @@ def write_stress_nominal_table(summary: List[Dict], md_path: Path, tex_path: Pat
                 steps=_fmt_num(row["avg_steps"], 1),
             )
         )
+    if rq1_rows:
+        md_lines.extend([
+            "",
+            "## Nominal RQ1 belief-feasibility ablation (new belief-gated run)",
+            "",
+            "These rows use the same 151 nominal episode IDs, 500-step budget, and Habitat success definition. They are separate from the historical legacy-FSM stress block and use metric-depth clearance.",
+            "",
+            "| Method | Episodes | Success rate | Strict SR (metric depth) | Collision | False Reject | Timeout | Avg steps |",
+            "|:---|---:|---:|---:|---:|---:|---:|---:|",
+        ])
+        for row in rq1_rows:
+            method = str(row["method"])
+            if method in {"point_estimate", "no_uncertainty"}:
+                method += "†"
+            md_lines.append(
+                "| {method} | {episodes} | {success} | {strict} | {collision} | {reject} | {timeout} | {steps:.1f} |".format(
+                    method=method,
+                    episodes=int(float(row["episodes"])),
+                    success=_fmt_pct(float(row["success_rate"])),
+                    strict=_fmt_pct(float(row["strict_success_rate"])),
+                    collision=_fmt_pct(float(row["collision_rate"])),
+                    reject=_fmt_pct(float(row["false_reject_rate"])),
+                    timeout=_fmt_pct(float(row["timeout_rate"])),
+                    steps=float(row["avg_steps"]),
+                )
+            )
+        md_lines.extend([
+            "",
+            "† `point_estimate` and `no_uncertainty` have identical episode-level behavior hashes and are compatibility aliases, not independent paper methods.",
+            "",
+            "The four RQ1 variants have identical aggregate Success (99.3%). Full vs point-estimate differs on two aligned mode decisions in one episode without changing the outcome; full vs no-yaw-prior has zero mode disagreements on these nominal aligned anchors.",
+        ])
     md_path.parent.mkdir(parents=True, exist_ok=True)
     md_path.write_text("\n".join(md_lines) + "\n")
     print(f"[write] {md_path}")
@@ -607,6 +651,37 @@ def write_stress_nominal_table(summary: List[Dict], md_path: Path, tex_path: Pat
             )
         )
     tex_lines.extend([r"\bottomrule", r"\end{tabular}", ""])
+    if rq1_rows:
+        tex_lines.extend([
+            r"\par\medskip",
+            r"\noindent\textit{Nominal RQ1 belief-feasibility ablation (new belief-gated run).}",
+            r"\begin{tabular}{lrrrrrrr}",
+            r"\toprule",
+            r"Method & N & Success & Strict SR & Collision & False Reject & Timeout & Avg steps \\",
+            r"\midrule",
+        ])
+        for row in rq1_rows:
+            method = str(row["method"])
+            if method in {"point_estimate", "no_uncertainty"}:
+                method += r"$^{\dagger}$"
+            tex_lines.append(
+                "{} & {} & {} & {} & {} & {} & {} & {:.1f} \\\\".format(
+                    _tex_escape(method),
+                    int(float(row["episodes"])),
+                    _fmt_pct(float(row["success_rate"])).replace("%", r"\%"),
+                    _fmt_pct(float(row["strict_success_rate"])).replace("%", r"\%"),
+                    _fmt_pct(float(row["collision_rate"])).replace("%", r"\%"),
+                    _fmt_pct(float(row["false_reject_rate"])).replace("%", r"\%"),
+                    _fmt_pct(float(row["timeout_rate"])).replace("%", r"\%"),
+                    float(row["avg_steps"]),
+                )
+            )
+        tex_lines.extend([
+            r"\bottomrule",
+            r"\end{tabular}",
+            r"\par\footnotesize $^{\dagger}$Behaviorally equivalent compatibility aliases; do not count as independent paper methods.\normalsize",
+            "",
+        ])
     tex_path.write_text("\n".join(tex_lines))
     print(f"[write] {tex_path}")
 

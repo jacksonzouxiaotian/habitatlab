@@ -7,6 +7,8 @@ habitat_baselines, while SB3 algorithms are connected through a small Gymnasium
 wrapper around NarrowPassageNav-v0.
 """
 
+from __future__ import annotations
+
 import argparse
 import csv
 from pathlib import Path
@@ -28,16 +30,26 @@ FEATURE_DIM = 19
 RESULTS = Path(__file__).parent / "results" / "narrow_passage_rl"
 
 
-def make_habitat_config(data_path: str, split: str, allow_sliding: bool = False):
+def make_habitat_config(
+    data_path: str,
+    split: str,
+    allow_sliding: bool = False,
+    agent_radius: float | None = None,
+):
+    overrides = [
+        "habitat/task=narrow_passage",
+        f"habitat.dataset.data_path={data_path}",
+        f"habitat.dataset.split={split}",
+        "habitat.dataset.type=PointNav-v1",
+        f"habitat.simulator.habitat_sim_v0.allow_sliding={str(allow_sliding)}",
+    ]
+    if agent_radius is not None:
+        overrides.append(
+            f"habitat.simulator.agents.main_agent.radius={agent_radius}"
+        )
     return habitat.get_config(
         config_path="benchmark/nav/pointnav/pointnav_habitat_test.yaml",
-        overrides=[
-            "habitat/task=narrow_passage",
-            f"habitat.dataset.data_path={data_path}",
-            f"habitat.dataset.split={split}",
-            "habitat.dataset.type=PointNav-v1",
-            f"habitat.simulator.habitat_sim_v0.allow_sliding={str(allow_sliding)}",
-        ],
+        overrides=overrides,
     )
 
 
@@ -53,10 +65,13 @@ class HabitatNarrowPassageSB3Env(gym.Env):
         max_steps: int = 500,
         action_space_mode: str = "normalized",
         allow_sliding: bool = False,
+        agent_radius: float | None = None,
     ) -> None:
         super().__init__()
         self._env = habitat.Env(
-            config=make_habitat_config(data_path, split, allow_sliding)
+            config=make_habitat_config(
+                data_path, split, allow_sliding, agent_radius
+            )
         )
         self.max_steps = int(max_steps)
         self.action_space_mode = action_space_mode
@@ -178,10 +193,15 @@ class HabitatNarrowPassageSB3Env(gym.Env):
 
 
 def build_model(args, env):
-    if args.algo == "ppo":
+    if args.algo in {"ppo", "recurrent_ppo"}:
         from stable_baselines3 import PPO
 
-        cls = PPO
+        if args.algo == "recurrent_ppo":
+            from sb3_contrib import RecurrentPPO
+
+            cls = RecurrentPPO
+        else:
+            cls = PPO
         kwargs = dict(
             n_steps=args.n_steps,
             batch_size=args.batch_size,
@@ -194,6 +214,11 @@ def build_model(args, env):
             device=args.device,
             tensorboard_log=str(args.save_dir / "tb"),
         )
+        if args.algo == "recurrent_ppo":
+            kwargs["policy_kwargs"] = {
+                "lstm_hidden_size": args.lstm_hidden_size,
+                "n_lstm_layers": args.n_lstm_layers,
+            }
     elif args.algo == "sac":
         from stable_baselines3 import SAC
 
@@ -236,10 +261,11 @@ def build_model(args, env):
 
     if args.load_model:
         return cls.load(str(args.load_model), env=env, device=args.device, verbose=1)
-    return cls("MlpPolicy", env, **kwargs)
+    policy = "MlpLstmPolicy" if args.algo == "recurrent_ppo" else "MlpPolicy"
+    return cls(policy, env, **kwargs)
 
 
-def evaluate(model, env, episodes: int, max_steps: int, output_csv: Path):
+def evaluate(model, env, episodes: int, max_steps: int, output_csv: Path, algo: str):
     rows = []
     total = env.number_of_episodes
     n = total if episodes <= 0 else min(episodes, total)
@@ -247,8 +273,19 @@ def evaluate(model, env, episodes: int, max_steps: int, output_csv: Path):
         obs, info = env.reset()
         done = False
         step = 0
+        recurrent_state = None
+        episode_start = np.ones((1,), dtype=bool)
         while not done and step < max_steps:
-            action, _ = model.predict(obs, deterministic=True)
+            if algo == "recurrent_ppo":
+                action, recurrent_state = model.predict(
+                    obs,
+                    state=recurrent_state,
+                    episode_start=episode_start,
+                    deterministic=True,
+                )
+                episode_start[...] = False
+            else:
+                action, _ = model.predict(obs, deterministic=True)
             obs, _, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             step += 1
@@ -275,7 +312,11 @@ def evaluate(model, env, episodes: int, max_steps: int, output_csv: Path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--algo", choices=["ppo", "sac", "td3"], default="td3")
+    ap.add_argument(
+        "--algo",
+        choices=["ppo", "recurrent_ppo", "sac", "td3"],
+        default="td3",
+    )
     ap.add_argument("--split", default="train")
     ap.add_argument(
         "--data-path",
@@ -294,6 +335,12 @@ def main():
         help="Use synthetic when finetuning a model trained in HarderNarrowPassageEnv.",
     )
     ap.add_argument("--allow-sliding", action="store_true")
+    ap.add_argument(
+        "--agent-radius",
+        type=float,
+        default=None,
+        help="Optional simulator body radius in metres.",
+    )
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--lr", type=float, default=3e-4)
@@ -305,6 +352,8 @@ def main():
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--buffer-size", type=int, default=200_000)
     ap.add_argument("--action-noise", type=float, default=0.10)
+    ap.add_argument("--lstm-hidden-size", type=int, default=64)
+    ap.add_argument("--n-lstm-layers", type=int, default=1)
     ap.add_argument("--output-csv", type=Path, default=None)
     args = ap.parse_args()
 
@@ -332,9 +381,14 @@ def main():
         max_steps=args.max_steps,
         action_space_mode=args.action_space,
         allow_sliding=args.allow_sliding,
+        agent_radius=args.agent_radius,
     )
     model = build_model(args, env)
-    model.learn(total_timesteps=args.total_steps, progress_bar=False)
+    model.learn(
+        total_timesteps=args.total_steps,
+        reset_num_timesteps=not bool(args.load_model),
+        progress_bar=False,
+    )
 
     ckpt = args.save_dir / f"{args.algo}_habitat_narrow_passage"
     model.save(str(ckpt))
@@ -348,11 +402,19 @@ def main():
             max_steps=args.max_steps,
             action_space_mode=args.action_space,
             allow_sliding=args.allow_sliding,
+            agent_radius=args.agent_radius,
         )
         out_csv = args.output_csv or (
             RESULTS / f"habitat_{args.algo}_{args.save_dir.name}_finetune_eval.csv"
         )
-        evaluate(model, eval_env, args.eval_episodes, args.max_steps, out_csv)
+        evaluate(
+            model,
+            eval_env,
+            args.eval_episodes,
+            args.max_steps,
+            out_csv,
+            args.algo,
+        )
         eval_env.close()
 
 

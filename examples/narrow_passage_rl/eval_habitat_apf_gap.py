@@ -135,22 +135,40 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--num-episodes", type=int, default=-1)
     ap.add_argument("--max-steps", type=int, default=500)
+    ap.add_argument(
+        "--data-path",
+        type=Path,
+        default=VAL_JSON,
+        help="PointNav narrow-passage .json.gz dataset.",
+    )
+    ap.add_argument("--split", default="val")
+    ap.add_argument(
+        "--agent-radius",
+        type=float,
+        default=None,
+        help="Optional simulator body radius in metres.",
+    )
     ap.add_argument("--out-csv", type=Path, default=OUT_CSV)
     args = ap.parse_args()
 
-    with gzip.open(VAL_JSON) as f:
+    with gzip.open(args.data_path) as f:
         val_data = json.load(f)
     ep_meta = {e["episode_id"]: e["info"] for e in val_data["episodes"]}
 
+    overrides = [
+        "habitat/task=narrow_passage",
+        f"habitat.dataset.data_path={args.data_path}",
+        f"habitat.dataset.split={args.split}",
+        "habitat.dataset.type=PointNav-v1",
+        "habitat.simulator.habitat_sim_v0.allow_sliding=False",
+    ]
+    if args.agent_radius is not None:
+        overrides.append(
+            f"habitat.simulator.agents.main_agent.radius={args.agent_radius}"
+        )
     config = habitat.get_config(
         config_path="benchmark/nav/pointnav/pointnav_habitat_test.yaml",
-        overrides=[
-            "habitat/task=narrow_passage",
-            "habitat.dataset.data_path=data/datasets/narrow_passage/val/val.json.gz",
-            "habitat.dataset.split=val",
-            "habitat.dataset.type=PointNav-v1",
-            "habitat.simulator.habitat_sim_v0.allow_sliding=False",
-        ],
+        overrides=overrides,
     )
 
     rows = []
@@ -180,10 +198,14 @@ def main():
             row = finalize_episode_row({
                 "episode_id":  eid,
                 "scene_id": str(env.current_episode.scene_id).split("/")[-2],
-                "split": "val",
+                "split": args.split,
                 "seed": "deterministic",
                 "method": "APF+Gap",
                 "body_margin": bm,
+                "agent_radius_m": args.agent_radius,
+                "false_feasible": float(
+                    bool(meta.get("false_feasible", False))
+                ),
                 "delta_d":     2.0 * bm,
                 "difficulty":  meta.get("difficulty", "unknown"),
                 "success":     success,

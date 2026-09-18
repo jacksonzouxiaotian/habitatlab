@@ -1,0 +1,7 @@
+defaults: [base]
+ablation: no_memory
+decision:
+  gate: dynamic_structural_and_pose_interval
+  reads_sigma_delta: true
+  yaw_aware_readiness: true
+  failure_memory: false
